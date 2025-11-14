@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskUI - Final Nested Hierarchy System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            background: #1e1e1e;
+            color: #abb2bf;
+            padding: 20px;
+        }
+
+        .mockup-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #61afef;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .clarification-box {
+            background: #2c313c;
+            border: 2px solid #61afef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .clarification-title {
+            color: #61afef;
+            font-size: 16px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .clarification-content {
+            color: #abb2bf;
+            line-height: 1.6;
+        }
+
+        .clarification-content ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .state-section {
+            margin-bottom: 50px;
+        }
+
+        .state-title {
+            color: #e5c07b;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .state-description {
+            color: #5c6370;
+            font-size: 14px;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+
+        /* TUI Window */
+        .tui-window {
+            background: #282c34;
+            border: 2px solid #4b5263;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        /* List Bar */
+        .list-bar {
+            background: #2c313c;
+            border-bottom: 2px solid #61afef;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .list-tabs {
+            display: flex;
+            gap: 5px;
+        }
+
+        .list-tab {
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .list-tab.active {
+            background: #61afef;
+            color: #282c34;
+            font-weight: bold;
+        }
+
+        .list-tab.inactive {
+            color: #5c6370;
+        }
+
+        .trash-can {
+            color: #5c6370;
+            font-size: 16px;
+        }
+
+        /* Columns Container */
+        .columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1.5fr;
+            height: 500px;
+        }
+
+        .column {
+            border-right: 1px solid #4b5263;
+            padding: 20px;
+            overflow-y: auto;
+            position: relative;
+            transition: background 0.2s;
+        }
+
+        .column:last-child {
+            border-right: none;
+        }
+
+        /* Enhanced column focus indicator */
+        .column.active {
+            background: #2c313c;
+            box-shadow: inset 0 0 0 2px #61afef;
+        }
+
+        .column.active .column-header {
+            color: #61afef;
+            font-weight: bold;
+        }
+
+        .column-header {
+            color: #5c6370;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+
+        .column-header-dynamic {
+            color: #98c379;
+            font-size: 12px;
+            text-transform: none;
+            margin-bottom: 15px;
+            letter-spacing: 0.5px;
+            font-weight: bold;
+        }
+
+        /* Task Items - Hierarchical Nesting Support */
+        .task-item {
+            padding: 10px 12px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Level 0 - Top level tasks */
+        .task-item.level-0 {
+            margin-left: 0;
+            border-left: 3px solid #61afef;
+        }
+
+        /* Level 1 - First level children */
+        .task-item.level-1 {
+            margin-left: 24px;
+            border-left: 2px solid #98c379;
+            font-size: 13px;
+        }
+
+        .task-item.level-1::before {
+            content: '└─';
+            position: absolute;
+            left: -18px;
+            color: #4b5263;
+        }
+
+        /* Level 2 - Second level children (Only in Column 2) */
+        .task-item.level-2 {
+            margin-left: 48px;
+            border-left: 2px solid #c678dd;
+            font-size: 12px;
+        }
+
+        .task-item.level-2::before {
+            content: '└─';
+            position: absolute;
+            left: -18px;
+            color: #3e4451;
+        }
+
+        /* Selected states */
+        .task-item.selected {
+            background: #3e4451;
+            box-shadow: 0 0 0 1px #61afef;
+        }
+
+        .task-item:hover {
+            background: #363c48;
+        }
+
+        .task-item.completed {
+            opacity: 0.6;
+            color: #5c6370;
+        }
+
+        .task-item.completed .task-text {
+            text-decoration: line-through;
+        }
+
+        .task-item.archived {
+            opacity: 0.4;
+            color: #3e4451;
+            font-style: italic;
+        }
+
+        .status-icon {
+            margin-right: 8px;
+            font-size: 12px;
+        }
+
+        /* Parent task progress indicator */
+        .progress-indicator {
+            margin-left: auto;
+            font-size: 11px;
+            color: #98c379;
+            padding: 2px 6px;
+            background: rgba(152, 195, 121, 0.2);
+            border-radius: 3px;
+        }
+
+        /* Detail Panel */
+        .detail-panel {
+            color: #abb2bf;
+        }
+
+        .detail-title {
+            font-size: 20px;
+            color: #e5c07b;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #4b5263;
+        }
+
+        .detail-meta {
+            margin-bottom: 20px;
+            line-height: 1.8;
+            color: #5c6370;
+        }
+
+        .detail-hierarchy {
+            background: #2c313c;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .detail-hierarchy strong {
+            color: #61afef;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .hierarchy-line {
+            color: #abb2bf;
+            display: flex;
+            align-items: center;
+        }
+
+        .hierarchy-line.current {
+            color: #e5c07b;
+            font-weight: bold;
+        }
+
+        .max-nesting-warning {
+            background: rgba(229, 192, 123, 0.1);
+            border: 1px solid #e5c07b;
+            color: #e5c07b;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+
+        .notes-section {
+            background: #2c313c;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .notes-header {
+            color: #61afef;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .notes-content {
+            color: #abb2bf;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* Keybind Helper */
+        .keybind-helper {
+            position: absolute;
+            bottom: 10px;
+            right: 20px;
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #5c6370;
+            flex-wrap: wrap;
+            max-width: 60%;
+            justify-content: flex-end;
+        }
+
+        .keybind {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .key {
+            background: #3e4451;
+            padding: 2px 8px;
+            border-radius: 3px;
+            color: #abb2bf;
+            font-weight: bold;
+            border: 1px solid #4b5263;
+        }
+
+        /* Task Creation Modal */
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal {
+            background: #282c34;
+            border: 2px solid #61afef;
+            border-radius: 8px;
+            padding: 30px;
+            min-width: 450px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-title {
+            color: #61afef;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .modal-content {
+            margin-bottom: 15px;
+        }
+
+        .modal-label {
+            color: #abb2bf;
+            font-size: 12px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .modal-input, .modal-textarea {
+            width: 100%;
+            background: #2c313c;
+            border: 1px solid #4b5263;
+            color: #abb2bf;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .modal-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .modal-input:focus, .modal-textarea:focus {
+            outline: none;
+            border-color: #61afef;
+            box-shadow: 0 0 0 2px rgba(97, 175, 239, 0.2);
+        }
+
+        .modal-info {
+            background: #2c313c;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #5c6370;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .modal-button {
+            padding: 8px 20px;
+            border-radius: 4px;
+            border: none;
+            font-family: inherit;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .modal-button.primary {
+            background: #61afef;
+            color: #282c34;
+        }
+
+        .modal-button.secondary {
+            background: #3e4451;
+            color: #abb2bf;
+        }
+
+        .modal-button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="mockup-container">
+        <h1>TaskUI - Final Nested Hierarchy System</h1>
+
+        <!-- Clarification Box -->
+        <div class="clarification-box">
+            <div class="clarification-title">📋 Nesting Behavior Clarification</div>
+            <div class="clarification-content">
+                <strong>Column 1 - Tasks:</strong>
+                <ul>
+                    <li>Maximum 2 levels of nesting (Level 0 → Level 1)</li>
+                    <li>Example: "Sprint Planning" (Level 0) → "Review backlog" (Level 1)</li>
+                </ul>
+                <strong>Column 2 - Subtasks:</strong>
+                <ul>
+                    <li>Shows children of the selected Column 1 task</li>
+                    <li>Maximum 3 levels of visible nesting (Level 0 → Level 1 → Level 2)</li>
+                    <li>Dynamic header shows: "[Parent Task] Subtasks"</li>
+                    <li>Example: When "API Development" is selected in Column 1, Column 2 shows its children up to 3 levels deep</li>
+                </ul>
+                <strong>New Features:</strong>
+                <ul>
+                    <li>Task creation modal includes notes field</li>
+                    <li>New keybind: 'A' for archive task</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- STATE 1: Task Creation Modal with Notes -->
+        <div class="state-section">
+            <div class="state-title">
+                <span>📝</span>
+                <span>State 1: Task Creation Modal with Notes Field</span>
+            </div>
+            <div class="state-description">
+                User pressed 'N' key to create a new task. Modal now includes a notes field.
+            </div>
+            
+            <div class="tui-window">
+                <div class="list-bar">
+                    <div class="list-tabs">
+                        <div class="list-tab active">1:Work</div>
+                        <div class="list-tab inactive">2:Home</div>
+                        <div class="list-tab inactive">3:Personal</div>
+                    </div>
+                    <div class="trash-can">🗑️ 0%</div>
+                </div>
+
+                <div class="columns">
+                    <div class="column active">
+                        <div class="column-header">Tasks (Column 1)</div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Sprint Planning</span>
+                        </div>
+                        <div class="task-item level-1 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Review backlog</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header-dynamic">Review backlog Subtasks</div>
+                        <div style="color: #5c6370; font-style: italic; padding: 20px;">
+                            No subtasks yet. Press 'C' to add children.
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header">Details (Column 3)</div>
+                        <div class="detail-panel">
+                            <div class="detail-title">Review backlog</div>
+                            <div class="detail-meta">
+                                Created: Today 9:00am<br>
+                                Type: Subtask (Level 1)<br>
+                                Status: Active<br>
+                                Parent: Sprint Planning
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Task Creation Modal with Notes -->
+                <div class="modal-overlay">
+                    <div class="modal">
+                        <div class="modal-title">Create New Task</div>
+                        <div class="modal-content">
+                            <label class="modal-label">Task Name</label>
+                            <input class="modal-input" type="text" value="Update board" autofocus>
+                        </div>
+                        <div class="modal-content">
+                            <label class="modal-label">Notes (Optional)</label>
+                            <textarea class="modal-textarea" placeholder="Add any additional details or context...">Move completed items to done column and add new sprint items</textarea>
+                        </div>
+                        <div class="modal-info">
+                            Creating sibling task at Level 1 (under Sprint Planning)
+                        </div>
+                        <div class="modal-buttons">
+                            <button class="modal-button secondary">Cancel (Esc)</button>
+                            <button class="modal-button primary">Create (Enter)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATE 2: Column 1 with Max 2 Levels -->
+        <div class="state-section">
+            <div class="state-title">
+                <span>📊</span>
+                <span>State 2: Column 1 - Maximum 2 Levels of Nesting</span>
+            </div>
+            <div class="state-description">
+                Column 1 shows tasks with maximum 2 levels (Level 0 and Level 1 only).
+            </div>
+            
+            <div class="tui-window">
+                <div class="list-bar">
+                    <div class="list-tabs">
+                        <div class="list-tab active">1:Work</div>
+                        <div class="list-tab inactive">2:Home</div>
+                        <div class="list-tab inactive">3:Personal</div>
+                    </div>
+                    <div class="trash-can">🗑️ 0%</div>
+                </div>
+
+                <div class="columns">
+                    <div class="column active">
+                        <div class="column-header">Tasks (Column 1)</div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Sprint Planning</span>
+                            <span class="progress-indicator">0/3</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Review backlog</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Team sync</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Update board</span>
+                        </div>
+                        <div class="task-item level-0 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API Development</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Data validation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Error handling</span>
+                        </div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Documentation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API reference</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header-dynamic">API Development Subtasks</div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">JWT implementation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Session management</span>
+                        </div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Data validation</span>
+                        </div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Error handling</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header">Details (Column 3)</div>
+                        <div class="detail-panel">
+                            <div class="detail-title">API Development</div>
+                            <div class="detail-meta">
+                                Created: Today 10:00am<br>
+                                Type: Parent Task (Level 0)<br>
+                                Status: Active<br>
+                                Children: 3 direct tasks
+                            </div>
+                            <div class="notes-section">
+                                <div class="notes-header">Notes</div>
+                                <div class="notes-content">
+                                    Column 1 max nesting: Level 0 → Level 1<br>
+                                    Cannot create children for Level 1 tasks in Column 1
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keybind-helper">
+                    <div class="keybind"><span class="key">N</span> New task</div>
+                    <div class="keybind"><span class="key">C</span> New child</div>
+                    <div class="keybind"><span class="key">A</span> Archive</div>
+                    <div class="keybind"><span class="key">Tab</span> Switch column</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATE 3: Column 2 with 3 Levels Deep -->
+        <div class="state-section">
+            <div class="state-title">
+                <span>🔍</span>
+                <span>State 3: Column 2 - Three Levels of Nesting</span>
+            </div>
+            <div class="state-description">
+                "API Development" selected in Column 1. Column 2 shows its children up to 3 levels deep.
+            </div>
+            
+            <div class="tui-window">
+                <div class="list-bar">
+                    <div class="list-tabs">
+                        <div class="list-tab active">1:Work</div>
+                        <div class="list-tab inactive">2:Home</div>
+                        <div class="list-tab inactive">3:Personal</div>
+                    </div>
+                    <div class="trash-can">🗑️ 15%</div>
+                </div>
+
+                <div class="columns">
+                    <div class="column">
+                        <div class="column-header">Tasks (Column 1)</div>
+                        <div class="task-item level-0 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API Development</span>
+                            <span class="progress-indicator">2/8</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                            <span class="progress-indicator">1/2</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Data validation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Error handling</span>
+                        </div>
+                    </div>
+
+                    <div class="column active">
+                        <div class="column-header-dynamic">API Development Subtasks</div>
+                        <!-- Level 0 in Column 2 context -->
+                        <div class="task-item level-0 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                            <span class="progress-indicator">1/2</span>
+                        </div>
+                        <!-- Level 1 children -->
+                        <div class="task-item level-1 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">JWT implementation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Session management</span>
+                        </div>
+                        <!-- Level 2 grandchildren -->
+                        <div class="task-item level-2">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Redis setup</span>
+                        </div>
+                        <div class="task-item level-2">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Timeout logic</span>
+                        </div>
+                        <div class="task-item level-2">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Refresh tokens</span>
+                        </div>
+                        <!-- Another Level 0 -->
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Data validation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Input schemas</span>
+                        </div>
+                        <div class="task-item level-1 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">Type checking</span>
+                        </div>
+                        <!-- Level 0 -->
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Error handling</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header">Details (Column 3)</div>
+                        <div class="detail-panel">
+                            <div class="detail-title">Auth endpoints</div>
+                            <div class="detail-meta">
+                                Created: Today 10:30am<br>
+                                Type: Subtask (Column 2, Level 0)<br>
+                                Status: In Progress<br>
+                                Parent: API Development<br>
+                                Progress: 1 of 2 children complete
+                            </div>
+                            <div class="detail-hierarchy">
+                                <strong>Full Task Hierarchy:</strong>
+                                <div class="hierarchy-line">API Development (Column 1 selected)</div>
+                                <div class="hierarchy-line current">└─ Auth endpoints (current)</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;├─ JWT implementation ✓</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;└─ Session management</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ Redis setup</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ Timeout logic</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ Refresh tokens</div>
+                            </div>
+                            <div class="notes-section">
+                                <div class="notes-header">Notes</div>
+                                <div class="notes-content">
+                                    Column 2 shows up to 3 levels of nesting.<br>
+                                    Level 2 is the maximum depth in Column 2.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keybind-helper">
+                    <div class="keybind"><span class="key">C</span> New child</div>
+                    <div class="keybind"><span class="key">Space</span> Complete</div>
+                    <div class="keybind"><span class="key">A</span> Archive</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATE 4: Different Parent Selected -->
+        <div class="state-section">
+            <div class="state-title">
+                <span>🔄</span>
+                <span>State 4: Different Column 1 Selection Changes Column 2</span>
+            </div>
+            <div class="state-description">
+                "Auth endpoints" selected in Column 1. Column 2 now shows Auth endpoints' children starting at Level 0.
+            </div>
+            
+            <div class="tui-window">
+                <div class="list-bar">
+                    <div class="list-tabs">
+                        <div class="list-tab active">1:Work</div>
+                        <div class="list-tab inactive">2:Home</div>
+                        <div class="list-tab inactive">3:Personal</div>
+                    </div>
+                    <div class="trash-can">🗑️ 15%</div>
+                </div>
+
+                <div class="columns">
+                    <div class="column active">
+                        <div class="column-header">Tasks (Column 1)</div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API Development</span>
+                            <span class="progress-indicator">2/8</span>
+                        </div>
+                        <div class="task-item level-1 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                            <span class="progress-indicator">1/2</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Data validation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Error handling</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header-dynamic">Auth endpoints Subtasks</div>
+                        <!-- Now these are Level 0 in Column 2 context -->
+                        <div class="task-item level-0 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">JWT implementation</span>
+                        </div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Session management</span>
+                        </div>
+                        <!-- Level 1 children of Session management -->
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Redis setup</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Timeout logic</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Refresh tokens</span>
+                        </div>
+                        <!-- Level 2 - can still go one level deeper -->
+                        <div class="task-item level-2">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Token rotation</span>
+                        </div>
+                        <div class="task-item level-2">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Blacklist expired</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header">Details (Column 3)</div>
+                        <div class="detail-panel">
+                            <div class="detail-title">Auth endpoints</div>
+                            <div class="detail-meta">
+                                Created: Today 10:30am<br>
+                                Type: Subtask (Level 1 in Column 1)<br>
+                                Status: In Progress<br>
+                                Parent: API Development<br>
+                                Children: 2 direct tasks, 7 total descendants
+                            </div>
+                            <div class="detail-hierarchy">
+                                <strong>Context in Column 2:</strong>
+                                <div class="hierarchy-line">When Auth endpoints is selected in Column 1,</div>
+                                <div class="hierarchy-line">its children appear as Level 0 in Column 2</div>
+                            </div>
+                            <div class="notes-section">
+                                <div class="notes-header">Notes</div>
+                                <div class="notes-content">
+                                    Column 2 always shows children of Column 1 selection.<br>
+                                    The nesting levels in Column 2 are relative to the selected parent.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keybind-helper">
+                    <div class="keybind"><span class="key">Tab</span> Focus Column 2</div>
+                    <div class="keybind"><span class="key">C</span> Create child</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATE 5: Maximum Nesting in Column 2 -->
+        <div class="state-section">
+            <div class="state-title">
+                <span>🚫</span>
+                <span>State 5: Maximum Nesting Level in Column 2</span>
+            </div>
+            <div class="state-description">
+                Level 2 task selected in Column 2. This is the maximum depth - cannot create children.
+            </div>
+            
+            <div class="tui-window">
+                <div class="list-bar">
+                    <div class="list-tabs">
+                        <div class="list-tab active">1:Work</div>
+                        <div class="list-tab inactive">2:Home</div>
+                        <div class="list-tab inactive">3:Personal</div>
+                    </div>
+                    <div class="trash-can">🗑️ 15%</div>
+                </div>
+
+                <div class="columns">
+                    <div class="column">
+                        <div class="column-header">Tasks (Column 1)</div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API Development</span>
+                        </div>
+                        <div class="task-item level-1 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                        </div>
+                    </div>
+
+                    <div class="column active">
+                        <div class="column-header-dynamic">Auth endpoints Subtasks</div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Session management</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Refresh tokens</span>
+                        </div>
+                        <div class="task-item level-2 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Token rotation</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header">Details (Column 3)</div>
+                        <div class="detail-panel">
+                            <div class="detail-title">Token rotation</div>
+                            <div class="detail-meta">
+                                Created: Just now<br>
+                                Type: Task (Level 2 in Column 2 - Maximum depth)<br>
+                                Status: Active<br>
+                                Parent: Refresh tokens
+                            </div>
+                            <div class="max-nesting-warning">
+                                ⚠️ Maximum nesting level reached in Column 2 (Level 2)<br>
+                                Cannot create children for this task. Press 'N' to create siblings.
+                            </div>
+                            <div class="notes-section">
+                                <div class="notes-header">Notes</div>
+                                <div class="notes-content">
+                                    Implement automatic token rotation on refresh.<br>
+                                    Issue new access and refresh tokens on each refresh.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keybind-helper">
+                    <div class="keybind"><span class="key">N</span> New sibling</div>
+                    <div class="keybind" style="opacity: 0.5;"><span class="key">C</span> Disabled</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATE 6: Archive Functionality -->
+        <div class="state-section">
+            <div class="state-title">
+                <span>📦</span>
+                <span>State 6: Archive Task Feature</span>
+            </div>
+            <div class="state-description">
+                User pressed 'A' to archive completed tasks. Archived tasks show with reduced opacity.
+            </div>
+            
+            <div class="tui-window">
+                <div class="list-bar">
+                    <div class="list-tabs">
+                        <div class="list-tab active">1:Work</div>
+                        <div class="list-tab inactive">2:Home</div>
+                        <div class="list-tab inactive">3:Personal</div>
+                    </div>
+                    <div class="trash-can">🗑️ 25% (2 archived)</div>
+                </div>
+
+                <div class="columns">
+                    <div class="column active">
+                        <div class="column-header">Tasks (Column 1)</div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Sprint Planning</span>
+                            <span class="progress-indicator">2/3</span>
+                        </div>
+                        <div class="task-item level-1 completed archived">
+                            <span class="status-icon">📦</span>
+                            <span class="task-text">Review backlog</span>
+                        </div>
+                        <div class="task-item level-1 completed archived">
+                            <span class="status-icon">📦</span>
+                            <span class="task-text">Team sync</span>
+                        </div>
+                        <div class="task-item level-1 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Update board</span>
+                        </div>
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API Development</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header-dynamic">Update board Subtasks</div>
+                        <div style="color: #5c6370; font-style: italic; padding: 20px;">
+                            No subtasks yet. Press 'C' to add children.
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header">Details (Column 3)</div>
+                        <div class="detail-panel">
+                            <div class="detail-title">Update board</div>
+                            <div class="detail-meta">
+                                Created: Today 11:00am<br>
+                                Type: Subtask (Level 1)<br>
+                                Status: Active<br>
+                                Parent: Sprint Planning
+                            </div>
+                            <div class="notes-section">
+                                <div class="notes-header">Archive Feature</div>
+                                <div class="notes-content">
+                                    Press 'A' to archive completed tasks.<br>
+                                    Archived tasks show with 📦 icon and reduced opacity.<br>
+                                    Trash icon shows completion % and archive count.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keybind-helper">
+                    <div class="keybind"><span class="key">A</span> Archive</div>
+                    <div class="keybind"><span class="key">Space</span> Complete</div>
+                    <div class="keybind"><span class="key">N</span> New task</div>
+                    <div class="keybind"><span class="key">C</span> New child</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATE 7: Complete Example -->
+        <div class="state-section">
+            <div class="state-title">
+                <span>🎯</span>
+                <span>State 7: Complete System Overview</span>
+            </div>
+            <div class="state-description">
+                Full system showing Column 1 (max 2 levels), Column 2 (max 3 levels), dynamic headers, and all features.
+            </div>
+            
+            <div class="tui-window">
+                <div class="list-bar">
+                    <div class="list-tabs">
+                        <div class="list-tab active">1:Work</div>
+                        <div class="list-tab inactive">2:Home</div>
+                        <div class="list-tab inactive">3:Personal</div>
+                    </div>
+                    <div class="trash-can">🗑️ 30% (3 archived)</div>
+                </div>
+
+                <div class="columns">
+                    <div class="column">
+                        <div class="column-header">Tasks (Column 1)</div>
+                        <!-- Level 0 -->
+                        <div class="task-item level-0 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">Sprint Planning</span>
+                        </div>
+                        <!-- Level 1 (max in Column 1) -->
+                        <div class="task-item level-1 archived">
+                            <span class="status-icon">📦</span>
+                            <span class="task-text">Review backlog</span>
+                        </div>
+                        <div class="task-item level-1 archived">
+                            <span class="status-icon">📦</span>
+                            <span class="task-text">Team sync</span>
+                        </div>
+                        <div class="task-item level-1 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">Update board</span>
+                        </div>
+                        <!-- Level 0 -->
+                        <div class="task-item level-0 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API Development</span>
+                            <span class="progress-indicator">3/10</span>
+                        </div>
+                        <!-- Level 1 -->
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                            <span class="progress-indicator">2/5</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Data validation</span>
+                        </div>
+                        <div class="task-item level-1 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">Error handling</span>
+                        </div>
+                        <!-- Level 0 -->
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Documentation</span>
+                        </div>
+                        <!-- Level 1 -->
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">API reference</span>
+                        </div>
+                        <div class="task-item level-1 archived">
+                            <span class="status-icon">📦</span>
+                            <span class="task-text">User guide</span>
+                        </div>
+                    </div>
+
+                    <div class="column active">
+                        <div class="column-header-dynamic">API Development Subtasks</div>
+                        <!-- Level 0 in Column 2 -->
+                        <div class="task-item level-0 selected">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Auth endpoints</span>
+                            <span class="progress-indicator">2/5</span>
+                        </div>
+                        <!-- Level 1 -->
+                        <div class="task-item level-1 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">JWT implementation</span>
+                        </div>
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Session management</span>
+                        </div>
+                        <!-- Level 2 (max in Column 2) -->
+                        <div class="task-item level-2">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Redis setup</span>
+                        </div>
+                        <div class="task-item level-2">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Timeout logic</span>
+                        </div>
+                        <div class="task-item level-2 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">Session cleanup</span>
+                        </div>
+                        <!-- Level 1 -->
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">OAuth integration</span>
+                        </div>
+                        <!-- Level 0 -->
+                        <div class="task-item level-0">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Data validation</span>
+                        </div>
+                        <!-- Level 1 -->
+                        <div class="task-item level-1">
+                            <span class="status-icon">○</span>
+                            <span class="task-text">Input schemas</span>
+                        </div>
+                        <!-- Level 0 -->
+                        <div class="task-item level-0 completed">
+                            <span class="status-icon">✓</span>
+                            <span class="task-text">Error handling</span>
+                        </div>
+                    </div>
+
+                    <div class="column">
+                        <div class="column-header">Details (Column 3)</div>
+                        <div class="detail-panel">
+                            <div class="detail-title">Auth endpoints</div>
+                            <div class="detail-meta">
+                                Created: Today 10:30am<br>
+                                Type: Subtask (Column 2 context)<br>
+                                Status: In Progress<br>
+                                Parent: API Development<br>
+                                Progress: 2 of 5 tasks complete (40%)
+                            </div>
+                            <div class="detail-hierarchy">
+                                <strong>Full Hierarchy:</strong>
+                                <div class="hierarchy-line">API Development (Column 1)</div>
+                                <div class="hierarchy-line current">└─ Auth endpoints (current, Column 2 Level 0)</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;├─ JWT implementation ✓</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;├─ Session management</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;├─ Redis setup</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;├─ Timeout logic</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;└─ Session cleanup ✓</div>
+                                <div class="hierarchy-line">&nbsp;&nbsp;&nbsp;└─ OAuth integration</div>
+                            </div>
+                            <div class="notes-section">
+                                <div class="notes-header">Notes</div>
+                                <div class="notes-content">
+                                    Complete authentication system implementation.<br>
+                                    Support JWT, sessions, and OAuth providers.<br>
+                                    Ensure proper security measures are in place.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keybind-helper">
+                    <div class="keybind"><span class="key">N</span> New task</div>
+                    <div class="keybind"><span class="key">C</span> New child</div>
+                    <div class="keybind"><span class="key">Space</span> Complete</div>
+                    <div class="keybind"><span class="key">A</span> Archive</div>
+                    <div class="keybind"><span class="key">P</span> Print</div>
+                    <div class="keybind"><span class="key">Tab</span> Switch</div>
+                    <div class="keybind"><span class="key">1-3</span> Lists</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

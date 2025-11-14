@@ -1,0 +1,657 @@
+# TaskUI Implementation Tasks
+
+## Overview
+This document breaks down the TaskUI project into discrete, manageable tasks optimized for Claude Code CLI workflows. Each task is sized to fit within a single context window without compacting.
+
+**Key Principles:**
+- Each task produces working, testable code
+- Tasks are as independent as possible to enable parallel work
+- Clear inputs/outputs and success criteria
+- MVP functionality first, enhancements later
+
+---
+
+## PHASE 1: MVP CORE (Project Foundation & Basic Functionality)
+
+### 1.1 Project Setup and Structure ⚡ [STANDALONE]
+**Size:** Small | **Time:** 15 mins | **Dependencies:** None
+
+Create the initial project structure with all directories, configuration files, and dependency management.
+
+**Deliverables:**
+- `pyproject.toml` or `requirements.txt` with all dependencies
+- Project directory structure
+- `.gitignore` file
+- `README.md` with setup instructions
+- `pytest.ini` configuration
+- Basic `__init__.py` files
+
+**Success Criteria:**
+- `pip install -r requirements.txt` works
+- `pytest` runs (even with no tests)
+- Project structure matches specification
+
+---
+
+### 1.2 Data Models ⚡ [STANDALONE]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.1
+
+Create Pydantic models for Task and TaskList with all fields, validation, and computed properties.
+
+**Files to create:**
+- `taskui/models.py`
+- `tests/test_models.py`
+
+**Success Criteria:**
+- Models validate data correctly
+- Computed fields (progress_string, completion_percentage) work
+- All fields have correct types
+- Tests pass for model creation and validation
+
+---
+
+### 1.3 Database Layer ⚡ [STANDALONE] 
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.2
+
+Implement SQLite database setup with SQLAlchemy/aiosqlite, including schema creation and connection management.
+
+**Files to create:**
+- `taskui/database.py` (engine, session, Base)
+- `taskui/schema.sql` (for reference)
+- `tests/test_database.py`
+- `tests/conftest.py` (database fixtures)
+
+**Success Criteria:**
+- Database creates successfully
+- Tables match schema specification
+- Async session management works
+- In-memory test database fixture works
+
+---
+
+### 1.4 Basic Textual App Shell 🔄 [BLOCKS: UI Tasks]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.1
+
+Create the main Textual application with three-column layout and One Monokai theme.
+
+**Files to create:**
+- `taskui/ui/app.py` (main App class)
+- `taskui/ui/theme.py` (One Monokai colors)
+- `taskui/ui/components/__init__.py`
+- `taskui/__main__.py` (entry point)
+
+**Success Criteria:**
+- App launches with `python -m taskui`
+- Three columns visible with correct layout
+- One Monokai theme applied
+- Columns have correct headers
+
+---
+
+### 1.5 Task Display Components ⚡ [DEPENDS ON: 1.4]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.4
+
+Create TaskItem widget and Column components for displaying tasks with proper nesting visualization.
+
+**Files to create:**
+- `taskui/ui/components/task_item.py`
+- `taskui/ui/components/column.py`
+- `tests/test_ui_components.py`
+
+**Success Criteria:**
+- Tasks display with correct indentation
+- Tree lines (└─) render properly
+- Nesting levels have distinct colors
+- Selection highlighting works
+
+---
+
+### 1.6 Nesting Rules Engine ⚡ [STANDALONE]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.2
+
+Implement the core nesting logic that enforces Column 1 (max 2 levels) and Column 2 (max 3 levels) rules.
+
+**Files to create:**
+- `taskui/services/nesting_rules.py`
+- `tests/test_nesting_rules.py`
+
+**Success Criteria:**
+- `can_create_child()` method works correctly
+- Context-relative level calculation works
+- Maximum depth enforcement works
+- Comprehensive tests pass
+
+---
+
+### 1.7 Task Service - Create & Read ⚡ [DEPENDS ON: 1.3, 1.6]
+**Size:** Large | **Time:** 45 mins | **Dependencies:** 1.3, 1.6
+
+Implement task creation and reading operations with database persistence and nesting validation.
+
+**Files to create:**
+- `taskui/services/task_service.py` (create, read methods)
+- `tests/test_task_service.py`
+
+**Key Methods:**
+- `create_task(title, notes, list_id)`
+- `create_child_task(parent_id, title, notes, column)`
+- `get_tasks_for_list(list_id)`
+- `get_children(task_id)`
+- `get_all_descendants(task_id)`
+
+**Success Criteria:**
+- Tasks save to database
+- Parent-child relationships work
+- Nesting limits enforced
+- Can retrieve task hierarchies
+
+---
+
+### 1.8 Keyboard Navigation ⚡ [DEPENDS ON: 1.5]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.5
+
+Implement keyboard navigation within and between columns (arrows, tab, shift+tab).
+
+**Files to create:**
+- `taskui/ui/keybindings.py`
+- Update `taskui/ui/app.py` with handlers
+
+**Success Criteria:**
+- Up/Down arrows navigate within column
+- Tab/Shift+Tab switches columns
+- Focus indicators clearly visible
+- Navigation wraps at boundaries
+
+---
+
+### 1.9 Task Creation Modal ⚡ [DEPENDS ON: 1.5, 1.7]
+**Size:** Medium | **Time:** 35 mins | **Dependencies:** 1.5, 1.7
+
+Create modal dialog for task creation with title and notes fields.
+
+**Files to create:**
+- `taskui/ui/components/task_modal.py`
+- Update keybindings for 'N' and 'C' keys
+- Update app.py to integrate modal with task_service
+- `tests/test_task_modal.py`
+
+**Success Criteria:**
+- Modal appears on 'N' (new sibling) and 'C' (new child)
+- Can input title and notes
+- Enter saves, Escape cancels
+- Modal shows context (creating sibling vs child)
+- Respects nesting limits
+- Tasks persist to database via task_service integration
+
+**Implementation Notes:**
+- Modal component should be fully functional and tested independently
+- App integration should wire modal results to task_service.create_task() and create_child_task()
+- Database session management will be added in Story 1.16 if not yet available
+
+---
+
+### 1.10 Column 2 Dynamic Updates ⚡ [DEPENDS ON: 1.7, 1.8]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.7, 1.8
+
+Implement Column 2 to show children of Column 1 selection with dynamic header.
+
+**Files to create:**
+- `taskui/ui/components/column2.py` (if needed)
+- Update app.py selection handler
+
+**Success Criteria:**
+- Column 2 updates when Column 1 selection changes
+- Header shows "[Parent] Subtasks"
+- Levels are context-relative (start at 0)
+- Empty state when no children
+
+---
+
+### 1.11 Task Service - Update & Delete ⚡ [DEPENDS ON: 1.7]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.7
+
+Complete CRUD operations with update and delete functionality.
+
+**Files to update:**
+- `taskui/services/task_service.py` (update, delete methods)
+- `tests/test_task_service.py`
+
+**Key Methods:**
+- `update_task(task_id, title, notes)`
+- `delete_task(task_id)` (handle children)
+- `move_task(task_id, new_parent_id, position)`
+
+**Success Criteria:**
+- Can update task properties
+- Delete handles cascade properly
+- Position/order maintained
+- Database consistency preserved
+
+---
+
+### 1.12 Task Editing ⚡ [DEPENDS ON: 1.9, 1.11]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.9, 1.11
+
+Add edit functionality to existing tasks (press 'E' to edit selected task).
+
+**Files to update:**
+- Update `taskui/ui/components/task_modal.py` for edit mode
+- Add 'E' key handler
+- Update task service integration
+
+**Success Criteria:**
+- 'E' opens modal with existing task data
+- Can modify title and notes
+- Save updates database
+- UI refreshes after edit
+
+---
+
+### 1.13 Column 3 Detail View ⚡ [DEPENDS ON: 1.8]
+**Size:** Medium | **Time:** 25 mins | **Dependencies:** 1.8
+
+Implement Column 3 to show detailed task information and metadata.
+
+**Files to create:**
+- `taskui/ui/components/detail_panel.py`
+- Update selection handlers
+
+**Success Criteria:**
+- Shows task title, dates, status
+- Shows complete hierarchy path
+- Shows parent information
+- Displays notes
+- Shows max nesting warning when applicable
+
+---
+
+### 1.14 List Management ⚡ [DEPENDS ON: 1.3]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.3
+
+Create default lists (Work, Home, Personal) and list bar display.
+
+**Files to create:**
+- `taskui/services/list_service.py`
+- `taskui/ui/components/list_bar.py`
+- Database migration/seed script
+
+**Success Criteria:**
+- Three default lists created on first run
+- List bar shows all lists
+- Active list highlighted
+- Can store list-specific tasks
+
+---
+
+### 1.15 Data Persistence & Auto-save ⚡ [DEPENDS ON: 1.7, 1.11]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.7, 1.11
+
+Implement automatic saving and session persistence.
+
+**Files to update:**
+- Add auto-save to all modification operations
+- Ensure database commits properly
+- Add error recovery
+
+**Success Criteria:**
+- All changes persist immediately
+- App restores state on restart
+- No data loss on crash
+- Database transactions handled correctly
+
+---
+
+### 1.16 MVP Integration & Testing 🏁 [DEPENDS ON: ALL MVP]
+**Size:** Large | **Time:** 45 mins | **Dependencies:** All MVP tasks
+
+Integration testing and bug fixes for complete MVP functionality.
+
+**Files to create:**
+- `tests/test_integration_mvp.py`
+- Bug fixes as needed
+
+**Key Integration Points:**
+- Wire app.py database session to task_service
+- Complete modal-to-database persistence flow (1.9)
+- Column updates on task creation/modification (1.10)
+- Ensure all keyboard shortcuts work end-to-end
+
+**Success Criteria:**
+- Can create nested task hierarchy via modal (N/C keys)
+- Tasks persist to database and reload on app restart
+- All CRUD operations work end-to-end
+- Navigation is smooth across all columns
+- Column 2 updates when Column 1 selection changes
+- Data persists across restarts
+- No critical bugs
+
+---
+
+## PHASE 2: ENHANCED FEATURES
+
+### 2.1 Task Completion Toggle ⚡ [DEPENDS ON: MVP]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** MVP
+
+Implement Space key to toggle task completion with visual feedback.
+
+**Files to update:**
+- Add completion handler
+- Update task display for completed state
+- Update database
+
+**Success Criteria:**
+- Space toggles completion
+- Visual feedback (strikethrough, checkmark, opacity)
+- Completion timestamp saved
+- State persists
+
+---
+
+### 2.2 Progress Indicators ⚡ [DEPENDS ON: 2.1]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 2.1
+
+Show parent task progress based on child completion.
+
+**Files to update:**
+- Calculate progress in task service
+- Display "2/5" style indicators
+- Update on child changes
+
+**Success Criteria:**
+- Parents show child progress
+- Updates in real-time
+- Doesn't auto-complete parents
+- Accurate calculations
+
+---
+
+### 2.3 Archive Functionality ⚡ [DEPENDS ON: 2.1]
+**Size:** Medium | **Time:** 25 mins | **Dependencies:** 2.1
+
+Implement 'A' key to archive completed tasks.
+
+**Files to update:**
+- Add archive handler
+- Update task display for archived state
+- Update trash icon percentage
+
+**Success Criteria:**
+- 'A' archives completed tasks
+- Archived tasks show with 📦 icon
+- Reduced opacity for archived
+- Trash icon shows percentage and count
+
+---
+
+### 2.4 List Switching ⚡ [DEPENDS ON: 1.14]
+**Size:** Medium | **Time:** 25 mins | **Dependencies:** 1.14
+
+Implement number keys (1-3) to switch between lists.
+
+**Files to update:**
+- Add number key handlers
+- Update column displays
+- Reset navigation state
+
+**Success Criteria:**
+- 1-3 keys switch lists
+- Column 1 updates with new list tasks
+- Column 2 clears
+- Selection resets
+- Active list highlighted
+
+---
+
+### 2.5 Delete Key Support ⚡ [DEPENDS ON: 1.11]
+**Size:** Small | **Time:** 15 mins | **Dependencies:** 1.11
+
+Add Delete/Backspace key to delete selected task.
+
+**Files to update:**
+- Add delete key handler
+- Confirmation dialog (optional)
+- Handle cascade deletion
+
+**Success Criteria:**
+- Delete key removes task
+- Handles children appropriately
+- Updates UI immediately
+- Maintains selection position
+
+---
+
+## PHASE 3: POLISH & OPTIMIZATION
+
+### 3.1 Error Handling & Recovery ⚡ [STANDALONE]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** MVP
+
+Comprehensive error handling throughout the application.
+
+**Files to create:**
+- `taskui/exceptions.py`
+- Update all services with try/catch
+- Add user-friendly error messages
+
+**Success Criteria:**
+- No crashes on errors
+- Clear error messages
+- Database recovery on corruption
+- Graceful degradation
+
+---
+
+### 3.2 JSON Backup System ⚡ [DEPENDS ON: MVP]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** MVP
+
+Import/export functionality for JSON backups.
+
+**Files to create:**
+- `taskui/backup.py`
+- CLI commands for backup/restore
+- Auto-backup on major operations
+
+**Success Criteria:**
+- Can export entire database to JSON
+- Can import from JSON
+- Preserves all relationships
+- Command-line interface works
+
+---
+
+### 3.3 Performance Optimization ⚡ [DEPENDS ON: MVP]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** MVP
+
+Optimize database queries and UI rendering.
+
+**Updates needed:**
+- Add database indexes
+- Optimize query patterns
+- Implement query caching
+- Lazy loading for large lists
+
+**Success Criteria:**
+- <50ms navigation response
+- <100ms task creation
+- Handles 1000+ tasks smoothly
+- Memory usage stays low
+
+---
+
+### 3.4 Configuration System ⚡ [STANDALONE]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** None
+
+Implement settings management with .env support.
+
+**Files to create:**
+- `taskui/config.py`
+- `.env.example`
+- Update app to use config
+
+**Success Criteria:**
+- Settings load from .env
+- Defaults work without .env
+- Can configure all key settings
+- Settings documented
+
+---
+
+### 3.5 Comprehensive Testing Suite 🧪 [DEPENDS ON: MVP]
+**Size:** Large | **Time:** 45 mins | **Dependencies:** MVP
+
+Complete test coverage for all components.
+
+**Files to create/update:**
+- All test files per specification
+- Factories and fixtures
+- Integration tests
+- Performance benchmarks
+
+**Success Criteria:**
+- >80% code coverage
+- All critical paths tested
+- UI snapshot tests pass
+- Performance benchmarks met
+
+---
+
+## PHASE 4: ADVANCED FEATURES
+
+### 4.1 Network Printer Support ⚡ [DEPENDS ON: MVP]
+**Size:** Large | **Time:** 40 mins | **Dependencies:** MVP
+
+Implement thermal printer integration via Raspberry Pi.
+
+**Files to create:**
+- `taskui/services/printer_service.py`
+- Print formatting logic
+- 'P' key handler
+- Mock printer for testing
+
+**Success Criteria:**
+- 'P' prints current column
+- Proper receipt formatting
+- Handles printer offline
+- Network communication works
+
+---
+
+### 4.2 PyInstaller Build ⚡ [DEPENDS ON: All]
+**Size:** Medium | **Time:** 30 mins | **Dependencies:** All features
+
+Create standalone executable distribution.
+
+**Files to create:**
+- `taskui.spec` (PyInstaller config)
+- Build scripts
+- Distribution documentation
+
+**Success Criteria:**
+- Single executable builds
+- Runs on target platforms
+- Includes all resources
+- <50MB file size
+
+---
+
+### 4.3 CLI Enhancements ⚡ [DEPENDS ON: MVP]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** MVP
+
+Add command-line arguments and operations.
+
+**Files to update:**
+- `taskui/__main__.py`
+- Add Typer CLI commands
+- Help documentation
+
+**Success Criteria:**
+- --help shows usage
+- Can specify database path
+- Backup/restore commands work
+- Version command works
+
+---
+
+### 4.4 Help System ⚡ [DEPENDS ON: MVP]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** MVP
+
+Add in-app help panel (press '?').
+
+**Files to create:**
+- `taskui/ui/components/help_panel.py`
+- Help text content
+- '?' key handler
+
+**Success Criteria:**
+- '?' shows help overlay
+- Lists all keyboard shortcuts
+- Escape closes help
+- Well-formatted display
+
+---
+
+## IMPLEMENTATION NOTES
+
+### Parallel Work Opportunities
+These task groups can be worked on simultaneously by different contexts:
+- **Group A:** 1.1, 1.2, 1.3, 1.6 (Models & Database)
+- **Group B:** 1.4, 1.5 (UI Foundation)
+- **Group C:** 1.14, 3.4 (Configuration & Lists)
+- **Group D:** 3.1, Tests (Quality & Testing)
+
+### Critical Path (Sequential Dependencies)
+1. Project Setup (1.1)
+2. Basic App Shell (1.4)
+3. Task Display (1.5)
+4. Task Service CRUD (1.7, 1.11)
+5. Task Creation Modal (1.9)
+6. Integration (1.16)
+
+### Size Guidelines for Claude Code CLI
+- **Small (15-20 mins):** Single file, <150 lines
+- **Medium (25-35 mins):** 2-3 files, <300 lines total
+- **Large (40-45 mins):** Multiple files, <500 lines total
+
+### Testing Strategy
+- Write tests alongside implementation
+- Use TDD for business logic
+- Integration tests after each phase
+- Performance tests in Phase 3
+
+### Success Metrics
+- **MVP Complete:** User can create, edit, delete nested tasks with persistence
+- **Phase 2 Complete:** Full keyboard navigation and task management
+- **Phase 3 Complete:** Production-ready with testing and optimization
+- **Phase 4 Complete:** Advanced features and distribution
+
+---
+
+## QUICK START SEQUENCE
+
+For fastest MVP delivery, execute tasks in this order:
+
+**Day 1 - Foundation:**
+1. 1.1 Project Setup (15m)
+2. 1.2 Data Models (20m)
+3. 1.3 Database Layer (30m)
+4. 1.4 Basic App Shell (30m)
+5. 1.6 Nesting Rules (20m)
+
+**Day 2 - Core Features:**
+1. 1.5 Task Display (30m)
+2. 1.7 Task Service Create/Read (45m)
+3. 1.8 Keyboard Navigation (30m)
+4. 1.9 Task Creation Modal (35m)
+
+**Day 3 - Complete MVP:**
+1. 1.10 Column 2 Updates (30m)
+2. 1.11 Task Service Update/Delete (30m)
+3. 1.13 Column 3 Details (25m)
+4. 1.14 List Management (20m)
+5. 1.15 Persistence (20m)
+6. 1.16 Integration (45m)
+
+Total MVP: ~7 hours of focused work
+
+---
+
+*Each task is designed to be completed in one Claude Code CLI session without context overflow. Tasks marked with ⚡ can be worked in parallel. Tasks marked with 🔄 block other UI work. Tasks marked with 🧪 are testing-focused. Tasks marked with 🏁 are integration points.*
