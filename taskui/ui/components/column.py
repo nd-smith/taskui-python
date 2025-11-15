@@ -113,14 +113,33 @@ class TaskColumn(Widget):
         with VerticalScroll(classes="column-content", id=f"{self.column_id}-content"):
             yield Static(self.empty_message, classes="empty-message", id=f"{self.column_id}-empty")
 
-    def set_tasks(self, tasks: List[Task]) -> None:
+    def set_tasks(self, tasks: List[Task], preserve_selection: bool = True) -> None:
         """Update the column with a new list of tasks.
 
         Args:
             tasks: List of Task objects to display
+            preserve_selection: If True, try to maintain the current selection by task ID
         """
+        # Remember currently selected task ID
+        previously_selected_id = None
+        if preserve_selection and 0 <= self._selected_index < len(self._tasks):
+            previously_selected_id = self._tasks[self._selected_index].id
+
         self._tasks = tasks
-        self._selected_index = 0 if tasks else -1
+
+        # Try to find the previously selected task in the new list
+        if preserve_selection and previously_selected_id:
+            for i, task in enumerate(tasks):
+                if task.id == previously_selected_id:
+                    self._selected_index = i
+                    break
+            else:
+                # Previously selected task not found, default to first task
+                self._selected_index = 0 if tasks else -1
+        else:
+            # Not preserving selection, default to first task
+            self._selected_index = 0 if tasks else -1
+
         self._render_tasks()
 
     def _render_tasks(self) -> None:
@@ -179,7 +198,8 @@ class TaskColumn(Widget):
             # Check if widget already exists
             try:
                 existing = content_container.query_one(f"#{task_id}", TaskItem)
-                # Widget exists, update its state
+                # Widget exists, update its task data and selection state
+                existing.update_task(task)
                 existing.selected = (i == self._selected_index)
                 continue
             except:

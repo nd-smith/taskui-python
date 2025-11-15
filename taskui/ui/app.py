@@ -525,11 +525,15 @@ class TaskUI(App):
         Args:
             column: TaskColumn widget to refresh
         """
-        # For Column 1, reload top-level tasks
+        # For Column 1, reload top-level tasks with their children (2 levels)
         if column.column_id == COLUMN_1_ID and self._current_list_id:
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
-                tasks = await task_service.get_tasks_for_list(self._current_list_id)
+                tasks = await self._get_tasks_with_children(
+                    task_service,
+                    self._current_list_id,
+                    include_archived=False
+                )
                 column.set_tasks(tasks)
         # For Column 2, we need to reload children of the selected Column 1 task
         elif column.column_id == COLUMN_2_ID:
@@ -566,10 +570,50 @@ class TaskUI(App):
         )
         self.push_screen(modal, self._handle_task_modal_result)
 
-    def action_toggle_completion(self) -> None:
-        """Toggle task completion status (Space key)."""
-        # TODO: Implement in Story 2.1
-        pass
+    async def action_toggle_completion(self) -> None:
+        """Toggle task completion status (Space key).
+
+        Toggles the completion status of the currently selected task.
+        When completed, the task will display with a strikethrough.
+        """
+        column = self._get_focused_column()
+        if not column:
+            return
+
+        # Get the currently selected task
+        selected_task = column.get_selected_task()
+        if not selected_task:
+            # No task selected, nothing to toggle
+            return
+
+        if not self._db_manager:
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                # Toggle the task completion status
+                await task_service.toggle_completion(selected_task.id)
+                # Session context manager will auto-commit
+
+            # Refresh the focused column to show the updated task with strikethrough
+            await self._refresh_column_tasks(column)
+
+            # If toggling in Column 2, also refresh Column 1 to update parent's progress indicator
+            if column.column_id == COLUMN_2_ID:
+                column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+                await self._refresh_column_tasks(column1)
+
+            # Refresh Column 3 to show updated details
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                updated_task = await task_service.get_task_by_id(selected_task.id)
+                if updated_task:
+                    await self._update_column3_for_selection(updated_task)
+
+        except Exception as e:
+            # TODO: Add proper error handling in Phase 3
+            print(f"Error toggling task completion: {e}")
 
     def action_archive_task(self) -> None:
         """Archive the selected task (A key)."""

@@ -880,3 +880,80 @@ class TestTaskServiceIntegration:
         assert len(personal_tasks) == 1
         assert all(task.list_id == list1_id for task in work_tasks)
         assert all(task.list_id == list2_id for task in personal_tasks)
+
+
+class TestTaskServiceToggleCompletion:
+    """Tests for task completion toggle operations."""
+
+    @pytest.mark.asyncio
+    async def test_toggle_completion_incomplete_to_complete(self, db_session, sample_task_list, sample_list_id):
+        """Test toggling an incomplete task to complete."""
+        service = TaskService(db_session)
+
+        # Create a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+
+        # Verify initial state
+        assert not task.is_completed
+        assert task.completed_at is None
+
+        # Toggle to complete
+        updated_task = await service.toggle_completion(task.id)
+
+        # Verify completion
+        assert updated_task.is_completed
+        assert updated_task.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_toggle_completion_complete_to_incomplete(self, db_session, sample_task_list, sample_list_id):
+        """Test toggling a complete task to incomplete."""
+        service = TaskService(db_session)
+
+        # Create and complete a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+        completed_task = await service.toggle_completion(task.id)
+        assert completed_task.is_completed
+
+        # Toggle back to incomplete
+        updated_task = await service.toggle_completion(task.id)
+
+        # Verify incompletion
+        assert not updated_task.is_completed
+        assert updated_task.completed_at is None
+
+    @pytest.mark.asyncio
+    async def test_toggle_completion_persistence(self, db_session, sample_task_list, sample_list_id):
+        """Test that completion status persists to database."""
+        service = TaskService(db_session)
+
+        # Create a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+
+        # Toggle to complete
+        await service.toggle_completion(task.id)
+        await db_session.commit()
+
+        # Retrieve from database
+        retrieved_task = await service.get_task_by_id(task.id)
+
+        # Verify persistence
+        assert retrieved_task.is_completed
+        assert retrieved_task.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_toggle_completion_nonexistent_task(self, db_session):
+        """Test toggling completion on a non-existent task raises error."""
+        service = TaskService(db_session)
+
+        # Try to toggle a non-existent task
+        with pytest.raises(TaskNotFoundError):
+            await service.toggle_completion(uuid4())
