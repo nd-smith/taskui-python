@@ -13,6 +13,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Header, Footer, Static
 from textual.binding import Binding
+from textual.events import Key
 
 from taskui.database import DatabaseManager, get_database_manager
 from taskui.models import Task, TaskList
@@ -134,6 +135,28 @@ class TaskUI(App):
     def action_help(self) -> None:
         """Show help information."""
         self.push_screen("help")
+
+    def on_key(self, event: Key) -> None:
+        """Handle key events to manage tab navigation in main app vs modals.
+
+        Intercepts tab and shift+tab keys to provide direct column navigation
+        in the main app, while allowing normal form field navigation in modals.
+
+        Args:
+            event: The key event
+        """
+        # Only intercept tab/shift+tab when not in a modal (screen stack size is 1)
+        if len(self.screen_stack) == 1:
+            if event.key == "tab":
+                # Prevent default focus cycling and handle column navigation
+                event.prevent_default()
+                event.stop()
+                self.action_navigate_next_column()
+            elif event.key == "shift+tab":
+                # Prevent default focus cycling and handle column navigation
+                event.prevent_default()
+                event.stop()
+                self.action_navigate_prev_column()
 
     async def on_mount(self) -> None:
         """Called when app is mounted and ready."""
