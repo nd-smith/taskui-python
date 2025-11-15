@@ -317,6 +317,9 @@ class TaskColumn(Widget):
             if task.id == message.task_id:
                 self._update_selection(i)
                 break
+        
+        # Ensure column regains focus to maintain keyboard navigation
+        self.focus()
 
     class TaskSelected(Message):
         """Message emitted when a task is selected in the column."""
