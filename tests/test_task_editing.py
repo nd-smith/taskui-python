@@ -311,11 +311,11 @@ class TestEditTaskWorkflow:
         assert hasattr(app, 'action_edit_task')
 
     def test_handle_task_modal_result_processes_edit_mode(self):
-        """Test that modal result handler recognizes edit mode."""
+        """Test that modal message handler recognizes edit mode."""
         app = TaskUI()
 
-        # The handler should have logic to handle edit mode differently
-        assert hasattr(app, '_handle_task_modal_result')
+        # The handler should use message-based approach
+        assert hasattr(app, 'on_task_creation_modal_task_created')
 
     def test_handle_edit_task_calls_task_service(self):
         """Test that _handle_edit_task calls the task service update method."""

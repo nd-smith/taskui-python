@@ -324,7 +324,7 @@ class TaskUI(App):
             parent_task=selected_task,
             column=nesting_column
         )
-        self.push_screen(modal, self._handle_task_modal_result)
+        self.push_screen(modal)
 
     def action_new_child_task(self) -> None:
         """Create a new child task (C key).
@@ -351,7 +351,7 @@ class TaskUI(App):
             parent_task=selected_task,
             column=nesting_column
         )
-        self.push_screen(modal, self._handle_task_modal_result)
+        self.push_screen(modal)
 
     def _get_nesting_column_from_id(self, column_id: str) -> NestingColumn:
         """Convert column ID to NestingColumn enum.
@@ -370,23 +370,19 @@ class TaskUI(App):
             # Default to COLUMN1 for column 3 or unknown
             return NestingColumn.COLUMN1
 
-    async def _handle_task_modal_result(self, result: Optional[dict[str, Any]]) -> None:
-        """Handle the result from the task creation modal.
+    async def on_task_creation_modal_task_created(self, message: TaskCreationModal.TaskCreated) -> None:
+        """Handle TaskCreated message from the task creation modal.
 
         Args:
-            result: Dictionary containing task data, or None if cancelled
+            message: TaskCreated message containing task data
         """
-        if result is None:
-            # User cancelled the modal
-            return
-
-        # Extract the task data
-        title = result.get("title")
-        notes = result.get("notes")
-        mode = result.get("mode")
-        parent_task = result.get("parent_task")
-        column = result.get("column")
-        edit_task = result.get("edit_task")
+        # Extract the task data from message
+        title = message.title
+        notes = message.notes
+        mode = message.mode
+        parent_task = message.parent_task
+        column = message.column
+        edit_task = message.edit_task
 
         if not title:
             return
@@ -407,6 +403,22 @@ class TaskUI(App):
         if focused_column:
             # Reload tasks from database
             await self._refresh_column_tasks(focused_column)
+
+            # If we created a child task and we're in Column 1, also refresh Column 2
+            # to show the new child under the selected parent
+            if mode == "create_child" and focused_column.column_id == COLUMN_1_ID:
+                selected_task = focused_column.get_selected_task()
+                if selected_task:
+                    await self._update_column2_for_selection(selected_task)
+
+    async def on_task_creation_modal_task_cancelled(self, message: TaskCreationModal.TaskCancelled) -> None:
+        """Handle TaskCancelled message from the task creation modal.
+
+        Args:
+            message: TaskCancelled message
+        """
+        # Nothing to do when task creation is cancelled
+        pass
 
     async def _handle_edit_task(self, task_id: UUID, title: str, notes: Optional[str]) -> None:
         """Update an existing task in the database.
@@ -568,7 +580,7 @@ class TaskUI(App):
             column=nesting_column,
             edit_task=selected_task
         )
-        self.push_screen(modal, self._handle_task_modal_result)
+        self.push_screen(modal)
 
     async def action_toggle_completion(self) -> None:
         """Toggle task completion status (Space key).
