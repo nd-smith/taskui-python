@@ -318,22 +318,27 @@ class TaskCreationModal(ModalScreen):
             # Show error - could add a validation label here
             return
 
-        # Create result data
-        result = {
-            "title": title,
-            "notes": notes,
-            "mode": self.mode,
-            "parent_task": self.parent_task,
-            "column": self.column,
-            "edit_task": self.edit_task,
-        }
+        # Post TaskCreated message
+        self.post_message(
+            self.TaskCreated(
+                title=title,
+                notes=notes,
+                mode=self.mode,
+                parent_task=self.parent_task,
+                column=self.column,
+                edit_task=self.edit_task,
+            )
+        )
 
-        # Dismiss modal with result
-        self.dismiss(result)
+        # Dismiss modal without result (message already posted)
+        self.dismiss()
 
     def action_cancel(self) -> None:
         """Cancel and dismiss the modal."""
-        self.dismiss(None)
+        # Post TaskCancelled message
+        self.post_message(self.TaskCancelled())
+        # Dismiss modal
+        self.dismiss()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in input fields.

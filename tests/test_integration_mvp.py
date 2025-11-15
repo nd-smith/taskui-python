@@ -322,7 +322,7 @@ class TestMVPIntegration:
             # Trigger selection event to update Column 2
             parent_task = column1.get_selected_task()
             column1.post_message(
-                TaskColumn.TaskSelected(task=parent_task)
+                TaskColumn.TaskSelected(task=parent_task, column_id="column-1")
             )
             await pilot.pause()
 
@@ -337,7 +337,7 @@ class TestMVPIntegration:
 
             # Refresh Column 2 by re-selecting parent
             column1.post_message(
-                TaskColumn.TaskSelected(task=parent_task)
+                TaskColumn.TaskSelected(task=parent_task, column_id="column-1")
             )
             await pilot.pause()
 
@@ -348,7 +348,7 @@ class TestMVPIntegration:
             assert column2._tasks[0].level == 0  # Context-relative
 
             # Verify Column 2 header updated
-            assert "Parent for Column 2 Test" in column2.title
+            assert "Parent for Column 2 Test" in column2.header_title
 
 
     @pytest.mark.asyncio
@@ -469,8 +469,10 @@ class TestMVPIntegration:
 
             # Verify tasks were restored
             column1 = app.query_one("#column-1", TaskColumn)
-            assert len(column1._tasks) == 1
+            # Column 1 shows hierarchical list: parent + child = 2 tasks
+            assert len(column1._tasks) == 2
             assert column1._tasks[0].title == "Persistent Parent"
+            assert column1._tasks[1].title == "Persistent Child"
 
             # Verify child task exists in database
             async with app._db_manager.get_session() as session:
@@ -606,7 +608,7 @@ class TestMVPIntegration:
             # Select Parent 1 and verify Column 2 shows its children
             column1._selected_index = 0
             column1.post_message(
-                TaskColumn.TaskSelected(task=parent1)
+                TaskColumn.TaskSelected(task=parent1, column_id="column-1")
             )
             await pilot.pause()
 
@@ -619,7 +621,7 @@ class TestMVPIntegration:
             # Select Parent 2 and verify Column 2 updates
             column1._selected_index = 1
             column1.post_message(
-                TaskColumn.TaskSelected(task=parent2)
+                TaskColumn.TaskSelected(task=parent2, column_id="column-1")
             )
             await pilot.pause()
 
@@ -660,7 +662,7 @@ class TestMVPIntegration:
 
             # Trigger Column 3 update
             column1.post_message(
-                TaskColumn.TaskSelected(task=task)
+                TaskColumn.TaskSelected(task=task, column_id="column-1")
             )
             await pilot.pause()
 
