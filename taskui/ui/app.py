@@ -411,6 +411,10 @@ class TaskUI(App):
                 if selected_task:
                     await self._update_column2_for_selection(selected_task)
 
+        # Refresh the list bar to update completion percentage (only for current list)
+        if self._current_list_id:
+            await self._refresh_list_bar_for_list(self._current_list_id)
+
     async def on_task_creation_modal_task_cancelled(self, message: TaskCreationModal.TaskCancelled) -> None:
         """Handle TaskCancelled message from the task creation modal.
 
@@ -554,6 +558,42 @@ class TaskUI(App):
             if selected_task:
                 await self._update_column2_for_selection(selected_task)
 
+    async def _refresh_list_bar_for_list(self, list_id: UUID) -> None:
+        """Refresh only the specific list that changed in the list bar.
+
+        This method reloads only the affected list from the database with its current
+        task counts and completion percentage, then updates the list bar display.
+        Much more efficient than reloading all lists.
+
+        Args:
+            list_id: UUID of the list to refresh
+        """
+        if not self._db_manager:
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                list_service = ListService(session)
+                # Reload only the affected list (3 queries: 1 list + 1 task count + 1 completed count)
+                updated_list = await list_service.get_list_by_id(list_id)
+
+            if not updated_list:
+                return
+
+            # Find and update just that list in self._lists
+            for i, task_list in enumerate(self._lists):
+                if task_list.id == list_id:
+                    self._lists[i] = updated_list
+                    break
+
+            # Update the list bar with the modified list
+            list_bar = self.query_one(ListBar)
+            list_bar.update_lists(self._lists)
+
+        except Exception as e:
+            # TODO: Add proper error handling in Phase 3
+            print(f"Error refreshing list bar for list {list_id}: {e}")
+
     def action_edit_task(self) -> None:
         """Edit the selected task (E key).
 
@@ -622,6 +662,10 @@ class TaskUI(App):
                 updated_task = await task_service.get_task_by_id(selected_task.id)
                 if updated_task:
                     await self._update_column3_for_selection(updated_task)
+
+            # Refresh the list bar to update completion percentage (only for current list)
+            if self._current_list_id:
+                await self._refresh_list_bar_for_list(self._current_list_id)
 
         except Exception as e:
             # TODO: Add proper error handling in Phase 3
