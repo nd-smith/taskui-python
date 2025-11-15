@@ -17,8 +17,8 @@ from textual.binding import Binding
 NAVIGATION_BINDINGS = [
     Binding("up", "navigate_up", "Navigate Up", show=False),
     Binding("down", "navigate_down", "Navigate Down", show=False),
-    Binding("tab", "navigate_next_column", "Next Column", show=False, priority=True),
-    Binding("shift+tab", "navigate_prev_column", "Previous Column", show=False, priority=True),
+    Binding("tab", "navigate_next_column", "Next Column", show=False),
+    Binding("shift+tab", "navigate_prev_column", "Previous Column", show=False),
 ]
 
 # Task action keybindings
