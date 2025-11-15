@@ -411,6 +411,9 @@ class TaskUI(App):
                 if selected_task:
                     await self._update_column2_for_selection(selected_task)
 
+        # Refresh the list bar to update completion percentage
+        await self._refresh_list_bar()
+
     async def on_task_creation_modal_task_cancelled(self, message: TaskCreationModal.TaskCancelled) -> None:
         """Handle TaskCancelled message from the task creation modal.
 
@@ -554,6 +557,30 @@ class TaskUI(App):
             if selected_task:
                 await self._update_column2_for_selection(selected_task)
 
+    async def _refresh_list_bar(self) -> None:
+        """Refresh the list bar to show updated completion percentages.
+
+        This method reloads all lists from the database with their current
+        task counts and completion percentages, then updates the list bar display.
+        Should be called after task creation or completion status changes.
+        """
+        if not self._db_manager:
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                list_service = ListService(session)
+                # Reload lists with updated counts
+                self._lists = await list_service.get_all_lists()
+
+            # Update the list bar
+            list_bar = self.query_one(ListBar)
+            list_bar.update_lists(self._lists)
+
+        except Exception as e:
+            # TODO: Add proper error handling in Phase 3
+            print(f"Error refreshing list bar: {e}")
+
     def action_edit_task(self) -> None:
         """Edit the selected task (E key).
 
@@ -622,6 +649,9 @@ class TaskUI(App):
                 updated_task = await task_service.get_task_by_id(selected_task.id)
                 if updated_task:
                     await self._update_column3_for_selection(updated_task)
+
+            # Refresh the list bar to update completion percentage
+            await self._refresh_list_bar()
 
         except Exception as e:
             # TODO: Add proper error handling in Phase 3
