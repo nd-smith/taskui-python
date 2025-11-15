@@ -689,3 +689,44 @@ class TaskService:
 
             # Recursively update grandchildren
             await self._update_descendant_levels(child.id, new_child_level)
+
+    async def toggle_completion(self, task_id: UUID) -> Task:
+        """
+        Toggle the completion status of a task.
+
+        If the task is currently completed, it will be marked as incomplete.
+        If the task is currently incomplete, it will be marked as completed.
+
+        Args:
+            task_id: UUID of the task to toggle
+
+        Returns:
+            Updated Task instance
+
+        Raises:
+            TaskNotFoundError: If task does not exist
+        """
+        # Get the task
+        task_orm = await self._get_task_or_raise(task_id)
+
+        # Toggle completion status
+        if task_orm.is_completed:
+            # Mark as incomplete
+            task_orm.is_completed = False
+            task_orm.completed_at = None
+        else:
+            # Mark as completed
+            task_orm.is_completed = True
+            task_orm.completed_at = datetime.utcnow()
+
+        # Flush changes to database
+        await self.session.flush()
+
+        # Convert back to Pydantic model
+        task = self._orm_to_pydantic(task_orm)
+
+        # Get child counts
+        child_count, completed_child_count = await self._get_child_counts(task.id)
+        task.update_child_counts(child_count, completed_child_count)
+
+        return task

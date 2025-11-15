@@ -100,6 +100,15 @@ class TaskItem(Widget):
         """
         return self._task_model
 
+    def update_task(self, task: Task) -> None:
+        """Update the task data and refresh the display.
+
+        Args:
+            task: Updated Task object
+        """
+        self._task_model = task
+        self.refresh()
+
     def render(self) -> Text:
         """Render the task item as Rich Text with tree visualization.
 
