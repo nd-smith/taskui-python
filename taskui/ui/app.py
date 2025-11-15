@@ -177,8 +177,20 @@ class TaskUI(App):
         await self._ensure_default_list()
         await self._restore_app_state()
 
-        # Set initial focus to Column 1
+        # Set initial focus to Column 1 (first column, leftmost)
         self._set_column_focus(COLUMN_1_ID)
+        
+        # Explicitly trigger selection on column 1 after everything is loaded
+        def ensure_column1_selection():
+            try:
+                column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+                if column1._tasks and column1._selected_index >= 0:
+                    column1._update_selection(column1._selected_index)
+            except Exception as e:
+                # If it fails, try again after another refresh
+                self.call_after_refresh(ensure_column1_selection)
+        
+        self.call_after_refresh(ensure_column1_selection)
 
     async def _ensure_default_list(self) -> None:
         """Ensure that default lists (Work, Home, Personal) exist in the database.

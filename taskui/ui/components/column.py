@@ -297,9 +297,29 @@ class TaskColumn(Widget):
         self.selected_task_id = None
 
     def on_focus(self) -> None:
-        """Handle focus event."""
+        """Handle focus event - ensure selection is properly activated."""
         self.focused = True
         self.add_class("focused")
+        
+        # Ensure we have a selection when focusing a column with tasks
+        def ensure_selection():
+            if not self._tasks:
+                return
+            
+            try:
+                if self._selected_index == -1:
+                    # No selection, auto-select first task
+                    self._update_selection(0)
+                elif 0 <= self._selected_index < len(self._tasks):
+                    # Valid selection exists but might not have posted message
+                    # Re-trigger selection to ensure TaskSelected message is posted
+                    self._update_selection(self._selected_index)
+            except Exception:
+                # Widgets not ready yet, try again after refresh
+                self.call_after_refresh(ensure_selection)
+        
+        # Defer to ensure widgets are mounted
+        self.call_after_refresh(ensure_selection)
 
     def on_blur(self) -> None:
         """Handle blur (unfocus) event."""
