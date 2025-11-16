@@ -114,6 +114,10 @@ class TaskUI(App):
 
     BINDINGS = get_all_bindings()
 
+    # ==============================================================================
+    # LIFECYCLE METHODS
+    # ==============================================================================
+
     def __init__(self, **kwargs) -> None:
         """Initialize the TaskUI application."""
         super().__init__(**kwargs)
@@ -161,6 +165,10 @@ class TaskUI(App):
 
         yield Footer()
 
+    # ==============================================================================
+    # ACTION HANDLERS - UTILITY
+    # ==============================================================================
+
     def action_help(self) -> None:
         """Show help information."""
         # Show notification with basic help info (full help screen not yet implemented)
@@ -169,6 +177,10 @@ class TaskUI(App):
             severity="information",
             timeout=NOTIFICATION_TIMEOUT_LONG
         )
+
+    # ==============================================================================
+    # EVENT HANDLERS
+    # ==============================================================================
 
     def on_key(self, event: Key) -> None:
         """Handle key events to manage tab navigation in main app vs modals.
@@ -232,6 +244,10 @@ class TaskUI(App):
 
         logger.info("TaskUI application ready")
 
+    # ==============================================================================
+    # PRIVATE HELPERS - DATA FETCHING
+    # ==============================================================================
+
     async def _ensure_default_list(self) -> None:
         """Ensure that default lists (Work, Home, Personal) exist in the database.
 
@@ -288,6 +304,10 @@ class TaskUI(App):
 
         return tasks_with_children
 
+    # ==============================================================================
+    # PRIVATE HELPERS - FOCUS & NAVIGATION
+    # ==============================================================================
+
     def _set_column_focus(self, column_id: str) -> None:
         """Set focus to a specific column.
 
@@ -318,7 +338,9 @@ class TaskUI(App):
         except Exception:
             return None
 
-    # Navigation action handlers
+    # ==============================================================================
+    # ACTION HANDLERS - NAVIGATION
+    # ==============================================================================
 
     def action_navigate_up(self) -> None:
         """Navigate up within the current column."""
@@ -344,7 +366,9 @@ class TaskUI(App):
         if prev_column_id:
             self._set_column_focus(prev_column_id)
 
-    # Task operation action handlers
+    # ==============================================================================
+    # ACTION HANDLERS - TASK OPERATIONS
+    # ==============================================================================
 
     def action_new_sibling_task(self) -> None:
         """Create a new sibling task (N key).
@@ -397,6 +421,10 @@ class TaskUI(App):
             column=nesting_column
         )
         self.push_screen(modal)
+
+    # ==============================================================================
+    # PRIVATE HELPERS - TASK OPERATIONS
+    # ==============================================================================
 
     def _get_nesting_column_from_id(self, column_id: str) -> NestingColumn:
         """Convert column ID to NestingColumn enum.
@@ -571,6 +599,10 @@ class TaskUI(App):
         except Exception as e:
             logger.error("Error creating child task", exc_info=True)
             self.notify("Failed to create subtask", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+
+    # ==============================================================================
+    # PRIVATE HELPERS - UI UPDATES
+    # ==============================================================================
 
     async def _refresh_column_tasks(self, column: TaskColumn) -> None:
         """Refresh tasks in a column from the database.
@@ -890,6 +922,10 @@ class TaskUI(App):
         """Delete the selected task (Delete/Backspace key)."""
         # TODO: Implement in Story 2.5
         self.notify("Delete not yet implemented", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+
+    # ==============================================================================
+    # ACTION HANDLERS - LIST SWITCHING
+    # ==============================================================================
 
     def action_switch_list_1(self) -> None:
         """Switch to list 1 (1 key)."""
