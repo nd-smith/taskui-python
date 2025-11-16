@@ -97,8 +97,8 @@ class ListTab(Widget):
         text.append(self.task_list.name, style=name_style)
 
         # Add completion percentage if there are tasks
-        completion = self.task_list.completion_percentage
-        if completion > 0:
+        if self.task_list.task_count > 0:
+            completion = self.task_list.completion_percentage
             percentage_color = YELLOW if completion < 100 else LEVEL_0_COLOR
             text.append(f" {completion:.0f}%", style=percentage_color)
 
