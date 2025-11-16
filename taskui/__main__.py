@@ -10,6 +10,8 @@ Or as an installed command:
 import sys
 from typing import Optional
 
+from taskui.logging_config import setup_logging
+
 
 def main(args: Optional[list[str]] = None) -> int:
     """Main entry point for TaskUI.
@@ -22,6 +24,9 @@ def main(args: Optional[list[str]] = None) -> int:
     """
     if args is None:
         args = sys.argv[1:]
+
+    # Initialize logging before any other operations
+    setup_logging()
 
     # Import here to avoid circular imports and improve startup time
     from taskui.ui.app import TaskUI
