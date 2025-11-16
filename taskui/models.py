@@ -50,6 +50,17 @@ class TaskList(BaseModel):
             return 0.0
         return round((self._completed_count / self._task_count) * 100, 1)
 
+    @computed_field
+    @property
+    def task_count(self) -> int:
+        """
+        Get the total number of tasks in this list.
+
+        Returns:
+            Total number of tasks
+        """
+        return self._task_count
+
     def update_counts(self, task_count: int, completed_count: int) -> None:
         """
         Update the task counts for computed properties.
