@@ -52,89 +52,89 @@ class DetailPanel(Widget):
     # Enable keyboard focus
     can_focus = True
 
-    DEFAULT_CSS = """
-    DetailPanel {
-        border: solid #3E3D32;
+    DEFAULT_CSS = f"""
+    DetailPanel {{
+        border: solid {BORDER};
         padding: 0 1;
         margin: 0 1;
-    }
+    }}
 
-    DetailPanel:focus {
-        border: thick #66D9EF;
-    }
+    DetailPanel:focus {{
+        border: thick {LEVEL_0_COLOR};
+    }}
 
-    DetailPanel .panel-header {
+    DetailPanel .panel-header {{
         width: 100%;
         height: 1;
-        background: #49483E;
-        color: #F8F8F2;
+        background: {SELECTION};
+        color: {FOREGROUND};
         text-align: center;
-        border-bottom: solid #3E3D32;
+        border-bottom: solid {BORDER};
         padding: 0 1;
-    }
+    }}
 
-    DetailPanel .panel-content {
+    DetailPanel .panel-content {{
         width: 100%;
         height: 1fr;
         padding: 1 1;
-    }
+    }}
 
-    DetailPanel .empty-message {
+    DetailPanel .empty-message {{
         width: 100%;
         height: 100%;
-        color: #75715E;
+        color: {COMMENT};
         text-align: center;
         padding: 2;
-    }
+    }}
 
-    DetailPanel .section {
+    DetailPanel .section {{
         padding: 0 0 1 0;
-    }
+    }}
 
-    DetailPanel .section-title {
-        color: #66D9EF;
+    DetailPanel .section-title {{
+        color: {LEVEL_0_COLOR};
         text-style: bold;
-    }
+    }}
 
-    DetailPanel .task-title {
-        color: #F8F8F2;
+    DetailPanel .task-title {{
+        color: {FOREGROUND};
         text-style: bold;
         padding: 0 0 1 0;
-    }
+    }}
 
-    DetailPanel .info-line {
-        color: #F8F8F2;
+    DetailPanel .info-line {{
+        color: {FOREGROUND};
         padding: 0 0 0 2;
-    }
+    }}
 
-    DetailPanel .status-complete {
-        color: #A6E22E;
-    }
+    DetailPanel .status-complete {{
+        color: {LEVEL_1_COLOR};
+    }}
 
-    DetailPanel .status-incomplete {
-        color: #75715E;
-    }
+    DetailPanel .status-incomplete {{
+        color: {COMMENT};
+    }}
 
-    DetailPanel .status-archived {
-        color: #FD971F;
-    }
+    DetailPanel .status-archived {{
+        color: {ORANGE};
+    }}
 
-    DetailPanel .warning {
-        color: #FD971F;
+    DetailPanel .warning {{
+        color: {ORANGE};
         text-style: bold;
         padding: 1 0;
-    }
+    }}
 
-    DetailPanel .hierarchy-item {
-        color: #F8F8F2;
+    DetailPanel .hierarchy-item {{
+        color: {FOREGROUND};
         padding: 0 0 0 2;
-    }
+    }}
 
-    DetailPanel .notes-content {
-        color: #F8F8F2;
+    DetailPanel .notes-content {{
+        color: {FOREGROUND};
         padding: 1 0 0 2;
         text-style: italic;
-    }
+    }}
     """
 
     # Reactive properties

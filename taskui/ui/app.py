@@ -31,6 +31,7 @@ from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
     BORDER,
+    SELECTION,
     LEVEL_0_COLOR,
 )
 from taskui.ui.components.column import TaskColumn
@@ -50,43 +51,43 @@ logger = get_logger(__name__)
 class TaskUI(App):
     """Main TaskUI application with three-column layout."""
 
-    CSS = """
-    Screen {
-        background: #272822;
+    CSS = f"""
+    Screen {{
+        background: {BACKGROUND};
         layout: vertical;
-    }
+    }}
 
-    #main-container {
+    #main-container {{
         width: 100%;
         height: 1fr;
-        background: #272822;
+        background: {BACKGROUND};
         margin-top: 1;
-    }
+    }}
 
-    #columns-container {
+    #columns-container {{
         width: 100%;
         height: 100%;
         layout: horizontal;
-    }
+    }}
 
-    #column-1 {
+    #column-1 {{
         width: 1fr;
         height: 100%;
-    }
+    }}
 
-    #column-2 {
+    #column-2 {{
         width: 1fr;
         height: 100%;
-    }
+    }}
 
-    #column-3 {
+    #column-3 {{
         width: 1fr;
         height: 100%;
-    }
+    }}
 
-    Footer {
-        background: #49483E;
-    }
+    Footer {{
+        background: {SELECTION};
+    }}
     """
 
     BINDINGS = get_all_bindings()

@@ -26,6 +26,9 @@ from taskui.ui.theme import (
     BACKGROUND,
     COMMENT,
     YELLOW,
+    BORDER,
+    HOVER_OPACITY,
+    with_alpha,
 )
 
 
@@ -35,25 +38,25 @@ class ListTab(Widget):
     Shows the list name, completion percentage, and highlights when active.
     """
 
-    DEFAULT_CSS = """
-    ListTab {
+    DEFAULT_CSS = f"""
+    ListTab {{
         height: 3;
         width: auto;
         min-width: 15;
         padding: 0 1;
         background: transparent;
-        border: solid #3E3D32;
+        border: solid {BORDER};
         margin: 0 0 0 1;
-    }
+    }}
 
-    ListTab:hover {
-        background: #49483E30;
-    }
+    ListTab:hover {{
+        background: {with_alpha(SELECTION, HOVER_OPACITY)};
+    }}
 
-    ListTab.active {
-        background: #49483E;
-        border: thick #66D9EF;
-    }
+    ListTab.active {{
+        background: {SELECTION};
+        border: thick {LEVEL_0_COLOR};
+    }}
     """
 
     # Reactive properties
@@ -123,16 +126,16 @@ class ListBar(Horizontal):
     Supports switching lists via number keys (1-3).
     """
 
-    DEFAULT_CSS = """
-    ListBar {
+    DEFAULT_CSS = f"""
+    ListBar {{
         height: 3;
         width: 100%;
-        background: #272822;
-        border-bottom: solid #3E3D32;
+        background: {BACKGROUND};
+        border-bottom: solid {BORDER};
         padding: 0;
         layout: horizontal;
         align: left middle;
-    }
+    }}
     """
 
     # Reactive properties

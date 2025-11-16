@@ -30,6 +30,12 @@ WHITE = "#F8F8F2"
 COMPLETE_COLOR = "#75715E"  # Dimmed gray for completed tasks
 ARCHIVE_COLOR = "#49483E"   # Even more dimmed for archived
 
+# Modal & Interaction States
+MODAL_OVERLAY_BG = "#27282280"  # Dark overlay with 50% opacity
+HOVER_OPACITY = "20"  # Standardized hover transparency (20%)
+FOCUS_COLOR = LEVEL_0_COLOR  # Semantic focus state color (cyan)
+DISABLED_OPACITY = "0.5"  # Disabled button opacity
+
 
 # Rich Theme for Textual
 ONE_MONOKAI_THEME = Theme({
@@ -75,3 +81,22 @@ def get_level_style(level: int) -> Style:
         Rich Style object with the appropriate color
     """
     return Style(color=get_level_color(level))
+
+
+def with_alpha(color: str, alpha: str) -> str:
+    """Add alpha transparency to a hex color.
+
+    Args:
+        color: Hex color string (e.g., '#272822')
+        alpha: Alpha value as hex string (e.g., '20' for ~12% opacity, 'FF' for 100%)
+
+    Returns:
+        Color with alpha channel appended (e.g., '#27282220')
+
+    Examples:
+        >>> with_alpha(SELECTION, HOVER_OPACITY)
+        '#49483E20'
+        >>> with_alpha(BACKGROUND, '80')
+        '#27282280'
+    """
+    return f"{color}{alpha}"
