@@ -28,6 +28,7 @@ TASK_ACTION_BINDINGS = [
     Binding("e", "edit_task", "Edit Task", show=True),
     Binding("space", "toggle_completion", "Toggle Complete", show=True),
     Binding("a", "archive_task", "Archive Task", show=True),
+    Binding("v", "view_archives", "View Archives", show=True),
     Binding("delete,backspace", "delete_task", "Delete Task", show=True),
 ]
 
