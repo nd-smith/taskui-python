@@ -778,6 +778,23 @@ class TaskUI(App):
             # Default to COLUMN1 for column 3 or unknown
             return NestingColumn.COLUMN1
 
+    def _get_parent_id_for_sibling(self, parent_task: Optional[Task]) -> Optional[UUID]:
+        """Determine parent ID for creating a sibling task.
+
+        Args:
+            parent_task: Currently selected task (sibling reference)
+
+        Returns:
+            Parent ID for new task, or None for top-level task
+        """
+        if parent_task is None or parent_task.parent_id is None:
+            # No task selected OR selected task is top-level
+            # Either way, create a top-level task
+            return None
+
+        # Selected task has a parent - create sibling under same parent
+        return parent_task.parent_id
+
     async def _handle_edit_task(self, task_id: UUID, title: str, notes: Optional[str]) -> None:
         """Update an existing task in the database.
 
@@ -822,27 +839,22 @@ class TaskUI(App):
             return
 
         try:
+            parent_id = self._get_parent_id_for_sibling(parent_task)
+
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
 
-                if parent_task is None:
-                    # No task selected, create a top-level task
-                    await task_service.create_task(
-                        title=title,
-                        list_id=self._current_list_id,
-                        notes=notes
-                    )
-                elif parent_task.parent_id is None:
-                    # Selected task is top-level, create another top-level task
+                if parent_id is None:
+                    # Create top-level task
                     await task_service.create_task(
                         title=title,
                         list_id=self._current_list_id,
                         notes=notes
                     )
                 else:
-                    # Selected task has a parent, create a sibling under the same parent
+                    # Create child under parent
                     await task_service.create_child_task(
-                        parent_id=parent_task.parent_id,
+                        parent_id=parent_id,
                         title=title,
                         column=column,
                         notes=notes
