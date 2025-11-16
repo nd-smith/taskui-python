@@ -143,3 +143,5 @@ backup/
 # Debug logs
 debug/
 taskui/debug/
+taskui/claudedocs/
+claudedocs
