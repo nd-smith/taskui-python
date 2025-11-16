@@ -832,6 +832,16 @@ class TaskUI(App):
             column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
             await self._refresh_column_tasks(column1)
 
+            # Refresh Column 2 if a parent is selected (in case restored task is a child)
+            selected_task = column1.get_selected_task()
+            if selected_task:
+                logger.debug(
+                    f"Refreshing Column 2 after task restore in case {restored_task.id} "
+                    f"is a child of selected parent {selected_task.id}"
+                )
+                column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
+                await self._refresh_column_tasks(column2)
+
             # Refresh the list bar to update completion percentage
             if self._current_list_id:
                 await self._refresh_list_bar_for_list(self._current_list_id)
