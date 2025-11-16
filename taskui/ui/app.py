@@ -23,6 +23,7 @@ from taskui.services.nesting_rules import Column as NestingColumn
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
 from taskui.ui.components.task_modal import TaskCreationModal
+from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
 from taskui.ui.theme import (
@@ -716,10 +717,127 @@ class TaskUI(App):
         except Exception as e:
             logger.error("Error toggling task completion", exc_info=True)
 
-    def action_archive_task(self) -> None:
-        """Archive the selected task (A key)."""
-        # TODO: Implement in Story 2.3
-        pass
+    async def action_archive_task(self) -> None:
+        """Archive the selected completed task ('a' key).
+
+        Archives the currently selected task if it is completed.
+        Only completed tasks can be archived. Archived tasks are removed
+        from the normal view and can be viewed/restored via the archive modal.
+        """
+        logger.debug("Archive key pressed ('a')")
+
+        column = self._get_focused_column()
+        if not column:
+            logger.debug("No focused column found for archive")
+            return
+
+        # Get the currently selected task
+        selected_task = column.get_selected_task()
+        if not selected_task:
+            logger.debug("No task selected for archive")
+            return
+
+        # Check if task is completed
+        if not selected_task.is_completed:
+            logger.debug(f"Task {selected_task.id} is not completed, cannot archive")
+            # Could show a notification to user here
+            return
+
+        if not self._db_manager:
+            logger.debug("No database manager available for archive")
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                # Archive the task
+                await task_service.archive_task(selected_task.id)
+                # Session context manager will auto-commit
+
+            # Refresh the focused column to remove the archived task
+            await self._refresh_column_tasks(column)
+
+            # If archiving in Column 2, also refresh Column 1 to update parent's progress indicator
+            if column.column_id == COLUMN_2_ID:
+                logger.debug(
+                    f"Completion percentage calculations updated: Refreshing Column 1 "
+                    f"after archiving child task {selected_task.id}"
+                )
+                column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+                await self._refresh_column_tasks(column1)
+
+            # Clear Column 3 since the task is now archived
+            detail_panel = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
+            detail_panel.clear()
+
+            # Refresh the list bar to update completion percentage (only for current list)
+            if self._current_list_id:
+                await self._refresh_list_bar_for_list(self._current_list_id)
+
+        except ValueError as e:
+            # Task was not completed (shouldn't happen as we check above)
+            logger.error(f"Error archiving task: {e}", exc_info=True)
+        except Exception as e:
+            logger.error("Error archiving task", exc_info=True)
+
+    async def action_view_archives(self) -> None:
+        """View archived tasks modal ('v' key).
+
+        Opens a modal showing all archived tasks for the current list,
+        with search/filter functionality and the ability to restore tasks.
+        """
+        logger.debug("View archives key pressed ('v')")
+
+        if not self._db_manager or not self._current_list_id:
+            logger.debug("No database manager or current list available for viewing archives")
+            return
+
+        try:
+            # Get archived tasks for the current list
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                archived_tasks = await task_service.get_archived_tasks(
+                    self._current_list_id
+                )
+
+            # Create and show the archive modal
+            modal = ArchiveModal(archived_tasks=archived_tasks)
+            self.push_screen(modal)
+
+        except Exception as e:
+            logger.error("Error loading archived tasks", exc_info=True)
+
+    async def on_archive_modal_task_restored(self, message: ArchiveModal.TaskRestored) -> None:
+        """Handle task restore from archive modal.
+
+        Args:
+            message: The TaskRestored message with task_id
+        """
+        logger.debug(f"Handling restore for task_id={message.task_id}")
+
+        if not self._db_manager:
+            logger.debug("No database manager available for restore")
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                # Unarchive (restore) the task
+                restored_task = await task_service.unarchive_task(message.task_id)
+                # Session context manager will auto-commit
+
+            logger.info(f"Task restored: {restored_task.title[:50]}")
+
+            # Refresh Column 1 to show the restored task
+            column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+            await self._refresh_column_tasks(column1)
+
+            # Refresh the list bar to update completion percentage
+            if self._current_list_id:
+                await self._refresh_list_bar_for_list(self._current_list_id)
+
+        except Exception as e:
+            logger.error("Error restoring task from archive", exc_info=True)
 
     def action_delete_task(self) -> None:
         """Delete the selected task (Delete/Backspace key)."""

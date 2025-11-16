@@ -957,3 +957,291 @@ class TestTaskServiceToggleCompletion:
         # Try to toggle a non-existent task
         with pytest.raises(TaskNotFoundError):
             await service.toggle_completion(uuid4())
+
+
+class TestTaskServiceArchive:
+    """Tests for task archive operations."""
+
+    @pytest.mark.asyncio
+    async def test_archive_completed_task(self, db_session, sample_task_list, sample_list_id):
+        """Test archiving a completed task."""
+        service = TaskService(db_session)
+
+        # Create and complete a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+        completed_task = await service.toggle_completion(task.id)
+        assert completed_task.is_completed
+
+        # Archive the task
+        archived_task = await service.archive_task(task.id)
+
+        # Verify archived
+        assert archived_task.is_archived
+        assert archived_task.archived_at is not None
+
+    @pytest.mark.asyncio
+    async def test_archive_incomplete_task_raises_error(self, db_session, sample_task_list, sample_list_id):
+        """Test archiving an incomplete task raises ValueError."""
+        service = TaskService(db_session)
+
+        # Create an incomplete task
+        task = await service.create_task(
+            title="Incomplete Task",
+            list_id=sample_list_id
+        )
+
+        # Try to archive incomplete task
+        with pytest.raises(ValueError, match="Only completed tasks can be archived"):
+            await service.archive_task(task.id)
+
+    @pytest.mark.asyncio
+    async def test_archive_persistence(self, db_session, sample_task_list, sample_list_id):
+        """Test that archive status persists to database."""
+        service = TaskService(db_session)
+
+        # Create, complete, and archive a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+        await service.toggle_completion(task.id)
+        await service.archive_task(task.id)
+        await db_session.commit()
+
+        # Retrieve from database
+        retrieved_task = await service.get_task_by_id(task.id)
+
+        # Verify persistence
+        assert retrieved_task.is_archived
+        assert retrieved_task.archived_at is not None
+
+    @pytest.mark.asyncio
+    async def test_archive_nonexistent_task(self, db_session):
+        """Test archiving a non-existent task raises error."""
+        service = TaskService(db_session)
+
+        # Try to archive a non-existent task
+        with pytest.raises(TaskNotFoundError):
+            await service.archive_task(uuid4())
+
+    @pytest.mark.asyncio
+    async def test_unarchive_task(self, db_session, sample_task_list, sample_list_id):
+        """Test unarchiving (restoring) a task."""
+        service = TaskService(db_session)
+
+        # Create, complete, and archive a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+        await service.toggle_completion(task.id)
+        archived_task = await service.archive_task(task.id)
+        assert archived_task.is_archived
+
+        # Unarchive the task
+        unarchived_task = await service.unarchive_task(task.id)
+
+        # Verify unarchived
+        assert not unarchived_task.is_archived
+        assert unarchived_task.archived_at is None
+        assert unarchived_task.is_completed  # Should still be completed
+
+    @pytest.mark.asyncio
+    async def test_unarchive_persistence(self, db_session, sample_task_list, sample_list_id):
+        """Test that unarchive status persists to database."""
+        service = TaskService(db_session)
+
+        # Create, complete, and archive a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+        await service.toggle_completion(task.id)
+        await service.archive_task(task.id)
+        await service.unarchive_task(task.id)
+        await db_session.commit()
+
+        # Retrieve from database
+        retrieved_task = await service.get_task_by_id(task.id)
+
+        # Verify persistence
+        assert not retrieved_task.is_archived
+        assert retrieved_task.archived_at is None
+
+    @pytest.mark.asyncio
+    async def test_unarchive_nonexistent_task(self, db_session):
+        """Test unarchiving a non-existent task raises error."""
+        service = TaskService(db_session)
+
+        # Try to unarchive a non-existent task
+        with pytest.raises(TaskNotFoundError):
+            await service.unarchive_task(uuid4())
+
+    @pytest.mark.asyncio
+    async def test_get_archived_tasks(self, db_session, sample_task_list, sample_list_id):
+        """Test retrieving all archived tasks for a list."""
+        service = TaskService(db_session)
+
+        # Create and archive multiple tasks
+        task1 = await service.create_task("Task 1", sample_list_id)
+        task2 = await service.create_task("Task 2", sample_list_id)
+        task3 = await service.create_task("Task 3", sample_list_id)
+
+        # Complete and archive task1 and task3
+        await service.toggle_completion(task1.id)
+        await service.archive_task(task1.id)
+        await service.toggle_completion(task3.id)
+        await service.archive_task(task3.id)
+
+        # Get archived tasks
+        archived_tasks = await service.get_archived_tasks(sample_list_id)
+
+        # Verify we get 2 archived tasks
+        assert len(archived_tasks) == 2
+        archived_ids = {task.id for task in archived_tasks}
+        assert task1.id in archived_ids
+        assert task3.id in archived_ids
+        assert task2.id not in archived_ids
+
+    @pytest.mark.asyncio
+    async def test_get_archived_tasks_ordered_by_date(self, db_session, sample_task_list, sample_list_id):
+        """Test archived tasks are ordered by archived date (newest first)."""
+        import asyncio
+        service = TaskService(db_session)
+
+        # Create and archive multiple tasks with small delays
+        task1 = await service.create_task("Task 1", sample_list_id)
+        await service.toggle_completion(task1.id)
+        await service.archive_task(task1.id)
+
+        await asyncio.sleep(0.01)  # Small delay to ensure different timestamps
+
+        task2 = await service.create_task("Task 2", sample_list_id)
+        await service.toggle_completion(task2.id)
+        await service.archive_task(task2.id)
+
+        # Get archived tasks
+        archived_tasks = await service.get_archived_tasks(sample_list_id)
+
+        # Verify order (newest first)
+        assert len(archived_tasks) == 2
+        assert archived_tasks[0].id == task2.id  # Most recently archived
+        assert archived_tasks[1].id == task1.id
+
+    @pytest.mark.asyncio
+    async def test_get_archived_tasks_with_search(self, db_session, sample_task_list, sample_list_id):
+        """Test searching archived tasks by title or notes."""
+        service = TaskService(db_session)
+
+        # Create tasks with different titles and notes
+        task1 = await service.create_task("Important meeting", sample_list_id, notes="Discuss project")
+        task2 = await service.create_task("Code review", sample_list_id, notes="Review PR #123")
+        task3 = await service.create_task("Write documentation", sample_list_id, notes="API docs")
+
+        # Complete and archive all tasks
+        for task in [task1, task2, task3]:
+            await service.toggle_completion(task.id)
+            await service.archive_task(task.id)
+
+        # Search by title
+        results = await service.get_archived_tasks(sample_list_id, search_query="meeting")
+        assert len(results) == 1
+        assert results[0].id == task1.id
+
+        # Search by notes
+        results = await service.get_archived_tasks(sample_list_id, search_query="API")
+        assert len(results) == 1
+        assert results[0].id == task3.id
+
+        # Search with no matches
+        results = await service.get_archived_tasks(sample_list_id, search_query="nonexistent")
+        assert len(results) == 0
+
+        # Search case-insensitive
+        results = await service.get_archived_tasks(sample_list_id, search_query="MEETING")
+        assert len(results) == 1
+        assert results[0].id == task1.id
+
+    @pytest.mark.asyncio
+    async def test_get_archived_tasks_empty_list(self, db_session, sample_task_list, sample_list_id):
+        """Test getting archived tasks when none exist."""
+        service = TaskService(db_session)
+
+        # Get archived tasks (should be empty)
+        archived_tasks = await service.get_archived_tasks(sample_list_id)
+
+        # Verify empty
+        assert len(archived_tasks) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_archived_tasks_invalid_list(self, db_session):
+        """Test getting archived tasks for non-existent list raises error."""
+        service = TaskService(db_session)
+        fake_list_id = uuid4()
+
+        # Try to get archived tasks for non-existent list
+        with pytest.raises(TaskListNotFoundError):
+            await service.get_archived_tasks(fake_list_id)
+
+    @pytest.mark.asyncio
+    async def test_archived_tasks_excluded_from_normal_queries(self, db_session, sample_task_list, sample_list_id):
+        """Test that archived tasks are excluded from normal task queries."""
+        service = TaskService(db_session)
+
+        # Create tasks
+        task1 = await service.create_task("Task 1", sample_list_id)
+        task2 = await service.create_task("Task 2", sample_list_id)
+
+        # Archive task1
+        await service.toggle_completion(task1.id)
+        await service.archive_task(task1.id)
+
+        # Get tasks for list (should exclude archived)
+        tasks = await service.get_tasks_for_list(sample_list_id, include_archived=False)
+
+        # Verify only non-archived task is returned
+        assert len(tasks) == 1
+        assert tasks[0].id == task2.id
+
+    @pytest.mark.asyncio
+    async def test_archived_tasks_excluded_from_child_counts(self, db_session, sample_task_list, sample_list_id):
+        """Test that archived children are excluded from parent's child counts."""
+        service = TaskService(db_session)
+
+        # Create parent with children
+        parent = await service.create_task("Parent", sample_list_id)
+        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
+        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
+        child3 = await service.create_child_task(parent.id, "Child 3", Column.COLUMN1)
+
+        # Complete and archive child2
+        await service.toggle_completion(child2.id)
+        await service.archive_task(child2.id)
+
+        # Get parent and check child counts
+        parent_task = await service.get_task_by_id(parent.id)
+
+        # Should only count non-archived children
+        assert parent_task.has_children
+        # The progress_string property is based on child counts, which excludes archived
+        # So we should have 2 children, not 3
+
+    @pytest.mark.asyncio
+    async def test_archive_then_complete_toggle(self, db_session, sample_task_list, sample_list_id):
+        """Test that archived tasks remain archived even if completion is toggled."""
+        service = TaskService(db_session)
+
+        # Create, complete, and archive a task
+        task = await service.create_task("Test Task", sample_list_id)
+        await service.toggle_completion(task.id)
+        await service.archive_task(task.id)
+
+        # Toggle completion (mark incomplete)
+        updated_task = await service.toggle_completion(task.id)
+
+        # Verify task remains archived
+        assert updated_task.is_archived
+        assert not updated_task.is_completed

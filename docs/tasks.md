@@ -454,7 +454,7 @@ Add Textual devtools handler for development and create comprehensive tests.
 
 ## PHASE 2: ENHANCED FEATURES
 
-### - [ ] 2.1 Task Completion Toggle ⚡ [DEPENDS ON: MVP]
+### - [x] 2.1 Task Completion Toggle ⚡ [DEPENDS ON: MVP]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** MVP
 
 Implement Space key to toggle task completion with visual feedback.
@@ -478,7 +478,7 @@ Implement Space key to toggle task completion with visual feedback.
 
 ---
 
-### - [ ] 2.2 Progress Indicators ⚡ [DEPENDS ON: 2.1]
+### - [x] 2.2 Progress Indicators ⚡ [DEPENDS ON: 2.1]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 2.1
 
 Show parent task progress based on child completion.
@@ -505,25 +505,27 @@ Show parent task progress based on child completion.
 ### - [ ] 2.3 Archive Functionality ⚡ [DEPENDS ON: 2.1]
 **Size:** Medium | **Time:** 25 mins | **Dependencies:** 2.1
 
-Implement 'A' key to archive completed tasks.
+Implement 'a' key to archive completed tasks.  Create new modal to search, display and restore archived tasks.  "As a user I might want to un-archive a task I archived by mistake". "As a user I might want to archive completed tasks to clean up my projects list"
 
 **Files to update:**
 - Add archive handler
 - Update task display for archived state
 - Update trash icon percentage
+- Add new modal for viewing archived tasks. 
 
 **Logging Requirements:**
 - INFO: Task archived (task_id, archive_timestamp)
 - DEBUG: Archive key press event
-- DEBUG: Trash icon percentage calculations
+- DEBUG: Completion percentage calculations updated
 - ERROR: Archive operation failures with exc_info=True
 
 **Success Criteria:**
-- 'A' archives completed tasks
-- Archived tasks show with 📦 icon
-- Reduced opacity for archived
-- Trash icon shows percentage and count
+- 'a' archives completed tasks
+- User can open the new task modal 
+- User can search archived tasks in the new modal 
+- User can restore a task from the new modal
 - Archive operations logged appropriately
+- When a task is archived it should no longer be part of completion % calculation (% complete should only consider tasks in completed or in progress states)
 
 ---
 
