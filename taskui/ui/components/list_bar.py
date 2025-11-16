@@ -131,10 +131,10 @@ class ListBar(Horizontal):
 
     DEFAULT_CSS = f"""
     ListBar {{
-        height: 1;
+        height: 2;
         width: 100%;
         background: {BACKGROUND};
-        padding: 0 1;
+        padding: 1 1 0 1;
         layout: horizontal;
         align: left middle;
     }}
