@@ -23,12 +23,12 @@ NAVIGATION_BINDINGS = [
 
 # Task action keybindings
 TASK_ACTION_BINDINGS = [
-    Binding("n", "new_sibling_task", "New Sibling Task", show=True),
-    Binding("c", "new_child_task", "New Child Task", show=True),
-    Binding("e", "edit_task", "Edit Task", show=True),
+    Binding("n,N", "new_sibling_task", "New Sibling Task", show=True),
+    Binding("c,C", "new_child_task", "New Child Task", show=True),
+    Binding("e,E", "edit_task", "Edit Task", show=True),
     Binding("space", "toggle_completion", "Toggle Complete", show=True),
-    Binding("a", "archive_task", "Archive Task", show=True),
-    Binding("v", "view_archives", "View Archives", show=True),
+    Binding("a,A", "archive_task", "Archive Task", show=True),
+    Binding("v,V", "view_archives", "View Archives", show=True),
     Binding("delete,backspace", "delete_task", "Delete Task", show=True),
 ]
 
@@ -41,12 +41,12 @@ LIST_BINDINGS = [
 
 # Printing keybindings
 PRINT_BINDINGS = [
-    Binding("p", "print_column", "Print Column", show=True),
+    Binding("p,P", "print_column", "Print Column", show=True),
 ]
 
 # Application control keybindings
 APP_CONTROL_BINDINGS = [
-    Binding("q", "quit", "Quit", priority=True, show=True),
+    Binding("q,Q", "quit", "Quit", priority=True, show=True),
     Binding("question_mark", "help", "Help", show=True),
     Binding("escape", "cancel", "Cancel", show=False),
 ]
