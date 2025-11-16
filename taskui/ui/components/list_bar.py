@@ -40,13 +40,10 @@ class ListTab(Widget):
 
     DEFAULT_CSS = f"""
     ListTab {{
-        height: 3;
+        height: 1;
         width: auto;
-        min-width: 15;
         padding: 0 1;
         background: transparent;
-        border: solid {BORDER};
-        margin: 0 0 0 1;
     }}
 
     ListTab:hover {{
@@ -54,8 +51,7 @@ class ListTab(Widget):
     }}
 
     ListTab.active {{
-        background: {SELECTION};
-        border: thick {LEVEL_0_COLOR};
+        background: transparent;
     }}
     """
 
@@ -68,6 +64,7 @@ class ListTab(Widget):
         task_list: TaskList,
         shortcut_number: int,
         is_active: bool = False,
+        is_last: bool = False,
         **kwargs
     ) -> None:
         """Initialize a ListTab widget.
@@ -76,12 +73,14 @@ class ListTab(Widget):
             task_list: The TaskList model to display
             shortcut_number: The number key shortcut (1-3)
             is_active: Whether this list is currently active
+            is_last: Whether this is the last tab (for separator logic)
             **kwargs: Additional widget arguments
         """
         super().__init__(**kwargs)
         self.task_list = task_list
         self.shortcut_number = shortcut_number
         self.active = is_active
+        self.is_last = is_last
         self.list_id = task_list.id
 
     def render(self) -> RenderableType:
@@ -104,6 +103,10 @@ class ListTab(Widget):
             completion = self.task_list.completion_percentage
             percentage_color = YELLOW if completion < 100 else LEVEL_0_COLOR
             text.append(f" {completion:.0f}%", style=percentage_color)
+
+        # Add separator if not the last tab
+        if not self.is_last:
+            text.append("  │  ", style=COMMENT)
 
         return text
 
@@ -128,11 +131,10 @@ class ListBar(Horizontal):
 
     DEFAULT_CSS = f"""
     ListBar {{
-        height: 3;
+        height: 1;
         width: 100%;
         background: {BACKGROUND};
-        border-bottom: solid {BORDER};
-        padding: 0;
+        padding: 0 1;
         layout: horizontal;
         align: left middle;
     }}
@@ -181,12 +183,15 @@ class ListBar(Horizontal):
         # Clear tabs list before composing to avoid duplicates on recompose
         self.tabs.clear()
 
+        total_lists = len(self.lists)
         for idx, task_list in enumerate(self.lists, start=1):
             is_active = task_list.id == self.active_list_id
+            is_last = idx == total_lists
             tab = ListTab(
                 task_list=task_list,
                 shortcut_number=idx,
-                is_active=is_active
+                is_active=is_active,
+                is_last=is_last
             )
             self.tabs.append(tab)
             yield tab
@@ -210,12 +215,15 @@ class ListBar(Horizontal):
         self.tabs.clear()
 
         # Create and mount new tabs
+        total_lists = len(self.lists)
         for idx, task_list in enumerate(self.lists, start=1):
             is_active = task_list.id == self.active_list_id
+            is_last = idx == total_lists
             tab = ListTab(
                 task_list=task_list,
                 shortcut_number=idx,
-                is_active=is_active
+                is_active=is_active,
+                is_last=is_last
             )
             self.tabs.append(tab)
             self.mount(tab)
