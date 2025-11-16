@@ -48,6 +48,35 @@ class TestKeybindings:
         """Test that column order is correct."""
         assert COLUMN_ORDER == [COLUMN_1_ID, COLUMN_2_ID, COLUMN_3_ID]
 
+    def test_letter_keybindings_case_insensitive(self):
+        """Test that letter keybindings work with both uppercase and lowercase (Issue #26)."""
+        bindings = get_all_bindings()
+        binding_dict = {b.key: b.action for b in bindings}
+
+        # Test task action bindings accept both cases
+        assert "n,N" in binding_dict
+        assert binding_dict["n,N"] == "new_sibling_task"
+
+        assert "c,C" in binding_dict
+        assert binding_dict["c,C"] == "new_child_task"
+
+        assert "e,E" in binding_dict
+        assert binding_dict["e,E"] == "edit_task"
+
+        assert "a,A" in binding_dict
+        assert binding_dict["a,A"] == "archive_task"
+
+        assert "v,V" in binding_dict
+        assert binding_dict["v,V"] == "view_archives"
+
+        # Test print binding
+        assert "p,P" in binding_dict
+        assert binding_dict["p,P"] == "print_column"
+
+        # Test quit binding
+        assert "q,Q" in binding_dict
+        assert binding_dict["q,Q"] == "quit"
+
     def test_get_next_column_cycles(self):
         """Test that get_next_column cycles through columns."""
         assert get_next_column(COLUMN_1_ID) == COLUMN_2_ID
