@@ -9,7 +9,7 @@ A powerful terminal-based task management system with a three-column hierarchica
 - **Keyboard-Driven**: Fast navigation and task management
 - **Multiple Lists**: Work, Home, Personal lists with easy switching
 - **Persistent Storage**: SQLite database with auto-save
-- **One Monokai Theme**: Beautiful terminal interface with level-specific colors
+- **4 Beautiful Themes**: One Monokai (default), Dracula, Tokyo Night, and Nord
 - **Archive System**: Keep completed tasks organized
 - **Thermal Printer Support**: Print task lists to Epson TM-T20III (optional)
 
@@ -240,7 +240,7 @@ TASKUI_PRINTER_PORT=9100
 
 ## Theming
 
-TaskUI uses the **One Monokai** color scheme, providing a beautiful dark theme optimized for terminal use. The entire application's visual styling is centralized in `taskui/ui/theme.py`, making it easy to customize colors.
+TaskUI comes with **4 popular VS Code themes** adapted for terminal use. The default is **One Monokai**, but you can easily switch to **Dracula**, **Tokyo Night**, or **Nord**. The entire application's visual styling is centralized in `taskui/ui/theme.py`, making theme switching effortless.
 
 ### Theme Architecture
 
@@ -274,6 +274,32 @@ PURPLE = "#AE81FF"      # Info/secondary
 ```
 
 All components automatically update when you change these constants - no need to modify individual component files!
+
+### Available Themes
+
+TaskUI includes 4 professionally crafted themes:
+
+**1. One Monokai (Default)** - Warm, balanced dark theme with cyan/green/pink hierarchy
+**2. Dracula** - Bold, vibrant colors optimized for low-light (10M+ VS Code installs)
+**3. Tokyo Night** - Cool blue tones inspired by Tokyo's nighttime skyline
+**4. Nord** - Arctic, north-bluish palette with calm, focused atmosphere
+
+**To switch themes:**
+
+```bash
+# Method 1: Replace theme.py (recommended)
+cd taskui/ui
+cp themes/dracula.py theme.py        # Dracula theme
+cp themes/tokyo_night.py theme.py    # Tokyo Night theme
+cp themes/nord.py theme.py           # Nord theme
+```
+
+```python
+# Method 2: Import in theme.py (for testing)
+from taskui.ui.themes.dracula import *
+```
+
+**Full theme documentation:** See `taskui/ui/themes/README.md` for detailed color previews, comparisons, and creating your own themes.
 
 ### Theme Features
 
