@@ -275,3 +275,29 @@ printer.cut()
 ---
 
 **Status:** ✅ Story 1 Complete - Raw printing on port 9100 fully functional
+
+---
+
+## Final Solution Summary
+
+**Working Configuration:**
+- **Library:** python-escpos (Network class)
+- **Connection:** Direct TCP socket to 192.168.50.99:9100
+- **Transport:** socat forwarding (GOPEN:/dev/usb/lp0,noctty)
+- **Cut behavior:** Partial cut (perforated edge, intentional for kanban cards)
+
+**Key Learnings:**
+1. Must call `printer.close()` after `printer.cut()` to flush cut command
+2. Partial cut is normal and desirable for receipt printers
+3. python-escpos handles Epson-specific commands better than raw ESC/POS
+4. Buffer clearing via `ESC @` prevents leftover text from previous jobs
+
+**Tested and Working:**
+- ✅ Text printing
+- ✅ Bold formatting
+- ✅ Underline formatting
+- ✅ Center alignment
+- ✅ Double-height text
+- ✅ Auto-cut (partial perforation)
+
+**Final Test Script:** `scripts/test_printer_connection.py`

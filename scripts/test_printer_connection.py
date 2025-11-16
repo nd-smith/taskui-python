@@ -30,10 +30,13 @@ def test_print_hello():
         # Test text printing
         printer.text("Hello World from TaskUI\n")
         printer.text("Test print successful!\n")
-        printer.text("\n")
+        printer.text("\n\n\n")
 
-        # Test auto-cut
-        printer.cut()
+        # Test auto-cut with full cut mode
+        printer.cut(mode='FULL')
+
+        # Close connection to ensure cut command is sent
+        printer.close()
 
         print("✓ Test print successful")
         return True
@@ -60,8 +63,11 @@ def test_formatted_text():
         printer.set(underline=True, bold=False)
         printer.text("Underlined text\n")
 
-        printer.text("\n")
-        printer.cut()
+        printer.text("\n\n\n")
+        printer.cut(mode='FULL')
+
+        # Close connection to ensure cut command is sent
+        printer.close()
 
         print("✓ Formatting test successful")
         return True
