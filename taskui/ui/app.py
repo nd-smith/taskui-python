@@ -17,6 +17,7 @@ from textual.binding import Binding
 from textual.events import Key
 
 from taskui.database import DatabaseManager, get_database_manager
+from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
 from taskui.services.nesting_rules import Column as NestingColumn
 from taskui.services.task_service import TaskService
@@ -39,6 +40,9 @@ from taskui.ui.keybindings import (
     COLUMN_2_ID,
     COLUMN_3_ID,
 )
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class TaskUI(App):
@@ -146,21 +150,27 @@ class TaskUI(App):
         Args:
             event: The key event
         """
+        logger.debug(f"Key pressed: {event.key}, screen_stack_size={len(self.screen_stack)}")
+
         # Only intercept tab/shift+tab when not in a modal (screen stack size is 1)
         if len(self.screen_stack) == 1:
             if event.key == "tab":
                 # Prevent default focus cycling and handle column navigation
+                logger.debug("Tab key: navigating to next column")
                 event.prevent_default()
                 event.stop()
                 self.action_navigate_next_column()
             elif event.key == "shift+tab":
                 # Prevent default focus cycling and handle column navigation
+                logger.debug("Shift+Tab key: navigating to previous column")
                 event.prevent_default()
                 event.stop()
                 self.action_navigate_prev_column()
 
     async def on_mount(self) -> None:
         """Called when app is mounted and ready."""
+        logger.info("TaskUI application mounted, initializing...")
+
         # Set up the theme colors
         self.theme_variables.update({
             "background": BACKGROUND,
@@ -169,15 +179,18 @@ class TaskUI(App):
             "selection": "#49483E",
             "level-0": LEVEL_0_COLOR,
         })
+        logger.debug("Theme colors applied")
 
         # Initialize database
         self._db_manager = get_database_manager()
         await self._db_manager.initialize()
+        logger.info("Database initialized")
 
         # Ensure default list exists
         # Note: _ensure_default_list() updates the ListBar which triggers
         # on_list_bar_list_selected event, which loads tasks and sets focus
         await self._ensure_default_list()
+        logger.info("TaskUI application ready")
 
     async def _ensure_default_list(self) -> None:
         """Ensure that default lists (Work, Home, Personal) exist in the database.
@@ -206,8 +219,7 @@ class TaskUI(App):
 
         except Exception as e:
             # Log error but don't crash the app
-            # TODO: Add proper logging in Phase 3
-            print(f"Error ensuring default lists: {e}")
+            logger.error("Error ensuring default lists", exc_info=True)
             # Create a fallback UUID for graceful degradation
             from uuid import uuid4
             self._current_list_id = uuid4()
@@ -235,14 +247,13 @@ class TaskUI(App):
                 )
 
             # Set tasks in Column 1
-            print(f"[DEBUG] _restore_app_state: Loading {len(tasks)} tasks into Column 1")
+            logger.debug(f"_restore_app_state: Loading {len(tasks)} tasks into Column 1")
             column1.set_tasks(tasks)
-            print(f"[DEBUG] _restore_app_state: set_tasks completed")
+            logger.debug("_restore_app_state: set_tasks completed")
 
         except Exception as e:
             # Log error but don't crash the app
-            # TODO: Add proper logging in Phase 3
-            print(f"Error restoring app state: {e}")
+            logger.error("Error restoring app state", exc_info=True)
 
     async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID, include_archived: bool = False) -> List[Task]:
         """Get top-level tasks and their children for a list (2 levels).
@@ -282,9 +293,10 @@ class TaskUI(App):
                 column = self.query_one(f"#{column_id}", TaskColumn)
             column.focus()
             self._focused_column_id = column_id
-        except Exception:
+            logger.debug(f"Focus changed to column: {column_id}")
+        except Exception as e:
             # Column not found or not focusable, ignore
-            pass
+            logger.debug(f"Could not set focus to column {column_id}: {e}")
 
     def _get_focused_column(self) -> Optional[TaskColumn]:
         """Get the currently focused column widget.
@@ -477,8 +489,7 @@ class TaskUI(App):
                 # Reload tasks from database
                 await self._refresh_column_tasks(focused_column)
         except Exception as e:
-            # TODO: Add proper error handling in Phase 3
-            print(f"Error updating task: {e}")
+            logger.error("Error updating task", exc_info=True)
 
     async def _handle_create_sibling_task(
         self,
@@ -527,8 +538,7 @@ class TaskUI(App):
                 # Session context manager will auto-commit
 
         except Exception as e:
-            # TODO: Add proper error handling in Phase 3
-            print(f"Error creating sibling task: {e}")
+            logger.error("Error creating sibling task", exc_info=True)
 
     async def _handle_create_child_task(
         self,
@@ -561,8 +571,7 @@ class TaskUI(App):
                 # Session context manager will auto-commit
 
         except Exception as e:
-            # TODO: Add proper error handling in Phase 3
-            print(f"Error creating child task: {e}")
+            logger.error("Error creating child task", exc_info=True)
 
     async def _refresh_column_tasks(self, column: TaskColumn) -> None:
         """Refresh tasks in a column from the database.
@@ -620,8 +629,7 @@ class TaskUI(App):
             list_bar.update_lists(self._lists)
 
         except Exception as e:
-            # TODO: Add proper error handling in Phase 3
-            print(f"Error refreshing list bar for list {list_id}: {e}")
+            logger.error(f"Error refreshing list bar for list {list_id}", exc_info=True)
 
     def action_edit_task(self) -> None:
         """Edit the selected task (E key).
@@ -697,8 +705,7 @@ class TaskUI(App):
                 await self._refresh_list_bar_for_list(self._current_list_id)
 
         except Exception as e:
-            # TODO: Add proper error handling in Phase 3
-            print(f"Error toggling task completion: {e}")
+            logger.error("Error toggling task completion", exc_info=True)
 
     def action_archive_task(self) -> None:
         """Archive the selected task (A key)."""
@@ -828,8 +835,7 @@ class TaskUI(App):
 
                 return hierarchy
         except Exception as e:
-            # TODO: Add proper error handling in Phase 3
-            print(f"Error loading hierarchy: {e}")
+            logger.error("Error loading hierarchy", exc_info=True)
             return []
 
     async def _get_task_children(self, parent_id: UUID) -> List[Task]:
@@ -851,23 +857,13 @@ class TaskUI(App):
                 descendants = await task_service.get_all_descendants(parent_id, include_archived=False)
 
                 # Debug logging
-                from datetime import datetime
-                try:
-                    import os
-                    debug_dir = "debug"
-                    os.makedirs(debug_dir, exist_ok=True)
-                    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                    with open(f"{debug_dir}/app_debug.log", "a") as f:
-                        f.write(f"[{timestamp}] _get_task_children({parent_id}): fetched {len(descendants)} descendants\n")
-                        for task in descendants:
-                            f.write(f"  - {task.title} (id={task.id}, parent_id={task.parent_id})\n")
-                except Exception:
-                    pass
+                logger.debug(f"_get_task_children({parent_id}): fetched {len(descendants)} descendants")
+                for task in descendants:
+                    logger.debug(f"  - {task.title} (id={task.id}, parent_id={task.parent_id})")
 
                 return descendants
         except Exception as e:
-            # TODO: Add proper error handling in Phase 3
-            print(f"Error loading children: {e}")
+            logger.error("Error loading children", exc_info=True)
             return []
 
     def _make_levels_context_relative(self, tasks: List[Task], parent_level: int) -> List[Task]:
@@ -931,5 +927,4 @@ class TaskUI(App):
                     # when the column is focused, so no manual trigger needed
 
             except Exception as e:
-                # TODO: Add proper error handling in Phase 3
-                print(f"Error loading tasks for list: {e}")
+                logger.error("Error loading tasks for list", exc_info=True)
