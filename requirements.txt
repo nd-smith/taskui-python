@@ -5,6 +5,10 @@ sqlalchemy>=2.0.0
 aiosqlite>=0.19.0
 typing-extensions>=4.8.0
 
+# Printer support
+python-escpos>=3.0
+Pillow>=10.0.0
+
 # Development dependencies (optional)
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

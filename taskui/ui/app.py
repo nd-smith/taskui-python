@@ -22,6 +22,7 @@ from taskui.models import Task, TaskList
 from taskui.services.nesting_rules import Column as NestingColumn
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
+from taskui.services.printer_service import PrinterService, PrinterConfig
 from taskui.ui.components.task_modal import TaskCreationModal
 from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.ui.components.detail_panel import DetailPanel
@@ -99,6 +100,7 @@ class TaskUI(App):
         self._db_manager: Optional[DatabaseManager] = None
         self._current_list_id: Optional[UUID] = None  # Will be set after database initialization
         self._lists: List[TaskList] = []  # Store available lists
+        self._printer_service: Optional[PrinterService] = None  # Thermal printer service
 
     def compose(self) -> ComposeResult:
         """Compose the application layout.
@@ -191,6 +193,17 @@ class TaskUI(App):
         # Note: _ensure_default_list() updates the ListBar which triggers
         # on_list_bar_list_selected event, which loads tasks and sets focus
         await self._ensure_default_list()
+
+        # Initialize printer service (don't fail if printer unavailable)
+        try:
+            printer_config = PrinterConfig.from_config_file()
+            self._printer_service = PrinterService(printer_config)
+            self._printer_service.connect()
+            logger.info("Printer service initialized and connected")
+        except Exception as e:
+            logger.warning(f"Printer not available at startup: {e}")
+            # Continue without printer - user can still use the app
+
         logger.info("TaskUI application ready")
 
     async def _ensure_default_list(self) -> None:
@@ -871,10 +884,59 @@ class TaskUI(App):
         list_bar = self.query_one(ListBar)
         list_bar.select_list_by_number(3)
 
-    def action_print_column(self) -> None:
-        """Print the current column to thermal printer (P key)."""
-        # TODO: Implement in Story 4.1
-        pass
+    async def action_print_column(self) -> None:
+        """Print the selected task card to thermal printer (P key).
+
+        Prints the currently selected task with all its children to the
+        thermal printer as a physical kanban card.
+        """
+        logger.debug("Print key pressed ('P')")
+
+        # Check if printer is available
+        if not self._printer_service or not self._printer_service.is_connected():
+            self.notify("Printer not connected", severity="warning", timeout=3)
+            logger.warning("Print requested but printer not connected")
+            return
+
+        # Get the focused column
+        column = self._get_focused_column()
+        if not column:
+            logger.debug("No focused column for print")
+            return
+
+        # Get the currently selected task
+        selected_task = column.get_selected_task()
+        if not selected_task:
+            self.notify("No task selected to print", severity="warning", timeout=3)
+            logger.debug("No task selected for printing")
+            return
+
+        # Get children of the selected task
+        if not self._db_manager:
+            logger.warning("No database manager available for printing")
+            return
+
+        try:
+            # Show printing status
+            self.notify("Printing task card...", timeout=2)
+            logger.info(f"Printing task card: {selected_task.title}")
+
+            # Get children from database
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                children = await task_service.get_children(selected_task.id, include_archived=False)
+
+            # Print the card
+            self._printer_service.print_task_card(selected_task, children)
+
+            # Show success message
+            self.notify("✓ Task card printed!", severity="information", timeout=3)
+            logger.info(f"Successfully printed task card for: {selected_task.title}")
+
+        except Exception as e:
+            # Show error message
+            self.notify(f"Print failed: {str(e)}", severity="error", timeout=5)
+            logger.error(f"Failed to print task card: {e}", exc_info=True)
 
     def action_cancel(self) -> None:
         """Cancel current operation (Escape key)."""
