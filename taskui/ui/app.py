@@ -643,24 +643,41 @@ class TaskUI(App):
             await task_service.archive_task(...)
             await self._refresh_ui_after_task_change(clear_detail_panel=True)
         """
+        logger.debug(
+            f"UI refresh: Refreshing all visible columns "
+            f"(clear_detail_panel={clear_detail_panel})"
+        )
+
         # Refresh Column 1 (top-level tasks)
         column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
         await self._refresh_column_tasks(column1)
-        
+        logger.debug("UI refresh: Column 1 refreshed")
+
         # Refresh Column 2 if a parent is selected (children view)
         selected_task = column1.get_selected_task()
         if selected_task:
+            logger.debug(
+                f"UI refresh: Refreshing Column 2 for parent task {selected_task.id}"
+            )
             column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
             await self._refresh_column_tasks(column2)
-        
+        else:
+            logger.debug("UI refresh: Skipping Column 2 (no parent selected)")
+
         # Clear detail panel if requested (e.g., after archiving)
         if clear_detail_panel:
+            logger.debug("UI refresh: Clearing detail panel")
             detail_panel = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
             detail_panel.clear()
-        
+
         # Refresh list bar (completion percentages)
         if self._current_list_id:
+            logger.debug(
+                f"UI refresh: Refreshing list bar for list {self._current_list_id}"
+            )
             await self._refresh_list_bar_for_list(self._current_list_id)
+
+        logger.debug("UI refresh: Complete")
 
     def action_edit_task(self) -> None:
         """Edit the selected task (E key).
