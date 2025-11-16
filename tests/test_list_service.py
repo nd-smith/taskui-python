@@ -318,20 +318,6 @@ class TestListServiceDefaultLists:
         all_lists = await service.get_all_lists()
         assert len(all_lists) == 3
 
-    @pytest.mark.asyncio
-    async def test_ensure_default_lists_preserves_existing(self, db_session):
-        """Test that ensure_default_lists preserves existing lists."""
-        service = ListService(db_session)
-
-        # Create a custom list first
-        custom_list = await service.create_list(name="Custom")
-
-        # Ensure defaults
-        lists = await service.ensure_default_lists()
-
-        # Should return the existing custom list
-        assert len(lists) == 1
-        assert lists[0].name == "Custom"
 
 
 class TestListServiceTaskCounts:

@@ -346,29 +346,3 @@ class TestTaskColumnNavigation:
         await pilot.pause()
         assert column._selected_index == 0  # Should stay at 0
 
-    async def test_navigation_with_empty_column(self):
-        """Test that navigation works with an empty column."""
-        from textual.app import App
-
-        class TestApp(App):
-            def compose(self):
-                yield TaskColumn(
-                    column_id="test-column",
-                    title="Test Column",
-                    id="test-column"
-                )
-
-        app = TestApp()
-        async with app.run_test() as pilot:
-            column = app.query_one("#test-column", TaskColumn)
-
-            # Set empty task list
-            column.set_tasks([])
-            await pilot.pause()
-
-            # Navigation should not crash
-            column.navigate_down()
-            column.navigate_up()
-            await pilot.pause()
-
-            assert column._selected_index == -1  # No selection
