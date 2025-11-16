@@ -502,7 +502,7 @@ Show parent task progress based on child completion.
 
 ---
 
-### - [ ] 2.3 Archive Functionality ⚡ [DEPENDS ON: 2.1]
+### - [x] 2.3 Archive Functionality ⚡ [DEPENDS ON: 2.1]
 **Size:** Medium | **Time:** 25 mins | **Dependencies:** 2.1
 
 Implement 'a' key to archive completed tasks.  Create new modal to search, display and restore archived tasks.  "As a user I might want to un-archive a task I archived by mistake". "As a user I might want to archive completed tasks to clean up my projects list"
