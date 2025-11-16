@@ -665,17 +665,22 @@ class TaskUI(App):
         Toggles the completion status of the currently selected task.
         When completed, the task will display with a strikethrough.
         """
+        logger.debug("Completion toggle key pressed (Space)")
+
         column = self._get_focused_column()
         if not column:
+            logger.debug("No focused column found for completion toggle")
             return
 
         # Get the currently selected task
         selected_task = column.get_selected_task()
         if not selected_task:
             # No task selected, nothing to toggle
+            logger.debug("No task selected for completion toggle")
             return
 
         if not self._db_manager:
+            logger.debug("No database manager available for completion toggle")
             return
 
         try:

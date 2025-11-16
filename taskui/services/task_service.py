@@ -762,13 +762,30 @@ class TaskService:
             # Mark as incomplete
             task_orm.is_completed = False
             task_orm.completed_at = None
+            new_state = False
+            logger.info(
+                f"Task completion toggled: task_id={task_id}, "
+                f"new_state=incomplete, timestamp={datetime.utcnow().isoformat()}"
+            )
         else:
             # Mark as completed
             task_orm.is_completed = True
             task_orm.completed_at = datetime.utcnow()
+            new_state = True
+            logger.info(
+                f"Task completion toggled: task_id={task_id}, "
+                f"new_state=completed, timestamp={task_orm.completed_at.isoformat()}"
+            )
 
         # Flush changes to database
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except Exception as e:
+            logger.error(
+                f"Database update failed for task completion toggle: task_id={task_id}",
+                exc_info=True
+            )
+            raise
 
         # Convert back to Pydantic model
         task = self._orm_to_pydantic(task_orm)
