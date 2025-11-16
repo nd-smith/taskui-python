@@ -34,6 +34,14 @@ from taskui.ui.theme import (
     LEVEL_1_COLOR,
     LEVEL_2_COLOR,
 )
+from taskui.ui.constants import (
+    MAX_TITLE_LENGTH_IN_NOTIFICATION,
+    NOTIFICATION_TIMEOUT_SHORT,
+    NOTIFICATION_TIMEOUT_MEDIUM,
+    NOTIFICATION_TIMEOUT_LONG,
+    SCREEN_STACK_SIZE_MAIN_APP,
+    THEME_SELECTION_COLOR,
+)
 from taskui.ui.components.column import TaskColumn
 from taskui.ui.keybindings import (
     get_all_bindings,
@@ -159,7 +167,7 @@ class TaskUI(App):
         self.notify(
             "Keybindings shown in footer. N=New Task, C=Child, E=Edit, Space=Complete, A=Archive, V=View Archives",
             severity="information",
-            timeout=5
+            timeout=NOTIFICATION_TIMEOUT_LONG
         )
 
     def on_key(self, event: Key) -> None:
@@ -174,7 +182,7 @@ class TaskUI(App):
         logger.debug(f"Key pressed: {event.key}, screen_stack_size={len(self.screen_stack)}")
 
         # Only intercept tab/shift+tab when not in a modal (screen stack size is 1)
-        if len(self.screen_stack) == 1:
+        if len(self.screen_stack) == SCREEN_STACK_SIZE_MAIN_APP:
             if event.key == "tab":
                 # Prevent default focus cycling and handle column navigation
                 logger.debug("Tab key: navigating to next column")
@@ -197,7 +205,7 @@ class TaskUI(App):
             "background": BACKGROUND,
             "foreground": FOREGROUND,
             "border": BORDER,
-            "selection": "#49483E",
+            "selection": THEME_SELECTION_COLOR,
             "level-0": LEVEL_0_COLOR,
         })
         logger.debug("Theme colors applied")
@@ -466,13 +474,13 @@ class TaskUI(App):
                 # Session context manager will auto-commit
 
             # Notify user of successful edit
-            self.notify(f"✓ Task updated: {title[:30]}...", severity="information", timeout=2)
+            self.notify(f"✓ Task updated: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
             # Refresh UI to show the updated task
             await self._refresh_ui_after_task_change()
         except Exception as e:
             logger.error("Error updating task", exc_info=True)
-            self.notify("Failed to update task", severity="error", timeout=3)
+            self.notify("Failed to update task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     async def _handle_create_sibling_task(
         self,
@@ -521,11 +529,11 @@ class TaskUI(App):
                 # Session context manager will auto-commit
 
             # Notify user of successful creation
-            self.notify(f"✓ Task created: {title[:30]}...", severity="information", timeout=2)
+            self.notify(f"✓ Task created: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
         except Exception as e:
             logger.error("Error creating sibling task", exc_info=True)
-            self.notify("Failed to create task", severity="error", timeout=3)
+            self.notify("Failed to create task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     async def _handle_create_child_task(
         self,
@@ -558,11 +566,11 @@ class TaskUI(App):
                 # Session context manager will auto-commit
 
             # Notify user of successful creation
-            self.notify(f"✓ Subtask created: {title[:30]}...", severity="information", timeout=2)
+            self.notify(f"✓ Subtask created: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
         except Exception as e:
             logger.error("Error creating child task", exc_info=True)
-            self.notify("Failed to create subtask", severity="error", timeout=3)
+            self.notify("Failed to create subtask", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     async def _refresh_column_tasks(self, column: TaskColumn) -> None:
         """Refresh tasks in a column from the database.
@@ -753,7 +761,7 @@ class TaskUI(App):
             # Determine completion status for notification
             completion_status = "completed" if not selected_task.is_completed else "reopened"
             icon = "✓" if not selected_task.is_completed else "○"
-            self.notify(f"{icon} Task {completion_status}", severity="information", timeout=2)
+            self.notify(f"{icon} Task {completion_status}", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
             # Refresh UI to show the updated task with strikethrough and updated progress
             await self._refresh_ui_after_task_change()
@@ -767,7 +775,7 @@ class TaskUI(App):
 
         except Exception as e:
             logger.error("Error toggling task completion", exc_info=True)
-            self.notify("Failed to toggle completion", severity="error", timeout=3)
+            self.notify("Failed to toggle completion", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     async def action_archive_task(self) -> None:
         """Archive the selected completed task ('a' key).
@@ -792,7 +800,7 @@ class TaskUI(App):
         # Check if task is completed
         if not selected_task.is_completed:
             logger.debug(f"Task {selected_task.id} is not completed, cannot archive")
-            self.notify("Only completed tasks can be archived", severity="warning", timeout=3)
+            self.notify("Only completed tasks can be archived", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
             return
 
         if not self._db_manager:
@@ -807,7 +815,7 @@ class TaskUI(App):
                 # Session context manager will auto-commit
 
             # Notify user of successful archive
-            self.notify(f"📦 Task archived: {selected_task.title[:30]}...", severity="information", timeout=2)
+            self.notify(f"📦 Task archived: {selected_task.title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
             # Refresh UI to remove archived task and clear detail panel
             await self._refresh_ui_after_task_change(clear_detail_panel=True)
@@ -815,10 +823,10 @@ class TaskUI(App):
         except ValueError as e:
             # Task was not completed (shouldn't happen as we check above)
             logger.error(f"Error archiving task: {e}", exc_info=True)
-            self.notify("Failed to archive task", severity="error", timeout=3)
+            self.notify("Failed to archive task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
         except Exception as e:
             logger.error("Error archiving task", exc_info=True)
-            self.notify("Failed to archive task", severity="error", timeout=3)
+            self.notify("Failed to archive task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     async def action_view_archives(self) -> None:
         """View archived tasks modal ('v' key).
@@ -869,19 +877,19 @@ class TaskUI(App):
             logger.info(f"Task restored: {restored_task.title[:50]}")
 
             # Notify user of successful restore
-            self.notify(f"✓ Task restored: {restored_task.title[:30]}...", severity="information", timeout=2)
+            self.notify(f"✓ Task restored: {restored_task.title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
             # Refresh UI to show the restored task
             await self._refresh_ui_after_task_change()
 
         except Exception as e:
             logger.error("Error restoring task from archive", exc_info=True)
-            self.notify("Failed to restore task", severity="error", timeout=3)
+            self.notify("Failed to restore task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     def action_delete_task(self) -> None:
         """Delete the selected task (Delete/Backspace key)."""
         # TODO: Implement in Story 2.5
-        self.notify("Delete not yet implemented", severity="warning", timeout=3)
+        self.notify("Delete not yet implemented", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     def action_switch_list_1(self) -> None:
         """Switch to list 1 (1 key)."""
@@ -908,7 +916,7 @@ class TaskUI(App):
 
         # Check if printer is available
         if not self._printer_service or not self._printer_service.is_connected():
-            self.notify("Printer not connected", severity="warning", timeout=3)
+            self.notify("Printer not connected", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
             logger.warning("Print requested but printer not connected")
             return
 
@@ -921,7 +929,7 @@ class TaskUI(App):
         # Get the currently selected task
         selected_task = column.get_selected_task()
         if not selected_task:
-            self.notify("No task selected to print", severity="warning", timeout=3)
+            self.notify("No task selected to print", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
             logger.debug("No task selected for printing")
             return
 
@@ -932,7 +940,7 @@ class TaskUI(App):
 
         try:
             # Show printing status
-            self.notify("Printing task card...", timeout=2)
+            self.notify("Printing task card...", timeout=NOTIFICATION_TIMEOUT_SHORT)
             logger.info(f"Printing task card: {selected_task.title}")
 
             # Get children from database
@@ -944,12 +952,12 @@ class TaskUI(App):
             self._printer_service.print_task_card(selected_task, children)
 
             # Show success message
-            self.notify("✓ Task card printed!", severity="information", timeout=3)
+            self.notify("✓ Task card printed!", severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
             logger.info(f"Successfully printed task card for: {selected_task.title}")
 
         except Exception as e:
             # Show error message
-            self.notify(f"Print failed: {str(e)}", severity="error", timeout=5)
+            self.notify(f"Print failed: {str(e)}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
             logger.error(f"Failed to print task card: {e}", exc_info=True)
 
     def action_cancel(self) -> None:
