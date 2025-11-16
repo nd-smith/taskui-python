@@ -7,6 +7,7 @@ Or as an installed command:
     taskui
 """
 
+import os
 import sys
 from typing import Optional
 
@@ -28,8 +29,11 @@ def main(args: Optional[list[str]] = None) -> int:
     if args is None:
         args = sys.argv[1:]
 
+    # Detect dev mode from --dev flag or TEXTUAL_DEVTOOLS environment variable
+    is_dev_mode = "--dev" in args or os.getenv("TEXTUAL_DEVTOOLS") is not None
+
     # Initialize logging before any other operations
-    setup_logging()
+    setup_logging(use_textual_handler=is_dev_mode)
 
     # Import here to avoid circular imports and improve startup time
     from taskui.ui.app import TaskUI
