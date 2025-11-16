@@ -1,0 +1,15 @@
+# TaskUI Configuration File Example
+# Copy this file to ~/.taskui/config.ini and customize as needed
+
+[printer]
+# Thermal printer network configuration
+host = 192.168.50.99
+port = 9100
+timeout = 60
+
+# Print format options (minimal is recommended)
+detail_level = minimal
+
+# Print behavior
+auto_cut = true
+enable_logging = true

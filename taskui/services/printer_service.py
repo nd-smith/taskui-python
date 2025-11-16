@@ -12,8 +12,7 @@ import logging
 from pathlib import Path
 from enum import Enum
 
-# NOTE: python-escpos will be added as dependency in future session
-# from escpos.printer import Network
+from escpos.printer import Network
 
 from taskui.models import Task
 from taskui.logging_config import get_logger
@@ -55,16 +54,30 @@ class PrinterConfig:
             PrinterConfig instance with loaded settings
 
         Raises:
-            FileNotFoundError: If config file doesn't exist
             ValueError: If config format is invalid
         """
-        if config_path is None:
-            config_path = Path.home() / ".taskui" / "config.ini"
+        from taskui.config import Config
 
-        # TODO: Implement config file parsing in future session
-        # For now, return defaults
-        logger.debug(f"Loading printer config from {config_path}")
-        return cls()
+        # Load configuration
+        config = Config(config_path)
+        printer_config = config.get_printer_config()
+
+        # Convert detail_level string to enum
+        detail_level_str = printer_config.get('detail_level', 'minimal').lower()
+        try:
+            detail_level = DetailLevel(detail_level_str)
+        except ValueError:
+            logger.warning(f"Invalid detail_level '{detail_level_str}', using MINIMAL")
+            detail_level = DetailLevel.MINIMAL
+
+        logger.debug(f"Loaded printer config: {printer_config['host']}:{printer_config['port']}")
+
+        return cls(
+            host=printer_config['host'],
+            port=printer_config['port'],
+            timeout=printer_config['timeout'],
+            detail_level=detail_level
+        )
 
 
 class PrinterService:
@@ -104,9 +117,7 @@ class PrinterService:
         logger.debug(f"Attempting to connect to printer at {self.config.host}:{self.config.port}")
 
         try:
-            # TODO: Implement actual connection in future session
-            # self.printer = Network(self.config.host, port=self.config.port, timeout=self.config.timeout)
-
+            self.printer = Network(self.config.host, port=self.config.port, timeout=self.config.timeout)
             self._connected = True
             logger.info(f"Successfully connected to printer at {self.config.host}")
             return True
@@ -119,7 +130,8 @@ class PrinterService:
     def disconnect(self):
         """Disconnect from thermal printer."""
         if self.printer:
-            # TODO: Implement actual disconnection
+            self.printer.close()
+            self.printer = None
             self._connected = False
             logger.info("Disconnected from printer")
 
@@ -152,12 +164,8 @@ class PrinterService:
         logger.debug(f"Detail level: {self.config.detail_level.value}")
 
         try:
-            # Generate card content based on detail level
-            card_content = self._format_task_card(task, children)
-
-            # TODO: Implement actual printing in future session
-            # self.printer.text(card_content)
-            # self.printer.cut()
+            # Print card based on detail level
+            self._print_card(task, children)
 
             logger.info(f"Successfully printed task card for task {task.id}")
             return True
@@ -166,108 +174,47 @@ class PrinterService:
             logger.error(f"Failed to print task card: {e}", exc_info=True)
             raise PrintError(f"Print operation failed: {e}") from e
 
-    def _format_task_card(self, task: Task, children: List[Task]) -> str:
+    def _print_card(self, task: Task, children: List[Task]):
         """
-        Format task and children into a kanban card layout.
+        Print task card directly to printer with validated minimal format.
+
+        Format:
+        - Title: Font A, bold, double-height, double-width
+        - Body: Font B (smaller), no bold
+        - Children: Checkboxes with titles
+        - Notes: Plain text with automatic wrapping
 
         Args:
             task: Parent task
             children: Child tasks
-
-        Returns:
-            Formatted card content as string
         """
-        # Dispatch to appropriate formatter based on detail level
-        if self.config.detail_level == DetailLevel.MINIMAL:
-            return self._format_minimal(task, children)
-        elif self.config.detail_level == DetailLevel.STANDARD:
-            return self._format_standard(task, children)
-        else:
-            return self._format_full(task, children)
+        # TITLE - BIG and BOLD (Font A, double size)
+        self.printer.set(font='a', bold=True, double_height=True, double_width=True)
+        self.printer.text(f"\n{task.title}\n\n\n")
 
-    def _format_minimal(self, task: Task, children: List[Task]) -> str:
-        """
-        Format task card with minimal detail.
+        # BODY - Small font (Font B is smaller than Font A)
+        self.printer.set(font='b', bold=False, double_height=False, double_width=False)
 
-        Includes:
-        - Title with checkbox
-        - Progress indicator
-        - Child tasks with checkboxes
-        - Created date
-        """
-        # Card width for 80mm thermal printer (70 chars standard font)
-        WIDTH = 70
-
-        lines = []
-
-        # Top border
-        lines.append("┌" + "─" * (WIDTH - 2) + "┐")
-        lines.append("│" + " " * (WIDTH - 2) + "│")
-
-        # Task title with checkbox
-        checkbox = "[X]" if task.is_completed else "[ ]"
-        title_line = f"  {checkbox} {task.title}"
-        lines.append("│" + title_line.ljust(WIDTH - 2) + "│")
-        lines.append("│" + " " * (WIDTH - 2) + "│")
-
-        # Progress indicator if has children
         if children:
-            completed_count = sum(1 for child in children if child.is_completed)
-            progress_line = f"      Progress: {completed_count}/{len(children)} subtasks"
-            lines.append("│" + progress_line.ljust(WIDTH - 2) + "│")
-            lines.append("│" + " " * (WIDTH - 2) + "│")
+            # Print children as checkboxes with spacing between them
+            for i, child in enumerate(children):
+                checkbox = "[X]" if child.is_completed else "[ ]"
+                self.printer.text(f"{checkbox} {child.title}\n")
+                # Add extra line between children (but not after the last one)
+                if i < len(children) - 1:
+                    self.printer.text("\n")
+        elif task.notes:
+            # Print notes with automatic wrapping
+            self.printer.text(f"{task.notes}\n")
 
-            # Child tasks
-            for child in children:
-                child_checkbox = "[X]" if child.is_completed else "[ ]"
-                child_line = f"      {child_checkbox} {child.title}"
-                # Truncate if too long
-                if len(child_line) > WIDTH - 4:
-                    child_line = child_line[:WIDTH - 7] + "..."
-                lines.append("│" + child_line.ljust(WIDTH - 2) + "│")
-
-            lines.append("│" + " " * (WIDTH - 2) + "│")
-
-        # Created date
-        created_date = task.created_at.strftime("%Y-%m-%d")
-        date_line = f"      Created: {created_date}"
-        lines.append("│" + date_line.ljust(WIDTH - 2) + "│")
-        lines.append("│" + " " * (WIDTH - 2) + "│")
-
-        # Bottom border
-        lines.append("└" + "─" * (WIDTH - 2) + "┘")
-
-        return "\n".join(lines)
-
-    def _format_standard(self, task: Task, children: List[Task]) -> str:
-        """
-        Format task card with standard detail level.
-
-        Adds to minimal:
-        - List name
-        - Completion percentage
-        - Child task dates
-        - Modified timestamp
-        """
-        # TODO: Implement in future session
-        return self._format_minimal(task, children)
-
-    def _format_full(self, task: Task, children: List[Task]) -> str:
-        """
-        Format task card with full detail level.
-
-        Adds to standard:
-        - Task notes
-        - Child task notes
-        - Column/level information
-        - Print timestamp
-        """
-        # TODO: Implement in future session
-        return self._format_minimal(task, children)
+        # Spacing and cut
+        self.printer.text("\n\n\n")
+        self.printer.cut(mode="FULL")
+        self.printer.close()
 
     def test_connection(self) -> bool:
         """
-        Test printer connection without printing.
+        Test printer connection by printing a simple test message.
 
         Returns:
             True if printer responds, False otherwise
@@ -275,9 +222,17 @@ class PrinterService:
         logger.debug("Testing printer connection")
 
         try:
-            # TODO: Implement actual test in future session
-            # Could send a simple command and check response
-            return self._connected
+            if not self._connected:
+                return False
+
+            # Print simple test message
+            self.printer.text("TaskUI Printer Test\n")
+            self.printer.text("Connection OK\n\n\n")
+            self.printer.cut(mode="FULL")
+            self.printer.close()
+
+            logger.info("Printer connection test successful")
+            return True
         except Exception as e:
             logger.error(f"Connection test failed: {e}", exc_info=True)
             return False
@@ -361,10 +316,25 @@ if __name__ == "__main__":
         Task(id=uuid.uuid4(), list_id=list_id, title="Review with team", is_completed=False, created_at=datetime.now()),
     ]
 
-    # Test formatting without actual printer
+    # Test with actual printer
     service = PrinterService(config)
-    card_content = service._format_minimal(parent_task, children)
 
-    # Use mock printer to visualize
-    mock_printer = MockPrinter()
-    mock_printer.print_card(card_content)
+    try:
+        # Connect to printer
+        service.connect()
+
+        # Test connection
+        if service.test_connection():
+            print("✓ Connection test passed")
+
+        # Reconnect after test (test_connection closes printer)
+        service.connect()
+
+        # Print task card
+        service.print_task_card(parent_task, children)
+        print("✓ Task card printed successfully")
+
+    except Exception as e:
+        print(f"✗ Error: {e}")
+    finally:
+        service.disconnect()

@@ -81,6 +81,52 @@ taskui
 - `Enter`: Confirm action
 - `Q`: Quit application
 
+## Thermal Printer
+
+TaskUI supports printing physical kanban cards to ESC/POS thermal printers. Press **'P'** on any task to create a physical card with the task title and all its children as checkboxes.
+
+### Quick Start
+
+1. **Install printer dependencies:**
+   ```bash
+   pip install python-escpos Pillow
+   ```
+
+2. **Configure printer** in `~/.taskui/config.ini`:
+   ```ini
+   [printer]
+   host = 192.168.50.99
+   port = 9100
+   ```
+
+3. **Test printer:**
+   ```bash
+   python3 scripts/validate_printer.py
+   ```
+
+4. **Print from TaskUI:**
+   - Select a task
+   - Press **'P'**
+   - Get your physical card!
+
+### Supported Printers
+
+- Epson TM-T20III (tested)
+- Any ESC/POS compatible 80mm thermal printer
+
+### Card Format
+
+Cards are printed in a clean, minimal format:
+- **Title:** Large, bold, easy to read
+- **Children:** Checkboxes `[ ]` or `[X]` for completed
+- **Auto-cut:** Automatic separation
+
+### Documentation
+
+- **Setup Guide:** `docs/PRINTER_SETUP_GUIDE.md` - Complete installation and configuration
+- **Troubleshooting:** `docs/PRINTER_TROUBLESHOOTING.md` - Common issues and solutions
+- **Implementation:** `docs/PRINT_TASKS.md` - Technical details
+
 ## Project Structure
 
 ```

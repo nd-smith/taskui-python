@@ -301,3 +301,92 @@ printer.cut()
 - ✅ Auto-cut (partial perforation)
 
 **Final Test Script:** `scripts/test_printer_connection.py`
+
+---
+
+## Common User Issues
+
+### Issue: "Printer not connected" in TaskUI
+
+**Symptom:** Warning message "Printer not connected" when pressing 'P'
+
+**Solutions:**
+1. Check printer is powered on
+2. Verify printer IP in `~/.taskui/config.ini`
+3. Test connection: `ping <printer_ip>`
+4. Run validation: `python3 scripts/validate_printer.py`
+5. Restart TaskUI to reconnect
+
+### Issue: TaskUI starts but printer doesn't initialize
+
+**Symptom:** No error, but printer doesn't work
+
+**Check logs:**
+```bash
+# Look for printer warnings in TaskUI output
+taskui 2>&1 | grep -i printer
+```
+
+**Common causes:**
+- Config file not found (`~/.taskui/config.ini` missing)
+- Wrong IP address in config
+- Firewall blocking port 9100
+
+### Issue: Printed cards are blank
+
+**Symptom:** Printer cuts paper but nothing prints
+
+**Solutions:**
+1. Check thermal paper is loaded correctly (thermal side down)
+2. Test if paper is thermal: scratch it with fingernail (should turn black)
+3. Replace paper if old/faded
+4. Run hardware validation to test printer
+
+### Issue: Text is cut off or wraps incorrectly
+
+**Symptom:** Task titles or notes don't display properly
+
+**Solutions:**
+- This should not happen with current implementation
+- Report as bug with task title/notes content
+- Maximum recommended title length: ~200 characters
+
+### Issue: Printer jams or paper feed problems
+
+**Solutions:**
+1. Power off printer
+2. Remove paper roll
+3. Clear any jammed paper
+4. Check for debris in paper path
+5. Reload paper correctly
+6. Power on and test
+
+### Issue: socat service stops working
+
+**Symptom:** Printing worked before, now fails with connection error
+
+**Check service status:**
+```bash
+ssh pi@192.168.50.99
+sudo systemctl status printer-raw.service
+```
+
+**Restart service:**
+```bash
+sudo systemctl restart printer-raw.service
+```
+
+**Check logs:**
+```bash
+sudo journalctl -u printer-raw.service -n 50
+```
+
+---
+
+## Getting Help
+
+1. **Check logs** - Look for error messages in TaskUI output
+2. **Run validation** - `python3 scripts/validate_printer.py`
+3. **Review this guide** - Most issues are covered above
+4. **Check printer manual** - For hardware-specific issues
+5. **GitHub issues** - Report bugs or ask for help
