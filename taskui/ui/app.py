@@ -12,7 +12,7 @@ import asyncio
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, Static
+from textual.widgets import Footer, Static
 from textual.binding import Binding
 from textual.events import Key
 
@@ -63,7 +63,6 @@ class TaskUI(App):
         width: 100%;
         height: 1fr;
         background: {BACKGROUND};
-        margin-top: 1;
     }}
 
     #columns-container {{
@@ -126,8 +125,6 @@ class TaskUI(App):
         Yields:
             Widgets that make up the application
         """
-        yield Header()
-
         # List bar for switching between task lists
         yield ListBar(lists=self._lists, active_list_id=self._current_list_id)
 
