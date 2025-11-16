@@ -48,6 +48,7 @@ class TaskItem(Widget):
         height: 1;
         width: 100%;
         background: transparent;
+        opacity: 0;
     }}
 
     TaskItem:hover {{
@@ -95,6 +96,10 @@ class TaskItem(Widget):
 
         # Set level-specific CSS class
         self.add_class(f"level-{task.level}")
+
+    def on_mount(self) -> None:
+        """Fade in the task item when mounted."""
+        self.styles.animate("opacity", value=1.0, duration=0.3, easing="out_cubic")
 
     @property
     def task(self) -> Task:
