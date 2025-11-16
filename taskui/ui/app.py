@@ -8,12 +8,10 @@ This module contains the main TaskUI application with three-column layout:
 
 from typing import Optional, Any, List
 from uuid import UUID
-import asyncio
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Footer, Static
-from textual.binding import Binding
+from textual.containers import Container, Horizontal
+from textual.widgets import Footer
 from textual.events import Key
 
 from taskui.database import DatabaseManager, get_database_manager
@@ -157,7 +155,12 @@ class TaskUI(App):
 
     def action_help(self) -> None:
         """Show help information."""
-        self.push_screen("help")
+        # Show notification with basic help info (full help screen not yet implemented)
+        self.notify(
+            "Keybindings shown in footer. N=New Task, C=Child, E=Edit, Space=Complete, A=Archive, V=View Archives",
+            severity="information",
+            timeout=5
+        )
 
     def on_key(self, event: Key) -> None:
         """Handle key events to manage tab navigation in main app vs modals.
@@ -252,37 +255,6 @@ class TaskUI(App):
             # Create a fallback UUID for graceful degradation
             from uuid import uuid4
             self._current_list_id = uuid4()
-
-    async def _restore_app_state(self) -> None:
-        """Restore the application state from the database.
-
-        Loads tasks for the current list into Column 1, ensuring the app
-        shows previous state on restart (supporting no data loss requirement).
-        """
-        if not self._db_manager or not self._current_list_id:
-            return
-
-        try:
-            # Get Column 1
-            column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-
-            # Load tasks from database (with 2 levels of hierarchy)
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                tasks = await self._get_tasks_with_children(
-                    task_service,
-                    self._current_list_id,
-                    include_archived=False
-                )
-
-            # Set tasks in Column 1
-            logger.debug(f"_restore_app_state: Loading {len(tasks)} tasks into Column 1")
-            column1.set_tasks(tasks)
-            logger.debug("_restore_app_state: set_tasks completed")
-
-        except Exception as e:
-            # Log error but don't crash the app
-            logger.error("Error restoring app state", exc_info=True)
 
     async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID, include_archived: bool = False) -> List[Task]:
         """Get top-level tasks and their children for a list (2 levels).
@@ -909,7 +881,7 @@ class TaskUI(App):
     def action_delete_task(self) -> None:
         """Delete the selected task (Delete/Backspace key)."""
         # TODO: Implement in Story 2.5
-        pass
+        self.notify("Delete not yet implemented", severity="warning", timeout=3)
 
     def action_switch_list_1(self) -> None:
         """Switch to list 1 (1 key)."""
@@ -982,7 +954,8 @@ class TaskUI(App):
 
     def action_cancel(self) -> None:
         """Cancel current operation (Escape key)."""
-        # TODO: Implement when modals are added
+        # Note: Textual handles Escape key for modal dismissal automatically.
+        # This action is reserved for future custom cancel behaviors if needed.
         pass
 
     # Message handlers
@@ -991,7 +964,7 @@ class TaskUI(App):
         """Handle task selection in columns to update Column 2 and Column 3.
 
         When a task is selected in Column 1, Column 2 updates to show
-        the children of that task wiTh context-relative levels.
+        the children of that task with context-relative levels.
         Column 3 is always updated to show details of the selected task.
 
         Args:
