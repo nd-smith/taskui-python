@@ -384,7 +384,7 @@ Integrate logging into database and service modules with comprehensive error tra
 - Run app and verify service logs appear in `taskui.log`
 
 
-### - [ ] 1.1.3 UI & Component Logging ⚡ [DEPENDS ON: 1.1.1]
+### - [x] 1.1.3 UI & Component Logging ⚡ [DEPENDS ON: 1.1.1]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 1.1.1
 
 Integrate logging into UI application and components with event tracking.
@@ -414,7 +414,7 @@ Integrate logging into UI application and components with event tracking.
 - TUI display unaffected by logging
 
 
-### - [ ] 1.1.4 Textual Devtools Integration & Testing 🧪 [DEPENDS ON: 1.1.1]
+### - [x] 1.1.4 Textual Devtools Integration & Testing 🧪 [DEPENDS ON: 1.1.1]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 1.1.1
 
 Add Textual devtools handler for development and create comprehensive tests.
