@@ -9,11 +9,10 @@ This document breaks down the TaskUI project into discrete, manageable tasks opt
 - Clear inputs/outputs and success criteria
 - MVP functionality first, enhancements later
 
----
 
 ## PHASE 1: MVP CORE (Project Foundation & Basic Functionality)
 
-### 1.1 Project Setup and Structure ⚡ [STANDALONE]
+### - [x] 1.1 Project Setup and Structure ⚡ [STANDALONE]
 **Size:** Small | **Time:** 15 mins | **Dependencies:** None
 
 Create the initial project structure with all directories, configuration files, and dependency management.
@@ -33,7 +32,7 @@ Create the initial project structure with all directories, configuration files, 
 
 ---
 
-### 1.2 Data Models ⚡ [STANDALONE]
+### - [x] 1.2 Data Models ⚡ [STANDALONE]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 1.1
 
 Create Pydantic models for Task and TaskList with all fields, validation, and computed properties.
@@ -50,7 +49,7 @@ Create Pydantic models for Task and TaskList with all fields, validation, and co
 
 ---
 
-### 1.3 Database Layer ⚡ [STANDALONE] 
+### - [x] 1.3 Database Layer ⚡ [STANDALONE]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.2
 
 Implement SQLite database setup with SQLAlchemy/aiosqlite, including schema creation and connection management.
@@ -69,7 +68,7 @@ Implement SQLite database setup with SQLAlchemy/aiosqlite, including schema crea
 
 ---
 
-### 1.4 Basic Textual App Shell 🔄 [BLOCKS: UI Tasks]
+### - [x] 1.4 Basic Textual App Shell 🔄 [BLOCKS: UI Tasks]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.1
 
 Create the main Textual application with three-column layout and One Monokai theme.
@@ -88,7 +87,7 @@ Create the main Textual application with three-column layout and One Monokai the
 
 ---
 
-### 1.5 Task Display Components ⚡ [DEPENDS ON: 1.4]
+### - [x] 1.5 Task Display Components ⚡ [DEPENDS ON: 1.4]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.4
 
 Create TaskItem widget and Column components for displaying tasks with proper nesting visualization.
@@ -106,7 +105,7 @@ Create TaskItem widget and Column components for displaying tasks with proper ne
 
 ---
 
-### 1.6 Nesting Rules Engine ⚡ [STANDALONE]
+### - [x] 1.6 Nesting Rules Engine ⚡ [STANDALONE]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 1.2
 
 Implement the core nesting logic that enforces Column 1 (max 2 levels) and Column 2 (max 3 levels) rules.
@@ -123,7 +122,7 @@ Implement the core nesting logic that enforces Column 1 (max 2 levels) and Colum
 
 ---
 
-### 1.7 Task Service - Create & Read ⚡ [DEPENDS ON: 1.3, 1.6]
+### - [x] 1.7 Task Service - Create & Read ⚡ [DEPENDS ON: 1.3, 1.6]
 **Size:** Large | **Time:** 45 mins | **Dependencies:** 1.3, 1.6
 
 Implement task creation and reading operations with database persistence and nesting validation.
@@ -147,7 +146,7 @@ Implement task creation and reading operations with database persistence and nes
 
 ---
 
-### 1.8 Keyboard Navigation ⚡ [DEPENDS ON: 1.5]
+### - [x] 1.8 Keyboard Navigation ⚡ [DEPENDS ON: 1.5]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.5
 
 Implement keyboard navigation within and between columns (arrows, tab, shift+tab).
@@ -164,7 +163,7 @@ Implement keyboard navigation within and between columns (arrows, tab, shift+tab
 
 ---
 
-### 1.9 Task Creation Modal ⚡ [DEPENDS ON: 1.5, 1.7]
+### - [x] 1.9 Task Creation Modal ⚡ [DEPENDS ON: 1.5, 1.7]
 **Size:** Medium | **Time:** 35 mins | **Dependencies:** 1.5, 1.7
 
 Create modal dialog for task creation with title and notes fields.
@@ -190,7 +189,7 @@ Create modal dialog for task creation with title and notes fields.
 
 ---
 
-### 1.10 Column 2 Dynamic Updates ⚡ [DEPENDS ON: 1.7, 1.8]
+### - [x] 1.10 Column 2 Dynamic Updates ⚡ [DEPENDS ON: 1.7, 1.8]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.7, 1.8
 
 Implement Column 2 to show children of Column 1 selection with dynamic header.
@@ -207,7 +206,7 @@ Implement Column 2 to show children of Column 1 selection with dynamic header.
 
 ---
 
-### 1.11 Task Service - Update & Delete ⚡ [DEPENDS ON: 1.7]
+### - [x] 1.11 Task Service - Update & Delete ⚡ [DEPENDS ON: 1.7]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** 1.7
 
 Complete CRUD operations with update and delete functionality.
@@ -229,7 +228,7 @@ Complete CRUD operations with update and delete functionality.
 
 ---
 
-### 1.12 Task Editing ⚡ [DEPENDS ON: 1.9, 1.11]
+### - [x] 1.12 Task Editing ⚡ [DEPENDS ON: 1.9, 1.11]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 1.9, 1.11
 
 Add edit functionality to existing tasks (press 'E' to edit selected task).
@@ -247,7 +246,7 @@ Add edit functionality to existing tasks (press 'E' to edit selected task).
 
 ---
 
-### 1.13 Column 3 Detail View ⚡ [DEPENDS ON: 1.8]
+### - [x] 1.13 Column 3 Detail View ⚡ [DEPENDS ON: 1.8]
 **Size:** Medium | **Time:** 25 mins | **Dependencies:** 1.8
 
 Implement Column 3 to show detailed task information and metadata.
@@ -265,7 +264,7 @@ Implement Column 3 to show detailed task information and metadata.
 
 ---
 
-### 1.14 List Management ⚡ [DEPENDS ON: 1.3]
+### - [x] 1.14 List Management ⚡ [DEPENDS ON: 1.3]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 1.3
 
 Create default lists (Work, Home, Personal) and list bar display.
@@ -283,7 +282,7 @@ Create default lists (Work, Home, Personal) and list bar display.
 
 ---
 
-### 1.15 Data Persistence & Auto-save ⚡ [DEPENDS ON: 1.7, 1.11]
+### - [x] 1.15 Data Persistence & Auto-save ⚡ [DEPENDS ON: 1.7, 1.11]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 1.7, 1.11
 
 Implement automatic saving and session persistence.
@@ -301,7 +300,7 @@ Implement automatic saving and session persistence.
 
 ---
 
-### 1.16 MVP Integration & Testing 🏁 [DEPENDS ON: ALL MVP]
+### - [x] 1.16 MVP Integration & Testing 🏁 [DEPENDS ON: ALL MVP]
 **Size:** Large | **Time:** 45 mins | **Dependencies:** All MVP tasks
 
 Integration testing and bug fixes for complete MVP functionality.
@@ -325,11 +324,137 @@ Integration testing and bug fixes for complete MVP functionality.
 - Data persists across restarts
 - No critical bugs
 
----
+
+## PHASE 1.1: LOGGING INFRASTRUCTURE & IMPLEMENTATION
+
+### - [x] 1.1.1 Core Logging Infrastructure ⚡ [STANDALONE]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** None
+
+Create centralized file-based logging configuration module with rotating log files.
+
+**Files to create:**
+- `taskui/logging_config.py` (logging setup and configuration)
+ 
+**Implementation:**
+- `LOG_DIR`, `LOG_FILE` constants (`~/.taskui/logs/taskui.log`)
+- `setup_logging()` function with RotatingFileHandler
+  - 10MB max file size
+  - 5 backup files
+  - Structured format: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
+- `get_logger(name)` helper function
+- Environment variable support (`TASKUI_LOG_LEVEL`)
+
+**Files to update:**
+- `taskui/__main__.py` - Call `setup_logging()` on startup
+
+**Success Criteria:**
+- Log directory created automatically at `~/.taskui/logs/`
+- Log file created on first log message
+- Log format includes timestamp, module, level, message
+- Environment variable `TASKUI_LOG_LEVEL` controls verbosity
+- Basic smoke test: import and call `setup_logging()`
+
+
+### - [x] 1.1.2 Database & Service Layer Logging ⚡ [DEPENDS ON: 1.1.1]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.1.1
+
+Integrate logging into database and service modules with comprehensive error tracking.
+
+**Files to update:**
+- `taskui/database.py`
+  - Add logger instance: `logger = get_logger(__name__)`
+  - Log database initialization, connection events
+  - Log errors with `exc_info=True`
+
+- `taskui/services/task_service.py`
+  - Add logger instance
+  - INFO: Task CRUD operations (created, updated, deleted)
+  - DEBUG: Task state changes, validation
+  - ERROR: Database errors, constraint violations
+
+- `taskui/services/list_service.py`
+  - Add logger instance
+  - INFO: List operations
+  - ERROR: List-related errors
+
+**Success Criteria:**
+- Logger instances added to all service modules
+- CRUD operations logged at INFO level
+- All exceptions logged with tracebacks
+- Run app and verify service logs appear in `taskui.log`
+
+
+### - [ ] 1.1.3 UI & Component Logging ⚡ [DEPENDS ON: 1.1.1]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.1.1
+
+Integrate logging into UI application and components with event tracking.
+
+**Files to update:**
+- `taskui/ui/app.py`
+  - Add logger instance: `logger = get_logger(__name__)`
+  - INFO: App lifecycle (mount, exit)
+  - DEBUG: Key press events, focus changes, column switches
+  - ERROR: UI-related errors
+
+- `taskui/ui/components/*.py` (TaskItem, Column, Modal, etc.)
+  - Add logger instances to key components
+  - DEBUG: Component state changes, interactions
+  - ERROR: Component errors
+
+**Cleanup Tasks:**
+- Search codebase for `print()` statements
+- Replace with appropriate logger calls
+- Verify no stdout/stderr writes remain
+
+**Success Criteria:**
+- Logger instances added to app and components
+- App lifecycle events logged
+- Key interactions logged at DEBUG level
+- No print statements remain in codebase
+- TUI display unaffected by logging
+
+
+### - [ ] 1.1.4 Textual Devtools Integration & Testing 🧪 [DEPENDS ON: 1.1.1]
+**Size:** Small | **Time:** 20 mins | **Dependencies:** 1.1.1
+
+Add Textual devtools handler for development and create comprehensive tests.
+
+**Files to update:**
+- `taskui/logging_config.py`
+  - Add `use_textual_handler` parameter to `setup_logging()`
+  - Import and configure `TextualHandler` when enabled
+  - Graceful fallback if TextualHandler unavailable
+
+- `taskui/__main__.py`
+  - Detect dev mode (`--dev` flag or `TEXTUAL_DEVTOOLS` env var)
+  - Pass `use_textual_handler=is_dev_mode` to `setup_logging()`
+
+**Files to create:**
+- `tests/test_logging_config.py`
+  - Test log directory creation
+  - Test log file creation and writing
+  - Test per-module logger naming
+  - Test log rotation (mock large file writes)
+  - Test environment variable log level control
+
+**Manual Testing:**
+- Run with `TASKUI_LOG_LEVEL=DEBUG python -m taskui`
+- Verify logs capture all events
+- Test log rotation by generating large logs
+- Run with `textual run --dev taskui/__main__.py`
+- Verify logs appear in devtools console
+
+**Success Criteria:**
+- TextualHandler integrates in dev mode
+- All tests pass
+- Log rotation verified (5 backup files created)
+- Manual testing confirms DEBUG logs capture detailed events
+- Documentation: Add logging usage to README
+
 
 ## PHASE 2: ENHANCED FEATURES
 
-### 2.1 Task Completion Toggle ⚡ [DEPENDS ON: MVP]
+### - [ ] 2.1 Task Completion Toggle ⚡ [DEPENDS ON: MVP]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** MVP
 
 Implement Space key to toggle task completion with visual feedback.
@@ -347,7 +472,7 @@ Implement Space key to toggle task completion with visual feedback.
 
 ---
 
-### 2.2 Progress Indicators ⚡ [DEPENDS ON: 2.1]
+### - [ ] 2.2 Progress Indicators ⚡ [DEPENDS ON: 2.1]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** 2.1
 
 Show parent task progress based on child completion.
@@ -365,7 +490,7 @@ Show parent task progress based on child completion.
 
 ---
 
-### 2.3 Archive Functionality ⚡ [DEPENDS ON: 2.1]
+### - [ ] 2.3 Archive Functionality ⚡ [DEPENDS ON: 2.1]
 **Size:** Medium | **Time:** 25 mins | **Dependencies:** 2.1
 
 Implement 'A' key to archive completed tasks.
@@ -383,7 +508,7 @@ Implement 'A' key to archive completed tasks.
 
 ---
 
-### 2.4 List Switching ⚡ [DEPENDS ON: 1.14]
+### - [ ] 2.4 List Switching ⚡ [DEPENDS ON: 1.14]
 **Size:** Medium | **Time:** 25 mins | **Dependencies:** 1.14
 
 Implement number keys (1-3) to switch between lists.
@@ -402,7 +527,7 @@ Implement number keys (1-3) to switch between lists.
 
 ---
 
-### 2.5 Delete Key Support ⚡ [DEPENDS ON: 1.11]
+### - [ ] 2.5 Delete Key Support ⚡ [DEPENDS ON: 1.11]
 **Size:** Small | **Time:** 15 mins | **Dependencies:** 1.11
 
 Add Delete/Backspace key to delete selected task.
@@ -422,7 +547,7 @@ Add Delete/Backspace key to delete selected task.
 
 ## PHASE 3: POLISH & OPTIMIZATION
 
-### 3.1 Error Handling & Recovery ⚡ [STANDALONE]
+### - [ ] 3.1 Error Handling & Recovery ⚡ [STANDALONE]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** MVP
 
 Comprehensive error handling throughout the application.
@@ -440,7 +565,7 @@ Comprehensive error handling throughout the application.
 
 ---
 
-### 3.2 JSON Backup System ⚡ [DEPENDS ON: MVP]
+### - [ ] 3.2 JSON Backup System ⚡ [DEPENDS ON: MVP]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** MVP
 
 Import/export functionality for JSON backups.
@@ -458,7 +583,7 @@ Import/export functionality for JSON backups.
 
 ---
 
-### 3.3 Performance Optimization ⚡ [DEPENDS ON: MVP]
+### - [ ] 3.3 Performance Optimization ⚡ [DEPENDS ON: MVP]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** MVP
 
 Optimize database queries and UI rendering.
@@ -477,7 +602,7 @@ Optimize database queries and UI rendering.
 
 ---
 
-### 3.4 Configuration System ⚡ [STANDALONE]
+### - [ ] 3.4 Configuration System ⚡ [STANDALONE]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** None
 
 Implement settings management with .env support.
@@ -495,7 +620,7 @@ Implement settings management with .env support.
 
 ---
 
-### 3.5 Comprehensive Testing Suite 🧪 [DEPENDS ON: MVP]
+### - [ ] 3.5 Comprehensive Testing Suite 🧪 [DEPENDS ON: MVP]
 **Size:** Large | **Time:** 45 mins | **Dependencies:** MVP
 
 Complete test coverage for all components.
@@ -516,7 +641,7 @@ Complete test coverage for all components.
 
 ## PHASE 4: ADVANCED FEATURES
 
-### 4.1 Network Printer Support ⚡ [DEPENDS ON: MVP]
+### - [ ] 4.1 Network Printer Support ⚡ [DEPENDS ON: MVP]
 **Size:** Large | **Time:** 40 mins | **Dependencies:** MVP
 
 Implement thermal printer integration via Raspberry Pi.
@@ -535,7 +660,7 @@ Implement thermal printer integration via Raspberry Pi.
 
 ---
 
-### 4.2 PyInstaller Build ⚡ [DEPENDS ON: All]
+### - [ ] 4.2 PyInstaller Build ⚡ [DEPENDS ON: All]
 **Size:** Medium | **Time:** 30 mins | **Dependencies:** All features
 
 Create standalone executable distribution.
@@ -553,7 +678,7 @@ Create standalone executable distribution.
 
 ---
 
-### 4.3 CLI Enhancements ⚡ [DEPENDS ON: MVP]
+### - [ ] 4.3 CLI Enhancements ⚡ [DEPENDS ON: MVP]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** MVP
 
 Add command-line arguments and operations.
@@ -571,7 +696,7 @@ Add command-line arguments and operations.
 
 ---
 
-### 4.4 Help System ⚡ [DEPENDS ON: MVP]
+### - [ ] 4.4 Help System ⚡ [DEPENDS ON: MVP]
 **Size:** Small | **Time:** 20 mins | **Dependencies:** MVP
 
 Add in-app help panel (press '?').
