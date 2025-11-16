@@ -695,6 +695,10 @@ class TaskUI(App):
 
             # If toggling in Column 2, also refresh Column 1 to update parent's progress indicator
             if column.column_id == COLUMN_2_ID:
+                logger.debug(
+                    f"Progress display refresh: Updating Column 1 to show parent progress "
+                    f"after child task {selected_task.id} completion toggle"
+                )
                 column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
                 await self._refresh_column_tasks(column1)
 

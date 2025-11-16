@@ -436,19 +436,31 @@ class TaskService:
         Returns:
             Tuple of (total_children, completed_children)
         """
-        # Get all direct children (not archived)
-        query = select(TaskORM).where(
-            TaskORM.parent_id == str(parent_id),
-            TaskORM.is_archived == False,
-        )
+        try:
+            # Get all direct children (not archived)
+            query = select(TaskORM).where(
+                TaskORM.parent_id == str(parent_id),
+                TaskORM.is_archived == False,
+            )
 
-        result = await self.session.execute(query)
-        children = result.scalars().all()
+            result = await self.session.execute(query)
+            children = result.scalars().all()
 
-        total_count = len(children)
-        completed_count = sum(1 for child in children if child.is_completed)
+            total_count = len(children)
+            completed_count = sum(1 for child in children if child.is_completed)
 
-        return total_count, completed_count
+            logger.debug(
+                f"Progress calculation updated: task_id={parent_id}, "
+                f"completed_count={completed_count}, total_count={total_count}"
+            )
+
+            return total_count, completed_count
+        except Exception as e:
+            logger.error(
+                f"Progress calculation error for task_id={parent_id}",
+                exc_info=True
+            )
+            raise
 
     async def get_task_by_id(self, task_id: UUID) -> Optional[Task]:
         """
