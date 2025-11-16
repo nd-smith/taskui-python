@@ -13,7 +13,10 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from taskui.database import TaskListORM, TaskORM
+from taskui.logging_config import get_logger
 from taskui.models import TaskList
+
+logger = get_logger(__name__)
 
 
 class ListService:
@@ -54,39 +57,50 @@ class ListService:
         Raises:
             ValueError: If a list with the same name already exists
         """
-        # Check if list with same name exists
-        existing = await self.get_list_by_name(name)
-        if existing:
-            raise ValueError(f"List with name '{name}' already exists")
+        try:
+            logger.debug(f"Creating list: name='{name}', list_id={list_id}")
 
-        # Create list
-        if list_id is None:
-            list_id = uuid4()
+            # Check if list with same name exists
+            existing = await self.get_list_by_name(name)
+            if existing:
+                logger.warning(f"List creation failed - name already exists: '{name}'")
+                raise ValueError(f"List with name '{name}' already exists")
 
-        created_at = datetime.utcnow()
+            # Create list
+            if list_id is None:
+                list_id = uuid4()
 
-        list_orm = TaskListORM(
-            id=str(list_id),
-            name=name,
-            created_at=created_at
-        )
+            created_at = datetime.utcnow()
 
-        self.session.add(list_orm)
-        await self.session.flush()  # Ensure ID is available
+            list_orm = TaskListORM(
+                id=str(list_id),
+                name=name,
+                created_at=created_at
+            )
 
-        # Convert to Pydantic model
-        task_list = TaskList(
-            id=list_id,
-            name=name,
-            created_at=created_at
-        )
+            self.session.add(list_orm)
+            await self.session.flush()  # Ensure ID is available
 
-        # Update counts
-        task_count = await self._get_task_count(list_id)
-        completed_count = await self._get_completed_count(list_id)
-        task_list.update_counts(task_count, completed_count)
+            # Convert to Pydantic model
+            task_list = TaskList(
+                id=list_id,
+                name=name,
+                created_at=created_at
+            )
 
-        return task_list
+            # Update counts
+            task_count = await self._get_task_count(list_id)
+            completed_count = await self._get_completed_count(list_id)
+            task_list.update_counts(task_count, completed_count)
+
+            logger.info(f"Created list: id={list_id}, name='{name}'")
+            return task_list
+        except ValueError:
+            # Already logged, just re-raise
+            raise
+        except Exception as e:
+            logger.error(f"Failed to create list: {e}", exc_info=True)
+            raise
 
     async def get_all_lists(self) -> List[TaskList]:
         """
@@ -193,37 +207,50 @@ class ListService:
         Raises:
             ValueError: If a different list with the same name already exists
         """
-        # Check if list exists
-        result = await self.session.execute(
-            select(TaskListORM).where(TaskListORM.id == str(list_id))
-        )
-        list_orm = result.scalar_one_or_none()
+        try:
+            logger.debug(f"Updating list {list_id}: name='{name}'")
 
-        if not list_orm:
-            return None
+            # Check if list exists
+            result = await self.session.execute(
+                select(TaskListORM).where(TaskListORM.id == str(list_id))
+            )
+            list_orm = result.scalar_one_or_none()
 
-        # Check if another list with same name exists
-        existing = await self.get_list_by_name(name)
-        if existing and existing.id != list_id:
-            raise ValueError(f"List with name '{name}' already exists")
+            if not list_orm:
+                logger.warning(f"Update failed - list not found: {list_id}")
+                return None
 
-        # Update name
-        list_orm.name = name
-        await self.session.flush()
+            # Check if another list with same name exists
+            existing = await self.get_list_by_name(name)
+            if existing and existing.id != list_id:
+                logger.warning(f"Update failed - name already exists: '{name}'")
+                raise ValueError(f"List with name '{name}' already exists")
 
-        # Return updated model
-        task_list = TaskList(
-            id=list_id,
-            name=name,
-            created_at=list_orm.created_at
-        )
+            # Update name
+            old_name = list_orm.name
+            list_orm.name = name
+            await self.session.flush()
 
-        # Update counts
-        task_count = await self._get_task_count(list_id)
-        completed_count = await self._get_completed_count(list_id)
-        task_list.update_counts(task_count, completed_count)
+            # Return updated model
+            task_list = TaskList(
+                id=list_id,
+                name=name,
+                created_at=list_orm.created_at
+            )
 
-        return task_list
+            # Update counts
+            task_count = await self._get_task_count(list_id)
+            completed_count = await self._get_completed_count(list_id)
+            task_list.update_counts(task_count, completed_count)
+
+            logger.info(f"Updated list: id={list_id}, '{old_name}' → '{name}'")
+            return task_list
+        except ValueError:
+            # Already logged, just re-raise
+            raise
+        except Exception as e:
+            logger.error(f"Failed to update list {list_id}: {e}", exc_info=True)
+            raise
 
     async def delete_list(self, list_id: UUID) -> bool:
         """
@@ -235,18 +262,27 @@ class ListService:
         Returns:
             True if list was deleted, False if not found
         """
-        result = await self.session.execute(
-            select(TaskListORM).where(TaskListORM.id == str(list_id))
-        )
-        list_orm = result.scalar_one_or_none()
+        try:
+            logger.debug(f"Deleting list {list_id}")
 
-        if not list_orm:
-            return False
+            result = await self.session.execute(
+                select(TaskListORM).where(TaskListORM.id == str(list_id))
+            )
+            list_orm = result.scalar_one_or_none()
 
-        await self.session.delete(list_orm)
-        await self.session.flush()
+            if not list_orm:
+                logger.warning(f"Delete failed - list not found: {list_id}")
+                return False
 
-        return True
+            list_name = list_orm.name
+            await self.session.delete(list_orm)
+            await self.session.flush()
+
+            logger.info(f"Deleted list: id={list_id}, name='{list_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete list {list_id}: {e}", exc_info=True)
+            raise
 
     async def ensure_default_lists(self) -> List[TaskList]:
         """
@@ -257,24 +293,37 @@ class ListService:
         Returns:
             List of all task lists after ensuring defaults exist
         """
-        # Check which default lists exist by name
-        existing_lists_by_name = {}
-        all_lists = await self.get_all_lists()
-        for task_list in all_lists:
-            existing_lists_by_name[task_list.name] = task_list
+        try:
+            logger.debug("Ensuring default lists exist")
 
-        # Create missing default lists
-        for default_list in self.DEFAULT_LISTS:
-            if default_list["name"] not in existing_lists_by_name:
-                task_list = await self.create_list(
-                    name=default_list["name"],
-                    list_id=UUID(default_list["id"])
-                )
+            # Check which default lists exist by name
+            existing_lists_by_name = {}
+            all_lists = await self.get_all_lists()
+            for task_list in all_lists:
+                existing_lists_by_name[task_list.name] = task_list
 
-        await self.session.commit()
+            # Create missing default lists
+            created_lists = []
+            for default_list in self.DEFAULT_LISTS:
+                if default_list["name"] not in existing_lists_by_name:
+                    task_list = await self.create_list(
+                        name=default_list["name"],
+                        list_id=UUID(default_list["id"])
+                    )
+                    created_lists.append(default_list["name"])
 
-        # Return all lists (existing + newly created)
-        return await self.get_all_lists()
+            await self.session.commit()
+
+            if created_lists:
+                logger.info(f"Created default lists: {created_lists}")
+            else:
+                logger.debug("All default lists already exist")
+
+            # Return all lists (existing + newly created)
+            return await self.get_all_lists()
+        except Exception as e:
+            logger.error(f"Failed to ensure default lists: {e}", exc_info=True)
+            raise
 
     async def _get_task_count(self, list_id: UUID) -> int:
         """

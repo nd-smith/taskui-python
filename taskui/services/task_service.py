@@ -14,8 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from taskui.database import TaskORM, TaskListORM
+from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
 from taskui.services.nesting_rules import Column, NestingRules
+
+logger = get_logger(__name__)
 
 
 class TaskServiceError(Exception):
@@ -191,28 +194,38 @@ class TaskService:
         Raises:
             TaskListNotFoundError: If list does not exist
         """
-        # Verify list exists
-        await self._verify_list_exists(list_id)
+        try:
+            logger.debug(f"Creating top-level task: title='{title}', list_id={list_id}")
 
-        # Get next position
-        position = await self._get_next_position(list_id, parent_id=None)
+            # Verify list exists
+            await self._verify_list_exists(list_id)
 
-        # Create task
-        task = Task(
-            title=title,
-            notes=notes,
-            list_id=list_id,
-            level=0,
-            position=position,
-            parent_id=None,
-        )
+            # Get next position
+            position = await self._get_next_position(list_id, parent_id=None)
 
-        # Convert to ORM and save
-        task_orm = self._pydantic_to_orm(task)
-        self.session.add(task_orm)
-        await self.session.flush()  # Flush to get the ID
+            # Create task
+            task = Task(
+                title=title,
+                notes=notes,
+                list_id=list_id,
+                level=0,
+                position=position,
+                parent_id=None,
+            )
 
-        return task
+            # Convert to ORM and save
+            task_orm = self._pydantic_to_orm(task)
+            self.session.add(task_orm)
+            await self.session.flush()  # Flush to get the ID
+
+            logger.info(f"Created task: id={task.id}, title='{title}', level=0")
+            return task
+        except TaskListNotFoundError as e:
+            logger.error(f"Failed to create task - list not found: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            logger.error(f"Failed to create task: {e}", exc_info=True)
+            raise
 
     async def create_child_task(
         self,
@@ -237,45 +250,57 @@ class TaskService:
             TaskNotFoundError: If parent task does not exist
             NestingLimitError: If nesting limit is exceeded
         """
-        # Get parent task
-        parent_orm = await self._get_task_or_raise(parent_id)
-        parent_task = self._orm_to_pydantic(parent_orm)
+        try:
+            logger.debug(f"Creating child task: title='{title}', parent_id={parent_id}, column={column}")
 
-        # Validate nesting rules
-        if not NestingRules.can_create_child(parent_task, column):
-            max_depth = NestingRules.get_max_depth(column)
-            raise NestingLimitError(
-                f"Cannot create child task. Parent task at level {parent_task.level} "
-                f"has reached maximum nesting depth ({max_depth}) for {column.value}."
+            # Get parent task
+            parent_orm = await self._get_task_or_raise(parent_id)
+            parent_task = self._orm_to_pydantic(parent_orm)
+
+            # Validate nesting rules
+            if not NestingRules.can_create_child(parent_task, column):
+                max_depth = NestingRules.get_max_depth(column)
+                logger.warning(f"Nesting limit reached: parent_level={parent_task.level}, max_depth={max_depth}, column={column}")
+                raise NestingLimitError(
+                    f"Cannot create child task. Parent task at level {parent_task.level} "
+                    f"has reached maximum nesting depth ({max_depth}) for {column.value}."
+                )
+
+            # Get the allowed child level
+            child_level = NestingRules.get_allowed_child_level(parent_task, column)
+            if child_level is None:
+                logger.error(f"Cannot determine child level: parent_level={parent_task.level}, column={column}")
+                raise NestingLimitError(
+                    f"Cannot determine child level for parent at level {parent_task.level} "
+                    f"in {column.value}."
+                )
+
+            # Get next position among siblings
+            position = await self._get_next_position(parent_task.list_id, parent_id=parent_id)
+
+            # Create child task
+            child_task = Task(
+                title=title,
+                notes=notes,
+                list_id=parent_task.list_id,
+                parent_id=parent_id,
+                level=child_level,
+                position=position,
             )
 
-        # Get the allowed child level
-        child_level = NestingRules.get_allowed_child_level(parent_task, column)
-        if child_level is None:
-            raise NestingLimitError(
-                f"Cannot determine child level for parent at level {parent_task.level} "
-                f"in {column.value}."
-            )
+            # Convert to ORM and save
+            task_orm = self._pydantic_to_orm(child_task)
+            self.session.add(task_orm)
+            await self.session.flush()
 
-        # Get next position among siblings
-        position = await self._get_next_position(parent_task.list_id, parent_id=parent_id)
-
-        # Create child task
-        child_task = Task(
-            title=title,
-            notes=notes,
-            list_id=parent_task.list_id,
-            parent_id=parent_id,
-            level=child_level,
-            position=position,
-        )
-
-        # Convert to ORM and save
-        task_orm = self._pydantic_to_orm(child_task)
-        self.session.add(task_orm)
-        await self.session.flush()
-
-        return child_task
+            logger.info(f"Created child task: id={child_task.id}, title='{title}', level={child_level}, parent_id={parent_id}")
+            return child_task
+        except (TaskNotFoundError, NestingLimitError):
+            # These are already logged above, just re-raise
+            raise
+        except Exception as e:
+            logger.error(f"Failed to create child task: {e}", exc_info=True)
+            raise
 
     async def get_tasks_for_list(self, list_id: UUID, include_archived: bool = False) -> List[Task]:
         """
@@ -475,26 +500,36 @@ class TaskService:
         if title is None and notes is None:
             raise ValueError("At least one of title or notes must be provided")
 
-        # Get existing task
-        task_orm = await self._get_task_or_raise(task_id)
+        try:
+            logger.debug(f"Updating task {task_id}: title={title}, notes={'<provided>' if notes else None}")
 
-        # Update fields
-        if title is not None:
-            task_orm.title = title
-        if notes is not None:
-            task_orm.notes = notes
+            # Get existing task
+            task_orm = await self._get_task_or_raise(task_id)
 
-        # Flush changes to database
-        await self.session.flush()
+            # Update fields
+            if title is not None:
+                task_orm.title = title
+            if notes is not None:
+                task_orm.notes = notes
 
-        # Convert back to Pydantic model
-        task = self._orm_to_pydantic(task_orm)
+            # Flush changes to database
+            await self.session.flush()
 
-        # Get child counts
-        child_count, completed_child_count = await self._get_child_counts(task.id)
-        task.update_child_counts(child_count, completed_child_count)
+            # Convert back to Pydantic model
+            task = self._orm_to_pydantic(task_orm)
 
-        return task
+            # Get child counts
+            child_count, completed_child_count = await self._get_child_counts(task.id)
+            task.update_child_counts(child_count, completed_child_count)
+
+            logger.info(f"Updated task: id={task_id}, title='{task.title}'")
+            return task
+        except TaskNotFoundError as e:
+            logger.error(f"Failed to update task - not found: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            logger.error(f"Failed to update task {task_id}: {e}", exc_info=True)
+            raise
 
     async def delete_task(self, task_id: UUID) -> None:
         """
@@ -509,23 +544,36 @@ class TaskService:
         Raises:
             TaskNotFoundError: If task does not exist
         """
-        # Get task to delete
-        task_orm = await self._get_task_or_raise(task_id)
+        try:
+            logger.debug(f"Deleting task {task_id} and descendants")
 
-        # Get all descendants for cascade deletion
-        descendants = await self.get_all_descendants(task_id, include_archived=True)
+            # Get task to delete
+            task_orm = await self._get_task_or_raise(task_id)
+            task_title = task_orm.title
 
-        # Delete descendants in reverse hierarchical order (deepest first)
-        # This ensures we don't violate foreign key constraints
-        for descendant in reversed(descendants):
-            descendant_orm = await self._get_task_or_raise(descendant.id)
-            await self.session.delete(descendant_orm)
+            # Get all descendants for cascade deletion
+            descendants = await self.get_all_descendants(task_id, include_archived=True)
+            descendant_count = len(descendants)
 
-        # Delete the task itself
-        await self.session.delete(task_orm)
+            # Delete descendants in reverse hierarchical order (deepest first)
+            # This ensures we don't violate foreign key constraints
+            for descendant in reversed(descendants):
+                descendant_orm = await self._get_task_or_raise(descendant.id)
+                await self.session.delete(descendant_orm)
 
-        # Flush the deletions
-        await self.session.flush()
+            # Delete the task itself
+            await self.session.delete(task_orm)
+
+            # Flush the deletions
+            await self.session.flush()
+
+            logger.info(f"Deleted task: id={task_id}, title='{task_title}', descendants={descendant_count}")
+        except TaskNotFoundError as e:
+            logger.error(f"Failed to delete task - not found: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete task {task_id}: {e}", exc_info=True)
+            raise
 
     async def move_task(
         self,
