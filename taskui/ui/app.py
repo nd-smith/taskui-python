@@ -883,20 +883,26 @@ class TaskUI(App):
     # ACTION HANDLERS - LIST SWITCHING
     # ==============================================================================
 
+    def _switch_to_list(self, list_number: int) -> None:
+        """Switch to specified list number.
+
+        Args:
+            list_number: List number to switch to (1-3)
+        """
+        list_bar = self.query_one(ListBar)
+        list_bar.select_list_by_number(list_number)
+
     def action_switch_list_1(self) -> None:
         """Switch to list 1 (1 key)."""
-        list_bar = self.query_one(ListBar)
-        list_bar.select_list_by_number(1)
+        self._switch_to_list(1)
 
     def action_switch_list_2(self) -> None:
         """Switch to list 2 (2 key)."""
-        list_bar = self.query_one(ListBar)
-        list_bar.select_list_by_number(2)
+        self._switch_to_list(2)
 
     def action_switch_list_3(self) -> None:
         """Switch to list 3 (3 key)."""
-        list_bar = self.query_one(ListBar)
-        list_bar.select_list_by_number(3)
+        self._switch_to_list(3)
 
     async def action_print_column(self) -> None:
         """Print the selected task card to thermal printer (P key).
