@@ -30,6 +30,7 @@ from taskui.ui.theme import (
     LEVEL_1_COLOR,
     LEVEL_2_COLOR,
     MODAL_OVERLAY_BG,
+    ORANGE,
 )
 
 # Initialize logger for this module
@@ -86,10 +87,11 @@ class TaskCreationModal(ModalScreen):
     TaskCreationModal .error-message {{
         width: 100%;
         height: auto;
-        color: {LEVEL_2_COLOR};
+        color: {ORANGE};
         text-align: center;
         margin-bottom: 1;
         padding: 0 1;
+        text-style: bold;
     }}
 
     TaskCreationModal .field-label {{

@@ -33,6 +33,7 @@ from taskui.ui.theme import (
     ARCHIVE_COLOR,
     YELLOW,
     ORANGE,
+    PURPLE,
     get_level_color,
 )
 
@@ -60,7 +61,7 @@ class DetailPanel(Widget):
     }}
 
     DetailPanel:focus {{
-        border: thick {LEVEL_0_COLOR};
+        border: thick {LEVEL_2_COLOR};
     }}
 
     DetailPanel .panel-header {{
@@ -112,7 +113,7 @@ class DetailPanel(Widget):
     }}
 
     DetailPanel .status-incomplete {{
-        color: {COMMENT};
+        color: {YELLOW};
     }}
 
     DetailPanel .status-archived {{
@@ -128,6 +129,12 @@ class DetailPanel(Widget):
     DetailPanel .hierarchy-item {{
         color: {FOREGROUND};
         padding: 0 0 0 2;
+    }}
+
+    DetailPanel .metadata {{
+        color: {PURPLE};
+        padding: 0 0 0 2;
+        text-style: italic;
     }}
 
     DetailPanel .notes-content {{
@@ -239,7 +246,7 @@ class DetailPanel(Widget):
         lines.append("[bold #66D9EF]STATUS[/bold #66D9EF]")
 
         status_text = "Completed" if task.is_completed else "Incomplete"
-        status_color = "#A6E22E" if task.is_completed else "#75715E"
+        status_color = "#A6E22E" if task.is_completed else "#E6DB74"  # YELLOW for incomplete
         lines.append(f"  Completion: [{status_color}]{status_text}[/{status_color}]")
 
         if task.is_archived:
@@ -250,13 +257,13 @@ class DetailPanel(Widget):
 
         # Dates Section
         lines.append("[bold #66D9EF]DATES[/bold #66D9EF]")
-        lines.append(f"  Created: {self._format_datetime(task.created_at)}")
+        lines.append(f"  Created: [#AE81FF]{self._format_datetime(task.created_at)}[/#AE81FF]")
 
         if task.completed_at:
-            lines.append(f"  Completed: {self._format_datetime(task.completed_at)}")
+            lines.append(f"  Completed: [#AE81FF]{self._format_datetime(task.completed_at)}[/#AE81FF]")
 
         if task.archived_at:
-            lines.append(f"  Archived: {self._format_datetime(task.archived_at)}")
+            lines.append(f"  Archived: [#AE81FF]{self._format_datetime(task.archived_at)}[/#AE81FF]")
 
         lines.append("")
 
@@ -278,7 +285,7 @@ class DetailPanel(Widget):
             lines.append(f"  [{parent_color}]{parent.title}[/{parent_color}]")
 
             parent_status = "Complete" if parent.is_completed else "Incomplete"
-            status_color = "#A6E22E" if parent.is_completed else "#75715E"
+            status_color = "#A6E22E" if parent.is_completed else "#E6DB74"  # YELLOW for incomplete
             lines.append(f"  Status: [{status_color}]{parent_status}[/{status_color}]")
             lines.append("")
 
