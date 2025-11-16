@@ -264,9 +264,22 @@ class ArchiveModal(ModalScreen):
         """Called when the modal is mounted."""
         logger.info(f"Archive modal opened with {len(self.all_archived_tasks)} archived tasks")
 
-        # Focus the search input
-        search_input = self.query_one("#search-input", Input)
-        search_input.focus()
+        # Focus the task list if there are tasks, otherwise focus search input
+        if self.all_archived_tasks:
+            try:
+                task_list = self.query_one("#task-list", ListView)
+                task_list.focus()
+                # Select the first task by default
+                if len(self.filtered_tasks) > 0:
+                    self.selected_task = self.filtered_tasks[0]
+            except Exception:
+                # Fallback to search input if list not available
+                search_input = self.query_one("#search-input", Input)
+                search_input.focus()
+        else:
+            # No tasks, focus search input
+            search_input = self.query_one("#search-input", Input)
+            search_input.focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes.
@@ -303,6 +316,9 @@ class ArchiveModal(ModalScreen):
                 id="task-list"
             )
             list_container.mount(list_view)
+            # Focus the new list view and select first task
+            list_view.focus()
+            self.selected_task = self.filtered_tasks[0] if self.filtered_tasks else None
         else:
             empty_msg = Static(
                 "No matching tasks\n\nTry a different search term",
