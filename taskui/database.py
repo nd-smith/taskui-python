@@ -20,6 +20,10 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from taskui.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
@@ -115,30 +119,43 @@ class DatabaseManager:
         Creates the async engine, session maker, and all tables defined
         in the Base metadata.
         """
-        self.engine = create_async_engine(
-            self.database_url,
-            echo=False,  # Set to True for SQL query logging
-            future=True,
-        )
+        try:
+            logger.info(f"Initializing database: {self.database_url}")
+            self.engine = create_async_engine(
+                self.database_url,
+                echo=False,  # Set to True for SQL query logging
+                future=True,
+            )
 
-        self.session_maker = async_sessionmaker(
-            self.engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
+            self.session_maker = async_sessionmaker(
+                self.engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
 
-        # Create all tables
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            # Create all tables
+            async with self.engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}", exc_info=True)
+            raise
 
     async def close(self) -> None:
         """
         Close the database engine and cleanup resources.
         """
         if self.engine:
-            await self.engine.dispose()
-            self.engine = None
-            self.session_maker = None
+            logger.info("Closing database connection")
+            try:
+                await self.engine.dispose()
+                self.engine = None
+                self.session_maker = None
+                logger.info("Database connection closed successfully")
+            except Exception as e:
+                logger.error(f"Error closing database connection: {e}", exc_info=True)
+                raise
 
     @asynccontextmanager
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
@@ -160,7 +177,8 @@ class DatabaseManager:
             try:
                 yield session
                 await session.commit()
-            except Exception:
+            except Exception as e:
+                logger.error(f"Database session error, rolling back: {e}", exc_info=True)
                 await session.rollback()
                 raise
 
