@@ -252,7 +252,7 @@ class TaskUI(App):
 
         Creates default lists if they don't exist.
         """
-        if not self._db_manager:
+        if not self._has_db_manager():
             return
 
         try:
@@ -333,6 +333,26 @@ class TaskUI(App):
             return self.query_one(f"#{self._focused_column_id}", TaskColumn)
         except Exception:
             return None
+
+    # ==============================================================================
+    # PRIVATE HELPERS - TASK OPERATIONS
+    # ==============================================================================
+
+    def _has_db_manager(self) -> bool:
+        """Check if database manager is initialized.
+
+        Returns:
+            True if database manager is available
+        """
+        return self._db_manager is not None
+
+    def _can_perform_task_operation(self) -> bool:
+        """Check if prerequisites for task operations are met.
+
+        Returns:
+            True if database manager and current list are available
+        """
+        return self._db_manager is not None and self._current_list_id is not None
 
     # ==============================================================================
     # ACTION HANDLERS - NAVIGATION
@@ -481,7 +501,7 @@ class TaskUI(App):
             title: New title for the task
             notes: New notes for the task (can be None)
         """
-        if not self._db_manager:
+        if not self._has_db_manager():
             return
 
         try:
@@ -510,7 +530,7 @@ class TaskUI(App):
             parent_task: The currently selected task (sibling reference)
             column: Column context for nesting rules
         """
-        if not self._db_manager or not self._current_list_id:
+        if not self._can_perform_task_operation():
             return
 
         try:
@@ -616,7 +636,7 @@ class TaskUI(App):
         Args:
             list_id: UUID of the list to refresh
         """
-        if not self._db_manager:
+        if not self._has_db_manager():
             return
 
         try:
@@ -738,15 +758,20 @@ class TaskUI(App):
             logger.debug("No task selected for completion toggle")
             return
 
-        if not self._db_manager:
+        if not self._has_db_manager():
             logger.debug("No database manager available for completion toggle")
             return
 
         try:
+            # Single combined session for toggle and fetch
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
+
                 # Toggle the task completion status
                 await task_service.toggle_completion(selected_task.id)
+
+                # Get updated task in same session
+                updated_task = await task_service.get_task_by_id(selected_task.id)
 
             # Determine completion status for notification
             completion_status = "completed" if not selected_task.is_completed else "reopened"
@@ -756,12 +781,9 @@ class TaskUI(App):
             # Refresh UI to show the updated task with strikethrough and updated progress
             await self._refresh_ui_after_task_change()
 
-            # Refresh Column 3 to show updated details
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                updated_task = await task_service.get_task_by_id(selected_task.id)
-                if updated_task:
-                    await self._update_column3_for_selection(updated_task)
+            # Update detail panel with fetched task
+            if updated_task:
+                await self._update_column3_for_selection(updated_task)
 
         except Exception as e:
             logger.error("Error toggling task completion", exc_info=True)
@@ -793,7 +815,7 @@ class TaskUI(App):
             self.notify("Only completed tasks can be archived", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
             return
 
-        if not self._db_manager:
+        if not self._has_db_manager():
             logger.debug("No database manager available for archive")
             return
 
@@ -825,7 +847,7 @@ class TaskUI(App):
         """
         logger.debug("View archives key pressed ('v')")
 
-        if not self._db_manager or not self._current_list_id:
+        if not self._can_perform_task_operation():
             logger.debug("No database manager or current list available for viewing archives")
             return
 
@@ -852,7 +874,7 @@ class TaskUI(App):
         """
         logger.debug(f"Handling restore for task_id={message.task_id}")
 
-        if not self._db_manager:
+        if not self._has_db_manager():
             logger.debug("No database manager available for restore")
             return
 
@@ -932,7 +954,7 @@ class TaskUI(App):
             return
 
         # Get children of the selected task
-        if not self._db_manager:
+        if not self._has_db_manager():
             logger.warning("No database manager available for printing")
             return
 
@@ -1028,7 +1050,7 @@ class TaskUI(App):
         Returns:
             List of tasks from root to current task (including the current task)
         """
-        if not self._db_manager:
+        if not self._has_db_manager():
             return []
 
         try:
@@ -1066,7 +1088,7 @@ class TaskUI(App):
         Returns:
             List of all descendant tasks in hierarchical order
         """
-        if not self._db_manager:
+        if not self._has_db_manager():
             return []
 
         try:
