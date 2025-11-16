@@ -354,6 +354,33 @@ class TaskUI(App):
         """
         return self._db_manager is not None and self._current_list_id is not None
 
+    def _notify_task_success(self, action: str, title: str, icon: str = "✓") -> None:
+        """Show success notification for task operation.
+
+        Args:
+            action: Action performed (e.g., "created", "updated", "archived")
+            title: Task title to display (will be truncated)
+            icon: Icon to display (default: "✓")
+        """
+        truncated = title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]
+        self.notify(
+            f"{icon} Task {action}: {truncated}...",
+            severity="information",
+            timeout=NOTIFICATION_TIMEOUT_SHORT
+        )
+
+    def _notify_task_error(self, action: str) -> None:
+        """Show error notification for task operation.
+
+        Args:
+            action: Action that failed (e.g., "create task", "toggle completion")
+        """
+        self.notify(
+            f"Failed to {action}",
+            severity="error",
+            timeout=NOTIFICATION_TIMEOUT_MEDIUM
+        )
+
     # ==============================================================================
     # ACTION HANDLERS - NAVIGATION
     # ==============================================================================
@@ -509,11 +536,14 @@ class TaskUI(App):
                 task_service = TaskService(session)
                 await task_service.update_task(task_id, title=title, notes=notes)
 
-            self.notify(f"✓ Task updated: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+            # Notify user of successful edit
+            self._notify_task_success("updated", title)
+
+            # Refresh UI to show the updated task
             await self._refresh_ui_after_task_change()
         except Exception as e:
             logger.error("Error updating task", exc_info=True)
-            self.notify("Failed to update task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            self._notify_task_error("update task")
 
     async def _handle_create_sibling_task(
         self,
@@ -560,11 +590,12 @@ class TaskUI(App):
                         notes=notes
                     )
 
-            self.notify(f"✓ Task created: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+            # Notify user of successful creation
+            self._notify_task_success("created", title)
 
         except Exception as e:
             logger.error("Error creating sibling task", exc_info=True)
-            self.notify("Failed to create task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            self._notify_task_error("create task")
 
     async def _handle_create_child_task(
         self,
@@ -595,11 +626,12 @@ class TaskUI(App):
                     notes=notes
                 )
 
-            self.notify(f"✓ Subtask created: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+            # Notify user of successful creation
+            self._notify_task_success("created", title)
 
         except Exception as e:
             logger.error("Error creating child task", exc_info=True)
-            self.notify("Failed to create subtask", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            self._notify_task_error("create subtask")
 
     # ==============================================================================
     # PRIVATE HELPERS - UI UPDATES
@@ -787,7 +819,7 @@ class TaskUI(App):
 
         except Exception as e:
             logger.error("Error toggling task completion", exc_info=True)
-            self.notify("Failed to toggle completion", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            self._notify_task_error("toggle completion")
 
     async def action_archive_task(self) -> None:
         """Archive the selected completed task ('a' key).
@@ -826,7 +858,7 @@ class TaskUI(App):
                 await task_service.archive_task(selected_task.id)
 
             # Notify user of successful archive
-            self.notify(f"📦 Task archived: {selected_task.title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+            self._notify_task_success("archived", selected_task.title, icon="📦")
 
             # Refresh UI to remove archived task and clear detail panel
             await self._refresh_ui_after_task_change(clear_detail_panel=True)
@@ -834,10 +866,10 @@ class TaskUI(App):
         except ValueError as e:
             # Task was not completed (shouldn't happen as we check above)
             logger.error(f"Error archiving task: {e}", exc_info=True)
-            self.notify("Failed to archive task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            self._notify_task_error("archive task")
         except Exception as e:
             logger.error("Error archiving task", exc_info=True)
-            self.notify("Failed to archive task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            self._notify_task_error("archive task")
 
     async def action_view_archives(self) -> None:
         """View archived tasks modal ('v' key).
@@ -887,14 +919,14 @@ class TaskUI(App):
             logger.info(f"Task restored: {restored_task.title[:50]}")
 
             # Notify user of successful restore
-            self.notify(f"✓ Task restored: {restored_task.title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+            self._notify_task_success("restored", restored_task.title)
 
             # Refresh UI to show the restored task
             await self._refresh_ui_after_task_change()
 
         except Exception as e:
             logger.error("Error restoring task from archive", exc_info=True)
-            self.notify("Failed to restore task", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            self._notify_task_error("restore task")
 
     def action_delete_task(self) -> None:
         """Delete the selected task (Delete/Backspace key)."""
@@ -1057,7 +1089,7 @@ class TaskUI(App):
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
                 # Build the hierarchy by traversing up the parent chain
-                hierarchy = []
+                hierarchy: List[Task] = []
                 current_task = await task_service.get_task_by_id(task_id)
 
                 if not current_task:
