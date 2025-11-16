@@ -171,9 +171,6 @@ class DetailPanel(Widget):
         Yields:
             Widgets that make up the panel
         """
-        # Header
-        yield Static(self.panel_title, classes="panel-header", id=f"{self.column_id}-header")
-
         # Scrollable content area
         with VerticalScroll(classes="panel-content", id=f"{self.column_id}-content"):
             yield Static(
@@ -302,15 +299,6 @@ class DetailPanel(Widget):
         warning = self._get_nesting_warning(task)
         if warning:
             lines.append(f"[bold #FD971F]⚠ {warning}[/bold #FD971F]")
-            lines.append("")
-
-        # Task metadata
-        lines.append("[bold #66D9EF]METADATA[/bold #66D9EF]")
-        lines.append(f"  ID: {task.id}")
-        if task.parent_id:
-            lines.append(f"  Parent ID: {task.parent_id}")
-        lines.append(f"  List ID: {task.list_id}")
-        lines.append(f"  Position: {task.position}")
 
         return "\n".join(lines)
 

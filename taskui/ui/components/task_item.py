@@ -125,10 +125,14 @@ class TaskItem(Widget):
         Returns:
             Rich Text object with formatted task display
         """
-        text = Text()
-
         # Calculate indentation (2 spaces per level)
         indent_spaces = "  " * self._task_model.level
+
+        # Determine base color (use white for selected items for better contrast)
+        base_color = FOREGROUND if self.selected else get_level_color(self._task_model.level)
+
+        # Build the text content first
+        text = Text()
 
         # Add tree line for nested items
         if self._task_model.level > 0:
@@ -136,9 +140,9 @@ class TaskItem(Widget):
             tree_char = "└─" if self._is_last_child else "├─"
             tree_line = f"{indent_spaces}{tree_char} "
 
-            # Use level-specific color for tree line
-            level_color = get_level_color(self._task_model.level)
-            text.append(tree_line, style=level_color)
+            # Use level-specific color for tree line (or white if selected)
+            tree_color = FOREGROUND if self.selected else get_level_color(self._task_model.level)
+            text.append(tree_line, style=tree_color)
         else:
             # Top level tasks just get indentation
             text.append(indent_spaces)
@@ -146,33 +150,40 @@ class TaskItem(Widget):
         # Add completion checkbox
         if self._task_model.is_completed:
             checkbox = "[✓] "
-            text.append(checkbox, style=COMPLETE_COLOR)
+            checkbox_color = FOREGROUND if self.selected else COMPLETE_COLOR
+            text.append(checkbox, style=checkbox_color)
         else:
             checkbox = "[ ] "
             text.append(checkbox, style=FOREGROUND)
 
         # Add archive icon if archived
         if self._task_model.is_archived:
-            text.append("📦 ", style=ARCHIVE_COLOR)
+            archive_color = FOREGROUND if self.selected else ARCHIVE_COLOR
+            text.append("📦 ", style=archive_color)
 
         # Add task title with appropriate styling
         title = self._task_model.title
 
         if self._task_model.is_completed:
             # Strikethrough for completed tasks
-            text.append(title, style=f"strike {COMPLETE_COLOR}")
+            title_color = FOREGROUND if self.selected else COMPLETE_COLOR
+            text.append(title, style=f"strike {title_color}")
         elif self._task_model.is_archived:
             # Dimmed for archived tasks
-            text.append(title, style=ARCHIVE_COLOR)
+            title_color = FOREGROUND if self.selected else ARCHIVE_COLOR
+            text.append(title, style=title_color)
         else:
-            # Normal styling with level-specific color
-            level_color = get_level_color(self._task_model.level)
-            text.append(title, style=level_color)
+            # Normal styling with level-specific color (or white if selected)
+            text.append(title, style=base_color)
 
         # Add child progress indicator if task has children
         if self._task_model.has_children:
             progress = f" ({self._task_model.progress_string})"
             text.append(progress, style=FOREGROUND + " dim")
+
+        # Apply selection background to entire text if selected
+        if self.selected:
+            text.stylize(f"on {SELECTION}")
 
         return text
 
