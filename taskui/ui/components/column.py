@@ -135,6 +135,7 @@ class TaskColumn(Widget):
             all(
                 new.id == old.id and
                 new._child_count == old._child_count and
+                new._completed_child_count == old._completed_child_count and
                 new.is_completed == old.is_completed
                 for new, old in zip(tasks, self._tasks)
             )
