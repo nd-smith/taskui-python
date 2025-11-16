@@ -26,6 +26,9 @@ from taskui.ui.theme import (
     BACKGROUND,
     COMMENT,
     YELLOW,
+    BORDER,
+    HOVER_OPACITY,
+    with_alpha,
 )
 
 
@@ -35,25 +38,21 @@ class ListTab(Widget):
     Shows the list name, completion percentage, and highlights when active.
     """
 
-    DEFAULT_CSS = """
-    ListTab {
-        height: 3;
+    DEFAULT_CSS = f"""
+    ListTab {{
+        height: 1;
         width: auto;
-        min-width: 15;
         padding: 0 1;
         background: transparent;
-        border: solid #3E3D32;
-        margin: 0 0 0 1;
-    }
+    }}
 
-    ListTab:hover {
-        background: #49483E30;
-    }
+    ListTab:hover {{
+        background: {with_alpha(SELECTION, HOVER_OPACITY)};
+    }}
 
-    ListTab.active {
-        background: #49483E;
-        border: thick #66D9EF;
-    }
+    ListTab.active {{
+        background: transparent;
+    }}
     """
 
     # Reactive properties
@@ -65,6 +64,7 @@ class ListTab(Widget):
         task_list: TaskList,
         shortcut_number: int,
         is_active: bool = False,
+        is_last: bool = False,
         **kwargs
     ) -> None:
         """Initialize a ListTab widget.
@@ -73,12 +73,14 @@ class ListTab(Widget):
             task_list: The TaskList model to display
             shortcut_number: The number key shortcut (1-3)
             is_active: Whether this list is currently active
+            is_last: Whether this is the last tab (for separator logic)
             **kwargs: Additional widget arguments
         """
         super().__init__(**kwargs)
         self.task_list = task_list
         self.shortcut_number = shortcut_number
         self.active = is_active
+        self.is_last = is_last
         self.list_id = task_list.id
 
     def render(self) -> RenderableType:
@@ -102,6 +104,10 @@ class ListTab(Widget):
             percentage_color = YELLOW if completion < 100 else LEVEL_0_COLOR
             text.append(f" {completion:.0f}%", style=percentage_color)
 
+        # Add separator if not the last tab
+        if not self.is_last:
+            text.append("  │  ", style=COMMENT)
+
         return text
 
     def watch_active(self, active: bool) -> None:
@@ -123,16 +129,15 @@ class ListBar(Horizontal):
     Supports switching lists via number keys (1-3).
     """
 
-    DEFAULT_CSS = """
-    ListBar {
-        height: 3;
+    DEFAULT_CSS = f"""
+    ListBar {{
+        height: 1;
         width: 100%;
-        background: #272822;
-        border-bottom: solid #3E3D32;
-        padding: 0;
+        background: {BACKGROUND};
+        padding: 0 1;
         layout: horizontal;
         align: left middle;
-    }
+    }}
     """
 
     # Reactive properties
@@ -178,12 +183,15 @@ class ListBar(Horizontal):
         # Clear tabs list before composing to avoid duplicates on recompose
         self.tabs.clear()
 
+        total_lists = len(self.lists)
         for idx, task_list in enumerate(self.lists, start=1):
             is_active = task_list.id == self.active_list_id
+            is_last = idx == total_lists
             tab = ListTab(
                 task_list=task_list,
                 shortcut_number=idx,
-                is_active=is_active
+                is_active=is_active,
+                is_last=is_last
             )
             self.tabs.append(tab)
             yield tab
@@ -207,12 +215,15 @@ class ListBar(Horizontal):
         self.tabs.clear()
 
         # Create and mount new tabs
+        total_lists = len(self.lists)
         for idx, task_list in enumerate(self.lists, start=1):
             is_active = task_list.id == self.active_list_id
+            is_last = idx == total_lists
             tab = ListTab(
                 task_list=task_list,
                 shortcut_number=idx,
-                is_active=is_active
+                is_active=is_active,
+                is_last=is_last
             )
             self.tabs.append(tab)
             self.mount(tab)

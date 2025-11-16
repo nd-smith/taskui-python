@@ -25,9 +25,12 @@ from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
     BORDER,
+    SELECTION,
     LEVEL_0_COLOR,
     LEVEL_1_COLOR,
     LEVEL_2_COLOR,
+    MODAL_OVERLAY_BG,
+    ORANGE,
 )
 
 # Initialize logger for this module
@@ -48,118 +51,119 @@ class TaskCreationModal(ModalScreen):
         TaskCancelled: Emitted when the modal is cancelled
     """
 
-    DEFAULT_CSS = """
-    TaskCreationModal {
+    DEFAULT_CSS = f"""
+    TaskCreationModal {{
         align: center middle;
-        background: #27282280;
-    }
+        background: {MODAL_OVERLAY_BG};
+    }}
 
-    TaskCreationModal > Container {
+    TaskCreationModal > Container {{
         width: 70;
         height: auto;
-        background: #272822;
-        border: thick #66D9EF;
+        background: {BACKGROUND};
+        border: thick {LEVEL_0_COLOR};
         padding: 1 2;
-    }
+    }}
 
-    TaskCreationModal .modal-header {
+    TaskCreationModal .modal-header {{
         width: 100%;
         height: 3;
         content-align: center middle;
         text-style: bold;
-        color: #66D9EF;
-        border-bottom: solid #3E3D32;
+        color: {LEVEL_0_COLOR};
+        border-bottom: solid {BORDER};
         margin-bottom: 1;
-    }
+    }}
 
-    TaskCreationModal .context-info {
+    TaskCreationModal .context-info {{
         width: 100%;
         height: auto;
-        color: #A6E22E;
+        color: {LEVEL_1_COLOR};
         text-align: center;
         margin-bottom: 1;
         padding: 0 1;
-    }
+    }}
 
-    TaskCreationModal .error-message {
+    TaskCreationModal .error-message {{
         width: 100%;
         height: auto;
-        color: #F92672;
+        color: {ORANGE};
         text-align: center;
         margin-bottom: 1;
         padding: 0 1;
-    }
+        text-style: bold;
+    }}
 
-    TaskCreationModal .field-label {
+    TaskCreationModal .field-label {{
         width: 100%;
         height: 1;
-        color: #F8F8F2;
+        color: {FOREGROUND};
         margin-top: 1;
-    }
+    }}
 
-    TaskCreationModal Input {
+    TaskCreationModal Input {{
         width: 100%;
         margin-bottom: 1;
-        background: #3E3D32;
-        color: #F8F8F2;
-        border: solid #49483E;
-    }
+        background: {BORDER};
+        color: {FOREGROUND};
+        border: solid {SELECTION};
+    }}
 
-    TaskCreationModal Input:focus {
-        border: solid #66D9EF;
-    }
+    TaskCreationModal Input:focus {{
+        border: solid {LEVEL_0_COLOR};
+    }}
 
-    TaskCreationModal TextArea {
+    TaskCreationModal TextArea {{
         width: 100%;
         height: 8;
         margin-bottom: 1;
-        background: #3E3D32;
-        color: #F8F8F2;
-        border: solid #49483E;
-    }
+        background: {BORDER};
+        color: {FOREGROUND};
+        border: solid {SELECTION};
+    }}
 
-    TaskCreationModal TextArea:focus {
-        border: solid #66D9EF;
-    }
+    TaskCreationModal TextArea:focus {{
+        border: solid {LEVEL_0_COLOR};
+    }}
 
-    TaskCreationModal .button-container {
+    TaskCreationModal .button-container {{
         width: 100%;
         height: 3;
         align: center middle;
         margin-top: 1;
         layout: horizontal;
-    }
+    }}
 
-    TaskCreationModal Button {
+    TaskCreationModal Button {{
         margin: 0 1;
         min-width: 15;
-        background: #49483E;
-        color: #F8F8F2;
-        border: solid #3E3D32;
-    }
+        background: {SELECTION};
+        color: {FOREGROUND};
+        border: solid {BORDER};
+    }}
 
-    TaskCreationModal Button:hover {
-        background: #3E3D32;
-        border: solid #66D9EF;
-    }
+    TaskCreationModal Button:hover {{
+        background: {BORDER};
+        border: solid {LEVEL_0_COLOR};
+    }}
 
-    TaskCreationModal Button.save-button {
-        border: solid #A6E22E;
-    }
+    TaskCreationModal Button.save-button {{
+        border: solid {LEVEL_1_COLOR};
+    }}
 
-    TaskCreationModal Button.save-button:hover {
-        background: #A6E22E;
-        color: #272822;
-    }
+    TaskCreationModal Button.save-button:hover {{
+        background: {LEVEL_1_COLOR};
+        color: {BACKGROUND};
+    }}
 
-    TaskCreationModal Button.cancel-button {
-        border: solid #F92672;
-    }
+    TaskCreationModal Button.cancel-button {{
+        border: solid {LEVEL_2_COLOR};
+    }}
 
-    TaskCreationModal Button.cancel-button:hover {
-        background: #F92672;
-        color: #272822;
-    }
+    TaskCreationModal Button.cancel-button:hover {{
+        background: {LEVEL_2_COLOR};
+        color: {BACKGROUND};
+    }}
     """
 
     BINDINGS = [

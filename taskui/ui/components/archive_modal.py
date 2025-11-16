@@ -19,6 +19,17 @@ from textual.binding import Binding
 
 from taskui.logging_config import get_logger
 from taskui.models import Task
+from taskui.ui.theme import (
+    BACKGROUND,
+    FOREGROUND,
+    BORDER,
+    SELECTION,
+    COMMENT,
+    LEVEL_0_COLOR,
+    LEVEL_1_COLOR,
+    LEVEL_2_COLOR,
+    MODAL_OVERLAY_BG,
+)
 
 # Initialize logger for this module
 logger = get_logger(__name__)
@@ -30,151 +41,140 @@ class ArchiveModal(ModalScreen):
     Displays:
     - Search input for filtering archived tasks
     - List of archived tasks with title and archived date
-    - Restore button for selected task
     - Close button
+
+    Keyboard shortcuts:
+    - R: Restore selected task
+    - Esc: Close modal
 
     Messages:
         TaskRestored: Emitted when a task is restored (unarchived)
         ArchiveClosed: Emitted when the modal is closed
     """
 
-    DEFAULT_CSS = """
-    ArchiveModal {
+    DEFAULT_CSS = f"""
+    ArchiveModal {{
         align: center middle;
-        background: #27282280;
-    }
+        background: {MODAL_OVERLAY_BG};
+    }}
 
-    ArchiveModal > Container {
+    ArchiveModal > Container {{
         width: 90;
         height: 35;
-        background: #272822;
-        border: thick #66D9EF;
+        background: {BACKGROUND};
+        border: thick {LEVEL_0_COLOR};
         padding: 1 2;
-    }
+    }}
 
-    ArchiveModal .modal-header {
+    ArchiveModal .modal-header {{
         width: 100%;
         height: 3;
         content-align: center middle;
         text-style: bold;
-        color: #66D9EF;
-        border-bottom: solid #3E3D32;
+        color: {LEVEL_0_COLOR};
+        border-bottom: solid {BORDER};
         margin-bottom: 1;
-    }
+    }}
 
-    ArchiveModal .search-container {
+    ArchiveModal .search-container {{
         width: 100%;
         height: auto;
         margin-bottom: 1;
-    }
+    }}
 
-    ArchiveModal .field-label {
+    ArchiveModal .field-label {{
         width: 100%;
         height: 1;
-        color: #F8F8F2;
+        color: {FOREGROUND};
         margin-bottom: 0;
-    }
+    }}
 
-    ArchiveModal Input {
+    ArchiveModal Input {{
         width: 100%;
         margin-bottom: 1;
-        background: #3E3D32;
-        color: #F8F8F2;
-        border: solid #49483E;
-    }
+        background: {BORDER};
+        color: {FOREGROUND};
+        border: solid {SELECTION};
+    }}
 
-    ArchiveModal Input:focus {
-        border: solid #66D9EF;
-    }
+    ArchiveModal Input:focus {{
+        border: solid {LEVEL_0_COLOR};
+    }}
 
-    ArchiveModal .task-list-container {
+    ArchiveModal .task-list-container {{
         width: 100%;
         height: 1fr;
-        border: solid #49483E;
+        border: solid {SELECTION};
         margin-bottom: 1;
-    }
+    }}
 
-    ArchiveModal ListView {
+    ArchiveModal ListView {{
         width: 100%;
         height: 100%;
-        background: #3E3D32;
-    }
+        background: {BORDER};
+    }}
 
-    ArchiveModal ListItem {
+    ArchiveModal ListItem {{
         padding: 0 1;
-        color: #F8F8F2;
-        background: #3E3D32;
-    }
+        color: {FOREGROUND};
+        background: {BORDER};
+    }}
 
-    ArchiveModal ListItem:hover {
-        background: #49483E;
-    }
+    ArchiveModal ListItem:hover {{
+        background: {SELECTION};
+    }}
 
-    ArchiveModal ListItem.-selected {
-        background: #66D9EF;
-        color: #272822;
-    }
+    ArchiveModal ListItem.-selected {{
+        background: {LEVEL_0_COLOR};
+        color: {BACKGROUND};
+    }}
 
-    ArchiveModal .empty-message {
+    ArchiveModal .empty-message {{
         width: 100%;
         height: 100%;
         content-align: center middle;
-        color: #75715E;
+        color: {COMMENT};
         text-style: italic;
-    }
+    }}
 
-    ArchiveModal .info-text {
+    ArchiveModal .info-text {{
         width: 100%;
         height: auto;
-        color: #75715E;
+        color: {COMMENT};
         text-align: center;
         margin-bottom: 1;
         padding: 0 1;
-    }
+    }}
 
-    ArchiveModal .button-container {
+    ArchiveModal .button-container {{
         width: 100%;
         height: 3;
         align: center middle;
         margin-top: 1;
         layout: horizontal;
-    }
+    }}
 
-    ArchiveModal Button {
+    ArchiveModal Button {{
         margin: 0 1;
         min-width: 15;
-        background: #49483E;
-        color: #F8F8F2;
-        border: solid #3E3D32;
-    }
+        background: {SELECTION};
+        color: {FOREGROUND};
+        border: solid {BORDER};
+    }}
 
-    ArchiveModal Button:hover {
-        background: #3E3D32;
-        border: solid #66D9EF;
-    }
+    ArchiveModal Button:hover {{
+        background: {BORDER};
+        border: solid {LEVEL_0_COLOR};
+    }}
 
-    ArchiveModal Button.restore-button {
-        border: solid #A6E22E;
-    }
+    ArchiveModal Button.close-button {{
+        border: solid {LEVEL_2_COLOR};
+    }}
 
-    ArchiveModal Button.restore-button:hover {
-        background: #A6E22E;
-        color: #272822;
-    }
-
-    ArchiveModal Button.restore-button:disabled {
-        opacity: 0.5;
-        border: solid #3E3D32;
-    }
-
-    ArchiveModal Button.close-button {
-        border: solid #F92672;
-    }
-
-    ArchiveModal Button.close-button:hover {
-        background: #F92672;
-        color: #272822;
-    }
+    ArchiveModal Button.close-button:hover {{
+        background: {LEVEL_2_COLOR};
+        color: {BACKGROUND};
+    }}
     """
 
     BINDINGS = [
@@ -218,7 +218,7 @@ class ArchiveModal(ModalScreen):
 
             # Info text
             task_count = len(self.all_archived_tasks)
-            info_text = f"{task_count} archived task{'s' if task_count != 1 else ''}"
+            info_text = f"{task_count} archived task{'s' if task_count != 1 else ''} • Press R to restore"
             yield Static(info_text, classes="info-text", id="info-text")
 
             # Task list
@@ -236,15 +236,6 @@ class ArchiveModal(ModalScreen):
 
             # Buttons
             with Container(classes="button-container"):
-                restore_btn = Button(
-                    "Restore [R]",
-                    variant="success",
-                    id="restore-button",
-                    classes="restore-button"
-                )
-                if not self.all_archived_tasks:
-                    restore_btn.disabled = True
-                yield restore_btn
                 yield Button("Close [Esc]", variant="error", id="close-button", classes="close-button")
 
     def _create_list_items(self) -> List[ListItem]:
@@ -273,9 +264,22 @@ class ArchiveModal(ModalScreen):
         """Called when the modal is mounted."""
         logger.info(f"Archive modal opened with {len(self.all_archived_tasks)} archived tasks")
 
-        # Focus the search input
-        search_input = self.query_one("#search-input", Input)
-        search_input.focus()
+        # Focus the task list if there are tasks, otherwise focus search input
+        if self.all_archived_tasks:
+            try:
+                task_list = self.query_one("#task-list", ListView)
+                task_list.focus()
+                # Select the first task by default
+                if len(self.filtered_tasks) > 0:
+                    self.selected_task = self.filtered_tasks[0]
+            except Exception:
+                # Fallback to search input if list not available
+                search_input = self.query_one("#search-input", Input)
+                search_input.focus()
+        else:
+            # No tasks, focus search input
+            search_input = self.query_one("#search-input", Input)
+            search_input.focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes.
@@ -312,6 +316,9 @@ class ArchiveModal(ModalScreen):
                 id="task-list"
             )
             list_container.mount(list_view)
+            # Focus the new list view and select first task
+            list_view.focus()
+            self.selected_task = self.filtered_tasks[0] if self.filtered_tasks else None
         else:
             empty_msg = Static(
                 "No matching tasks\n\nTry a different search term",
@@ -325,16 +332,12 @@ class ArchiveModal(ModalScreen):
         total_count = len(self.all_archived_tasks)
         if search_query:
             info_text.update(
-                f"{filtered_count} of {total_count} archived task{'s' if total_count != 1 else ''}"
+                f"{filtered_count} of {total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
             )
         else:
             info_text.update(
-                f"{total_count} archived task{'s' if total_count != 1 else ''}"
+                f"{total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
             )
-
-        # Update restore button state
-        restore_button = self.query_one("#restore-button", Button)
-        restore_button.disabled = len(self.filtered_tasks) == 0
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle task selection in the list view.
@@ -364,9 +367,7 @@ class ArchiveModal(ModalScreen):
         Args:
             event: The button pressed event
         """
-        if event.button.id == "restore-button":
-            self.action_restore()
-        elif event.button.id == "close-button":
+        if event.button.id == "close-button":
             self.action_close()
 
     def action_restore(self) -> None:

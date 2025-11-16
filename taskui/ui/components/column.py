@@ -23,7 +23,13 @@ from textual.widgets import Static
 from taskui.logging_config import get_logger
 from taskui.models import Task
 from taskui.ui.components.task_item import TaskItem
-from taskui.ui.theme import BORDER, SELECTION, FOREGROUND
+from taskui.ui.theme import (
+    BORDER,
+    SELECTION,
+    FOREGROUND,
+    LEVEL_0_COLOR,
+    COMMENT,
+)
 
 # Initialize logger for this module
 logger = get_logger(__name__)
@@ -43,40 +49,30 @@ class TaskColumn(Widget):
     # Enable keyboard focus
     can_focus = True
 
-    DEFAULT_CSS = """
-    TaskColumn {
-        border: solid #3E3D32;
+    DEFAULT_CSS = f"""
+    TaskColumn {{
+        border: solid {BORDER};
         padding: 0 1;
         margin: 0 1;
-    }
+    }}
 
-    TaskColumn:focus {
-        border: thick #66D9EF;
-    }
+    TaskColumn:focus {{
+        border: thick {LEVEL_0_COLOR};
+    }}
 
-    TaskColumn .column-header {
-        width: 100%;
-        height: 1;
-        background: #49483E;
-        color: #F8F8F2;
-        text-align: center;
-        border-bottom: solid #3E3D32;
-        padding: 0 1;
-    }
-
-    TaskColumn .column-content {
+    TaskColumn .column-content {{
         width: 100%;
         height: 1fr;
         padding: 1 0;
-    }
+    }}
 
-    TaskColumn .empty-message {
+    TaskColumn .empty-message {{
         width: 100%;
         height: 100%;
-        color: #75715E;
+        color: {COMMENT};
         text-align: center;
         padding: 2;
-    }
+    }}
     """
 
     # Reactive properties
@@ -112,9 +108,6 @@ class TaskColumn(Widget):
         Yields:
             Widgets that make up the column
         """
-        # Header
-        yield Static(self.header_title, classes="column-header", id=f"{self.column_id}-header")
-
         # Scrollable content area
         with VerticalScroll(classes="column-content", id=f"{self.column_id}-content"):
             yield Static(self.empty_message, classes="empty-message", id=f"{self.column_id}-empty")
@@ -293,10 +286,13 @@ class TaskColumn(Widget):
 
         Args:
             title: New header title
+
+        Note:
+            This method is a no-op since column headers have been removed.
+            Kept for backward compatibility.
         """
         self.header_title = title
-        header = self.query_one(f"#{self.column_id}-header", Static)
-        header.update(title)
+        # No-op: headers removed for space efficiency
 
     def navigate_up(self) -> None:
         """Navigate to the previous task in the list."""

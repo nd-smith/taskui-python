@@ -33,6 +33,7 @@ from taskui.ui.theme import (
     ARCHIVE_COLOR,
     YELLOW,
     ORANGE,
+    PURPLE,
     get_level_color,
 )
 
@@ -52,89 +53,95 @@ class DetailPanel(Widget):
     # Enable keyboard focus
     can_focus = True
 
-    DEFAULT_CSS = """
-    DetailPanel {
-        border: solid #3E3D32;
+    DEFAULT_CSS = f"""
+    DetailPanel {{
+        border: solid {BORDER};
         padding: 0 1;
         margin: 0 1;
-    }
+    }}
 
-    DetailPanel:focus {
-        border: thick #66D9EF;
-    }
+    DetailPanel:focus {{
+        border: thick {LEVEL_2_COLOR};
+    }}
 
-    DetailPanel .panel-header {
+    DetailPanel .panel-header {{
         width: 100%;
         height: 1;
-        background: #49483E;
-        color: #F8F8F2;
+        background: {SELECTION};
+        color: {FOREGROUND};
         text-align: center;
-        border-bottom: solid #3E3D32;
+        border-bottom: solid {BORDER};
         padding: 0 1;
-    }
+    }}
 
-    DetailPanel .panel-content {
+    DetailPanel .panel-content {{
         width: 100%;
         height: 1fr;
         padding: 1 1;
-    }
+    }}
 
-    DetailPanel .empty-message {
+    DetailPanel .empty-message {{
         width: 100%;
         height: 100%;
-        color: #75715E;
+        color: {COMMENT};
         text-align: center;
         padding: 2;
-    }
+    }}
 
-    DetailPanel .section {
+    DetailPanel .section {{
         padding: 0 0 1 0;
-    }
+    }}
 
-    DetailPanel .section-title {
-        color: #66D9EF;
+    DetailPanel .section-title {{
+        color: {LEVEL_0_COLOR};
         text-style: bold;
-    }
+    }}
 
-    DetailPanel .task-title {
-        color: #F8F8F2;
+    DetailPanel .task-title {{
+        color: {FOREGROUND};
         text-style: bold;
         padding: 0 0 1 0;
-    }
+    }}
 
-    DetailPanel .info-line {
-        color: #F8F8F2;
+    DetailPanel .info-line {{
+        color: {FOREGROUND};
         padding: 0 0 0 2;
-    }
+    }}
 
-    DetailPanel .status-complete {
-        color: #A6E22E;
-    }
+    DetailPanel .status-complete {{
+        color: {LEVEL_1_COLOR};
+    }}
 
-    DetailPanel .status-incomplete {
-        color: #75715E;
-    }
+    DetailPanel .status-incomplete {{
+        color: {YELLOW};
+    }}
 
-    DetailPanel .status-archived {
-        color: #FD971F;
-    }
+    DetailPanel .status-archived {{
+        color: {ORANGE};
+    }}
 
-    DetailPanel .warning {
-        color: #FD971F;
+    DetailPanel .warning {{
+        color: {ORANGE};
         text-style: bold;
         padding: 1 0;
-    }
+    }}
 
-    DetailPanel .hierarchy-item {
-        color: #F8F8F2;
+    DetailPanel .hierarchy-item {{
+        color: {FOREGROUND};
         padding: 0 0 0 2;
-    }
+    }}
 
-    DetailPanel .notes-content {
-        color: #F8F8F2;
+    DetailPanel .metadata {{
+        color: {PURPLE};
+        padding: 0 0 0 2;
+        text-style: italic;
+    }}
+
+    DetailPanel .notes-content {{
+        color: {FOREGROUND};
         padding: 1 0 0 2;
         text-style: italic;
-    }
+    }}
     """
 
     # Reactive properties
@@ -239,7 +246,7 @@ class DetailPanel(Widget):
         lines.append("[bold #66D9EF]STATUS[/bold #66D9EF]")
 
         status_text = "Completed" if task.is_completed else "Incomplete"
-        status_color = "#A6E22E" if task.is_completed else "#75715E"
+        status_color = "#A6E22E" if task.is_completed else "#E6DB74"  # YELLOW for incomplete
         lines.append(f"  Completion: [{status_color}]{status_text}[/{status_color}]")
 
         if task.is_archived:
@@ -250,13 +257,13 @@ class DetailPanel(Widget):
 
         # Dates Section
         lines.append("[bold #66D9EF]DATES[/bold #66D9EF]")
-        lines.append(f"  Created: {self._format_datetime(task.created_at)}")
+        lines.append(f"  Created: [#AE81FF]{self._format_datetime(task.created_at)}[/#AE81FF]")
 
         if task.completed_at:
-            lines.append(f"  Completed: {self._format_datetime(task.completed_at)}")
+            lines.append(f"  Completed: [#AE81FF]{self._format_datetime(task.completed_at)}[/#AE81FF]")
 
         if task.archived_at:
-            lines.append(f"  Archived: {self._format_datetime(task.archived_at)}")
+            lines.append(f"  Archived: [#AE81FF]{self._format_datetime(task.archived_at)}[/#AE81FF]")
 
         lines.append("")
 
@@ -278,7 +285,7 @@ class DetailPanel(Widget):
             lines.append(f"  [{parent_color}]{parent.title}[/{parent_color}]")
 
             parent_status = "Complete" if parent.is_completed else "Incomplete"
-            status_color = "#A6E22E" if parent.is_completed else "#75715E"
+            status_color = "#A6E22E" if parent.is_completed else "#E6DB74"  # YELLOW for incomplete
             lines.append(f"  Status: [{status_color}]{parent_status}[/{status_color}]")
             lines.append("")
 

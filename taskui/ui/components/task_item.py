@@ -23,6 +23,11 @@ from taskui.ui.theme import (
     COMPLETE_COLOR,
     ARCHIVE_COLOR,
     SELECTION,
+    LEVEL_0_COLOR,
+    LEVEL_1_COLOR,
+    LEVEL_2_COLOR,
+    HOVER_OPACITY,
+    with_alpha,
 )
 
 
@@ -38,32 +43,33 @@ class TaskItem(Widget):
     - Selection highlighting
     """
 
-    DEFAULT_CSS = """
-    TaskItem {
+    DEFAULT_CSS = f"""
+    TaskItem {{
         height: 1;
         width: 100%;
         background: transparent;
-    }
+        opacity: 0;
+    }}
 
-    TaskItem:hover {
-        background: #49483E20;
-    }
+    TaskItem:hover {{
+        background: {with_alpha(SELECTION, HOVER_OPACITY)};
+    }}
 
-    TaskItem.selected {
-        background: #49483E;
-    }
+    TaskItem.selected {{
+        background: {SELECTION};
+    }}
 
-    TaskItem.level-0 {
-        border-left: thick #66D9EF;
-    }
+    TaskItem.level-0 {{
+        border-left: thick {LEVEL_0_COLOR};
+    }}
 
-    TaskItem.level-1 {
-        border-left: thick #A6E22E;
-    }
+    TaskItem.level-1 {{
+        border-left: thick {LEVEL_1_COLOR};
+    }}
 
-    TaskItem.level-2 {
-        border-left: thick #F92672;
-    }
+    TaskItem.level-2 {{
+        border-left: thick {LEVEL_2_COLOR};
+    }}
     """
 
     # Reactive properties
@@ -90,6 +96,10 @@ class TaskItem(Widget):
 
         # Set level-specific CSS class
         self.add_class(f"level-{task.level}")
+
+    def on_mount(self) -> None:
+        """Fade in the task item when mounted."""
+        self.styles.animate("opacity", value=1.0, duration=0.3, easing="out_cubic")
 
     @property
     def task(self) -> Task:

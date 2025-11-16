@@ -12,7 +12,7 @@ import asyncio
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, Static
+from textual.widgets import Footer, Static
 from textual.binding import Binding
 from textual.events import Key
 
@@ -31,7 +31,10 @@ from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
     BORDER,
+    SELECTION,
     LEVEL_0_COLOR,
+    LEVEL_1_COLOR,
+    LEVEL_2_COLOR,
 )
 from taskui.ui.components.column import TaskColumn
 from taskui.ui.keybindings import (
@@ -50,43 +53,57 @@ logger = get_logger(__name__)
 class TaskUI(App):
     """Main TaskUI application with three-column layout."""
 
-    CSS = """
-    Screen {
-        background: #272822;
+    CSS = f"""
+    Screen {{
+        background: {BACKGROUND};
         layout: vertical;
-    }
+    }}
 
-    #main-container {
+    #main-container {{
         width: 100%;
         height: 1fr;
-        background: #272822;
-        margin-top: 1;
-    }
+        background: {BACKGROUND};
+    }}
 
-    #columns-container {
+    #columns-container {{
         width: 100%;
         height: 100%;
         layout: horizontal;
-    }
+    }}
 
-    #column-1 {
+    #column-1 {{
         width: 1fr;
         height: 100%;
-    }
+        border: round {BORDER};
+    }}
 
-    #column-2 {
+    #column-2 {{
         width: 1fr;
         height: 100%;
-    }
+        border: double {BORDER};
+    }}
 
-    #column-3 {
+    #column-3 {{
         width: 1fr;
         height: 100%;
-    }
+        border: dashed {BORDER};
+    }}
 
-    Footer {
-        background: #49483E;
-    }
+    #column-1:focus {{
+        border: round {LEVEL_0_COLOR};
+    }}
+
+    #column-2:focus {{
+        border: double {LEVEL_1_COLOR};
+    }}
+
+    #column-3:focus {{
+        border: dashed {LEVEL_2_COLOR};
+    }}
+
+    Footer {{
+        background: {SELECTION};
+    }}
     """
 
     BINDINGS = get_all_bindings()
@@ -108,8 +125,6 @@ class TaskUI(App):
         Yields:
             Widgets that make up the application
         """
-        yield Header()
-
         # List bar for switching between task lists
         yield ListBar(lists=self._lists, active_list_id=self._current_list_id)
 
@@ -478,10 +493,14 @@ class TaskUI(App):
                 await task_service.update_task(task_id, title=title, notes=notes)
                 # Session context manager will auto-commit
 
+            # Notify user of successful edit
+            self.notify(f"✓ Task updated: {title[:30]}...", severity="information", timeout=2)
+
             # Refresh UI to show the updated task
             await self._refresh_ui_after_task_change()
         except Exception as e:
             logger.error("Error updating task", exc_info=True)
+            self.notify("Failed to update task", severity="error", timeout=3)
 
     async def _handle_create_sibling_task(
         self,
@@ -529,8 +548,12 @@ class TaskUI(App):
                     )
                 # Session context manager will auto-commit
 
+            # Notify user of successful creation
+            self.notify(f"✓ Task created: {title[:30]}...", severity="information", timeout=2)
+
         except Exception as e:
             logger.error("Error creating sibling task", exc_info=True)
+            self.notify("Failed to create task", severity="error", timeout=3)
 
     async def _handle_create_child_task(
         self,
@@ -562,8 +585,12 @@ class TaskUI(App):
                 )
                 # Session context manager will auto-commit
 
+            # Notify user of successful creation
+            self.notify(f"✓ Subtask created: {title[:30]}...", severity="information", timeout=2)
+
         except Exception as e:
             logger.error("Error creating child task", exc_info=True)
+            self.notify("Failed to create subtask", severity="error", timeout=3)
 
     async def _refresh_column_tasks(self, column: TaskColumn) -> None:
         """Refresh tasks in a column from the database.
@@ -751,6 +778,11 @@ class TaskUI(App):
                 await task_service.toggle_completion(selected_task.id)
                 # Session context manager will auto-commit
 
+            # Determine completion status for notification
+            completion_status = "completed" if not selected_task.is_completed else "reopened"
+            icon = "✓" if not selected_task.is_completed else "○"
+            self.notify(f"{icon} Task {completion_status}", severity="information", timeout=2)
+
             # Refresh UI to show the updated task with strikethrough and updated progress
             await self._refresh_ui_after_task_change()
 
@@ -763,6 +795,7 @@ class TaskUI(App):
 
         except Exception as e:
             logger.error("Error toggling task completion", exc_info=True)
+            self.notify("Failed to toggle completion", severity="error", timeout=3)
 
     async def action_archive_task(self) -> None:
         """Archive the selected completed task ('a' key).
@@ -787,7 +820,7 @@ class TaskUI(App):
         # Check if task is completed
         if not selected_task.is_completed:
             logger.debug(f"Task {selected_task.id} is not completed, cannot archive")
-            # Could show a notification to user here
+            self.notify("Only completed tasks can be archived", severity="warning", timeout=3)
             return
 
         if not self._db_manager:
@@ -801,14 +834,19 @@ class TaskUI(App):
                 await task_service.archive_task(selected_task.id)
                 # Session context manager will auto-commit
 
+            # Notify user of successful archive
+            self.notify(f"📦 Task archived: {selected_task.title[:30]}...", severity="information", timeout=2)
+
             # Refresh UI to remove archived task and clear detail panel
             await self._refresh_ui_after_task_change(clear_detail_panel=True)
 
         except ValueError as e:
             # Task was not completed (shouldn't happen as we check above)
             logger.error(f"Error archiving task: {e}", exc_info=True)
+            self.notify("Failed to archive task", severity="error", timeout=3)
         except Exception as e:
             logger.error("Error archiving task", exc_info=True)
+            self.notify("Failed to archive task", severity="error", timeout=3)
 
     async def action_view_archives(self) -> None:
         """View archived tasks modal ('v' key).
@@ -858,11 +896,15 @@ class TaskUI(App):
 
             logger.info(f"Task restored: {restored_task.title[:50]}")
 
+            # Notify user of successful restore
+            self.notify(f"✓ Task restored: {restored_task.title[:30]}...", severity="information", timeout=2)
+
             # Refresh UI to show the restored task
             await self._refresh_ui_after_task_change()
 
         except Exception as e:
             logger.error("Error restoring task from archive", exc_info=True)
+            self.notify("Failed to restore task", severity="error", timeout=3)
 
     def action_delete_task(self) -> None:
         """Delete the selected task (Delete/Backspace key)."""

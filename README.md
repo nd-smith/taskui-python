@@ -9,7 +9,7 @@ A powerful terminal-based task management system with a three-column hierarchica
 - **Keyboard-Driven**: Fast navigation and task management
 - **Multiple Lists**: Work, Home, Personal lists with easy switching
 - **Persistent Storage**: SQLite database with auto-save
-- **One Monokai Theme**: Beautiful terminal interface with level-specific colors
+- **4 Beautiful Themes**: One Monokai (default), Dracula, Tokyo Night, and Nord
 - **Archive System**: Keep completed tasks organized
 - **Thermal Printer Support**: Print task lists to Epson TM-T20III (optional)
 
@@ -237,6 +237,152 @@ TASKUI_PRINTER_PORT=9100
 - Displays children of selected Column 1 task
 - Context-relative levels (always starts at Level 0)
 - Dynamic header shows "[Parent Task] Subtasks"
+
+## Theming
+
+TaskUI comes with **4 popular VS Code themes** adapted for terminal use. The default is **One Monokai**, but you can easily switch to **Dracula**, **Tokyo Night**, or **Nord**. The entire application's visual styling is centralized in `taskui/ui/theme.py`, making theme switching effortless.
+
+### Theme Architecture
+
+The theme system follows these principles:
+- **Single source of truth**: All colors defined in `theme.py`
+- **Dynamic CSS**: Components use f-string interpolation to reference theme constants
+- **Consistent patterns**: Standardized hover states, focus indicators, and interaction feedback
+- **Semantic colors**: Level-based colors (cyan/green/pink) for visual hierarchy
+
+### Customizing Colors
+
+To change the app's color scheme, edit the constants in `taskui/ui/theme.py`:
+
+```python
+# Base colors
+BACKGROUND = "#272822"  # Main background
+FOREGROUND = "#F8F8F2"  # Text color
+SELECTION = "#49483E"   # Selection highlight
+BORDER = "#3E3D32"      # Borders and dividers
+COMMENT = "#75715E"     # Secondary/dimmed text
+
+# Task hierarchy colors
+LEVEL_0_COLOR = "#66D9EF"  # Cyan - Top-level tasks
+LEVEL_1_COLOR = "#A6E22E"  # Green - Nested tasks
+LEVEL_2_COLOR = "#F92672"  # Pink - Deep nested tasks
+
+# Additional colors
+YELLOW = "#E6DB74"      # Highlights/warnings
+ORANGE = "#FD971F"      # Archive/warnings
+PURPLE = "#AE81FF"      # Info/secondary
+```
+
+All components automatically update when you change these constants - no need to modify individual component files!
+
+### Available Themes
+
+TaskUI includes 4 professionally crafted themes:
+
+**1. One Monokai (Default)** - Warm, balanced dark theme with cyan/green/pink hierarchy
+**2. Dracula** - Bold, vibrant colors optimized for low-light (10M+ VS Code installs)
+**3. Tokyo Night** - Cool blue tones inspired by Tokyo's nighttime skyline
+**4. Nord** - Arctic, north-bluish palette with calm, focused atmosphere
+
+**To switch themes:**
+
+```bash
+# Method 1: Replace theme.py (recommended)
+cd taskui/ui
+cp themes/dracula.py theme.py        # Dracula theme
+cp themes/tokyo_night.py theme.py    # Tokyo Night theme
+cp themes/nord.py theme.py           # Nord theme
+```
+
+```python
+# Method 2: Import in theme.py (for testing)
+from taskui.ui.themes.dracula import *
+```
+
+**Full theme documentation:** See `taskui/ui/themes/README.md` for detailed color previews, comparisons, and creating your own themes.
+
+### Theme Features
+
+**Visual Hierarchy**
+- Each nesting level has a distinct accent color
+- Task items show colored left borders based on their level
+- Completed tasks appear dimmed with strikethrough text
+- Archived tasks use reduced opacity for visual distinction
+
+**Interactive States**
+- **Hover**: 20% transparent overlay on all interactive elements
+- **Focus**: Thick cyan border indicates keyboard focus
+- **Selection**: Highlighted background for selected items
+- **Disabled**: 50% opacity for unavailable actions
+
+**Modal Styling**
+- Semi-transparent dark overlay (`#27282280`)
+- Consistent button variants (success=green, error=pink)
+- Focused inputs highlighted with cyan border
+
+### Creating a Custom Theme
+
+Want to create your own theme? Here's how:
+
+1. **Copy the theme constants** from `theme.py`
+2. **Choose your color palette** (use a hex color picker)
+3. **Update the constants** with your new colors
+4. **Test the application** to see your changes live
+5. **(Optional)** Share your theme with the community!
+
+Example - Creating a "Nord" theme:
+```python
+BACKGROUND = "#2E3440"
+FOREGROUND = "#ECEFF4"
+LEVEL_0_COLOR = "#88C0D0"  # Frost blue
+LEVEL_1_COLOR = "#A3BE8C"  # Aurora green
+LEVEL_2_COLOR = "#B48EAD"  # Aurora purple
+```
+
+### Advanced Theming
+
+**Using Transparency**
+
+The `with_alpha()` helper function adds transparency to any color:
+
+```python
+from taskui.ui.theme import with_alpha, SELECTION, HOVER_OPACITY
+
+# Create a semi-transparent selection overlay
+hover_bg = with_alpha(SELECTION, HOVER_OPACITY)  # Returns: '#49483E20'
+```
+
+**Base Styles**
+
+The `taskui/ui/base_styles.py` module provides reusable CSS patterns for:
+- Modal dialogs and overlays
+- Button states and variants
+- Semantic text classes
+- Background states
+
+Components can import these to maintain consistency:
+```python
+from taskui.ui.base_styles import MODAL_BASE_CSS, BUTTON_BASE_CSS
+```
+
+### Color Reference
+
+| Color Constant | Hex Value | Usage |
+|----------------|-----------|-------|
+| `BACKGROUND` | `#272822` | Main app background |
+| `FOREGROUND` | `#F8F8F2` | Primary text |
+| `SELECTION` | `#49483E` | Selected items |
+| `BORDER` | `#3E3D32` | Borders, dividers |
+| `COMMENT` | `#75715E` | Secondary text |
+| `LEVEL_0_COLOR` | `#66D9EF` | Top-level (cyan) |
+| `LEVEL_1_COLOR` | `#A6E22E` | Level 1 (green) |
+| `LEVEL_2_COLOR` | `#F92672` | Level 2 (pink) |
+| `YELLOW` | `#E6DB74` | Highlights |
+| `ORANGE` | `#FD971F` | Warnings/archive |
+| `PURPLE` | `#AE81FF` | Info |
+| `COMPLETE_COLOR` | `#75715E` | Completed tasks |
+| `ARCHIVE_COLOR` | `#49483E` | Archived tasks |
+| `MODAL_OVERLAY_BG` | `#27282280` | Modal backdrop |
 
 ## Contributing
 
