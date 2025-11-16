@@ -18,6 +18,7 @@ from textual.widgets import Button, Input, Label, Static, TextArea
 from textual.message import Message
 from textual.binding import Binding
 
+from taskui.logging_config import get_logger
 from taskui.models import Task
 from taskui.services.nesting_rules import Column, NestingRules
 from taskui.ui.theme import (
@@ -28,6 +29,9 @@ from taskui.ui.theme import (
     LEVEL_1_COLOR,
     LEVEL_2_COLOR,
 )
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class TaskCreationModal(ModalScreen):
@@ -280,12 +284,15 @@ class TaskCreationModal(ModalScreen):
 
     def on_mount(self) -> None:
         """Called when the modal is mounted."""
+        logger.info(f"Task modal opened in {self.mode} mode")
+
         # Focus the title input
         title_input = self.query_one("#title-input", Input)
         title_input.focus()
 
         # Disable save button if there's a validation error
         if self.validation_error:
+            logger.debug(f"Validation error in modal: {self.validation_error}")
             save_button = self.query_one("#save-button", Button)
             save_button.disabled = True
 
@@ -304,6 +311,7 @@ class TaskCreationModal(ModalScreen):
         """Save the task and dismiss the modal."""
         # Don't save if there's a validation error
         if self.validation_error:
+            logger.debug("Save cancelled due to validation error")
             return
 
         # Get input values
@@ -315,8 +323,11 @@ class TaskCreationModal(ModalScreen):
 
         # Validate title
         if not title:
+            logger.debug("Save cancelled: empty title")
             # Show error - could add a validation label here
             return
+
+        logger.info(f"Task {self.mode} saved: {title[:50]}")
 
         # Post TaskCreated message
         self.post_message(
@@ -335,6 +346,7 @@ class TaskCreationModal(ModalScreen):
 
     def action_cancel(self) -> None:
         """Cancel and dismiss the modal."""
+        logger.info("Task modal cancelled")
         # Post TaskCancelled message
         self.post_message(self.TaskCancelled())
         # Dismiss modal

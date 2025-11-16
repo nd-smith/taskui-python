@@ -20,22 +20,13 @@ from textual.reactive import reactive
 from textual.message import Message
 from textual.widgets import Static
 
+from taskui.logging_config import get_logger
 from taskui.models import Task
 from taskui.ui.components.task_item import TaskItem
 from taskui.ui.theme import BORDER, SELECTION, FOREGROUND
 
-
-def _debug_log(message: str):
-    """Write debug message to file."""
-    try:
-        import os
-        debug_dir = "debug"
-        os.makedirs(debug_dir, exist_ok=True)
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        with open(f"{debug_dir}/column_debug.log", "a") as f:
-            f.write(f"[{timestamp}] {message}\n")
-    except Exception:
-        pass  # Silently fail if debug logging doesn't work
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class TaskColumn(Widget):
@@ -135,9 +126,7 @@ class TaskColumn(Widget):
             tasks: List of Task objects to display
             preserve_selection: If True, try to maintain the current selection by task ID
         """
-        import traceback
-        stack = ''.join(traceback.format_stack()[-4:-1])  # Get calling stack
-        _debug_log(f"{self.column_id}: set_tasks() called with {len(tasks)} tasks\n{stack}")
+        logger.debug(f"{self.column_id}: set_tasks() called with {len(tasks)} tasks")
 
         # Check if tasks are identical (same IDs in same order AND same attributes)
         # to avoid unnecessary re-renders
@@ -152,7 +141,7 @@ class TaskColumn(Widget):
         )
 
         if tasks_unchanged:
-            _debug_log(f"{self.column_id}: Tasks unchanged, skipping re-render")
+            logger.debug(f"{self.column_id}: Tasks unchanged, skipping re-render")
             return
 
         # Remember currently selected task ID
@@ -191,13 +180,13 @@ class TaskColumn(Widget):
 
     def _render_tasks(self) -> None:
         """Render the task list with TaskItem widgets."""
-        _debug_log(f"{self.column_id}: _render_tasks() called with {len(self._tasks)} tasks")
+        logger.debug(f"{self.column_id}: _render_tasks() called with {len(self._tasks)} tasks")
         try:
             content_container = self.query_one(f"#{self.column_id}-content", VerticalScroll)
             empty_message = self.query_one(f"#{self.column_id}-empty", Static)
         except Exception as e:
             # Container not yet mounted, skip rendering
-            _debug_log(f"{self.column_id}: Container not ready - {e}")
+            logger.debug(f"{self.column_id}: Container not ready - {e}")
             return
 
         if not self._tasks:
@@ -217,7 +206,7 @@ class TaskColumn(Widget):
 
         # Clear all existing widgets to ensure correct order
         existing_items = list(content_container.query(TaskItem))
-        _debug_log(f"{self.column_id}: Clearing {len(existing_items)} existing widgets")
+        logger.debug(f"{self.column_id}: Clearing {len(existing_items)} existing widgets")
 
         if existing_items:
             # Remove all TaskItem children
@@ -225,7 +214,7 @@ class TaskColumn(Widget):
 
             # Defer mounting until after removal completes
             def mount_widgets():
-                _debug_log(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
+                logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
 
                 # Group tasks by parent to determine last child status
                 parent_groups = {}
@@ -256,14 +245,14 @@ class TaskColumn(Widget):
                         content_container.mount(task_item)
                     except Exception as e:
                         # This shouldn't happen with fresh widget creation
-                        _debug_log(f"{self.column_id}: ERROR mounting task widget: {e}")
+                        logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
 
-                _debug_log(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
+                logger.debug(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
 
             self.call_after_refresh(mount_widgets)
         else:
             # No existing widgets, mount directly
-            _debug_log(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
+            logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
 
             # Group tasks by parent to determine last child status
             parent_groups = {}
@@ -294,9 +283,9 @@ class TaskColumn(Widget):
                     content_container.mount(task_item)
                 except Exception as e:
                     # This shouldn't happen with fresh widget creation
-                    _debug_log(f"{self.column_id}: ERROR mounting task widget: {e}")
+                    logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
 
-            _debug_log(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
+            logger.debug(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
 
     def update_header(self, title: str) -> None:
         """Update the column header title.
@@ -330,25 +319,25 @@ class TaskColumn(Widget):
         Args:
             new_index: New selection index
         """
-        _debug_log(f"{self.column_id}: _update_selection({new_index}), current_index={self._selected_index}, num_tasks={len(self._tasks)}")
+        logger.debug(f"{self.column_id}: _update_selection({new_index}), current_index={self._selected_index}, num_tasks={len(self._tasks)}")
         if not self._tasks or new_index < 0 or new_index >= len(self._tasks):
-            _debug_log(f"{self.column_id}: Invalid selection index, skipping")
+            logger.debug(f"{self.column_id}: Invalid selection index, skipping")
             return
 
         # Deselect old item
         if 0 <= self._selected_index < len(self._tasks):
             old_task_id = self._tasks[self._selected_index].id
-            _debug_log(f"{self.column_id}: Querying old item task-{old_task_id}")
+            logger.debug(f"{self.column_id}: Deselecting old item task-{old_task_id}")
             old_item = self.query_one(f"#task-{old_task_id}", TaskItem)
             old_item.selected = False
 
         # Select new item
         self._selected_index = new_index
         new_task = self._tasks[new_index]
-        _debug_log(f"{self.column_id}: Querying new item task-{new_task.id}")
+        logger.debug(f"{self.column_id}: Selecting new item task-{new_task.id}")
         new_item = self.query_one(f"#task-{new_task.id}", TaskItem)
         new_item.selected = True
-        _debug_log(f"{self.column_id}: Selection updated successfully")
+        logger.debug(f"{self.column_id}: Selection updated successfully")
 
         # Update reactive property
         self.selected_task_id = new_task.id
@@ -381,7 +370,7 @@ class TaskColumn(Widget):
 
     def on_focus(self) -> None:
         """Handle focus event - ensure selection is properly activated."""
-        _debug_log(f"{self.column_id}: on_focus() called, {len(self._tasks)} tasks, selected_index={self._selected_index}")
+        logger.debug(f"{self.column_id}: on_focus() called, {len(self._tasks)} tasks, selected_index={self._selected_index}")
         self.focused = True
         self.add_class("focused")
 
@@ -390,9 +379,9 @@ class TaskColumn(Widget):
         max_retries = 3
 
         def ensure_selection():
-            _debug_log(f"{self.column_id}: ensure_selection() running (retry {retry_count[0]})")
+            logger.debug(f"{self.column_id}: ensure_selection() running (retry {retry_count[0]})")
             if not self._tasks:
-                _debug_log(f"{self.column_id}: No tasks, skipping selection")
+                logger.debug(f"{self.column_id}: No tasks, skipping selection")
                 return
 
             try:
@@ -404,25 +393,24 @@ class TaskColumn(Widget):
                     # Widgets not mounted yet, retry if under limit
                     if retry_count[0] < max_retries:
                         retry_count[0] += 1
-                        _debug_log(f"{self.column_id}: Widgets not ready, will retry")
+                        logger.debug(f"{self.column_id}: Widgets not ready, will retry")
                         self.call_after_refresh(ensure_selection)
                     else:
-                        _debug_log(f"{self.column_id}: Max retries reached, giving up on selection")
+                        logger.debug(f"{self.column_id}: Max retries reached, giving up on selection")
                     return
 
                 if self._selected_index == -1:
                     # No selection, auto-select first task
-                    _debug_log(f"{self.column_id}: Auto-selecting first task")
+                    logger.debug(f"{self.column_id}: Auto-selecting first task")
                     self._update_selection(0)
                 elif 0 <= self._selected_index < len(self._tasks):
                     # Valid index exists - always trigger to ensure TaskSelected message is sent
                     # This is important for Column 2 which needs to trigger Column 3 detail view
-                    _debug_log(f"{self.column_id}: Triggering selection for index {self._selected_index}")
+                    logger.debug(f"{self.column_id}: Triggering selection for index {self._selected_index}")
                     self._update_selection(self._selected_index)
             except Exception as e:
                 # Unexpected error
-                _debug_log(f"{self.column_id}: Exception in ensure_selection: {e}")
-                _debug_log(f"{self.column_id}: {traceback.format_exc()}")
+                logger.error(f"{self.column_id}: Exception in ensure_selection", exc_info=True)
 
         # Defer to ensure widgets are mounted
         self.call_after_refresh(ensure_selection)

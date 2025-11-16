@@ -10,7 +10,10 @@ Or as an installed command:
 import sys
 from typing import Optional
 
-from taskui.logging_config import setup_logging
+from taskui.logging_config import setup_logging, get_logger
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 def main(args: Optional[list[str]] = None) -> int:
@@ -34,13 +37,14 @@ def main(args: Optional[list[str]] = None) -> int:
     try:
         app = TaskUI()
         app.run()
+        logger.info("TaskUI application exited normally")
         return 0
     except KeyboardInterrupt:
         # Graceful shutdown on Ctrl+C
-        print("\nTaskUI closed.")
+        logger.info("TaskUI closed by user (Ctrl+C)")
         return 0
     except Exception as e:
-        print(f"Error running TaskUI: {e}", file=sys.stderr)
+        logger.error("Error running TaskUI", exc_info=True)
         return 1
 
 
