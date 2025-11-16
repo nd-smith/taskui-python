@@ -41,8 +41,11 @@ class ArchiveModal(ModalScreen):
     Displays:
     - Search input for filtering archived tasks
     - List of archived tasks with title and archived date
-    - Restore button for selected task
     - Close button
+
+    Keyboard shortcuts:
+    - R: Restore selected task
+    - Esc: Close modal
 
     Messages:
         TaskRestored: Emitted when a task is restored (unarchived)
@@ -164,20 +167,6 @@ class ArchiveModal(ModalScreen):
         border: solid {LEVEL_0_COLOR};
     }}
 
-    ArchiveModal Button.restore-button {{
-        border: solid {LEVEL_1_COLOR};
-    }}
-
-    ArchiveModal Button.restore-button:hover {{
-        background: {LEVEL_1_COLOR};
-        color: {BACKGROUND};
-    }}
-
-    ArchiveModal Button.restore-button:disabled {{
-        opacity: 0.5;
-        border: solid {BORDER};
-    }}
-
     ArchiveModal Button.close-button {{
         border: solid {LEVEL_2_COLOR};
     }}
@@ -229,7 +218,7 @@ class ArchiveModal(ModalScreen):
 
             # Info text
             task_count = len(self.all_archived_tasks)
-            info_text = f"{task_count} archived task{'s' if task_count != 1 else ''}"
+            info_text = f"{task_count} archived task{'s' if task_count != 1 else ''} • Press R to restore"
             yield Static(info_text, classes="info-text", id="info-text")
 
             # Task list
@@ -247,15 +236,6 @@ class ArchiveModal(ModalScreen):
 
             # Buttons
             with Container(classes="button-container"):
-                restore_btn = Button(
-                    "Restore [R]",
-                    variant="success",
-                    id="restore-button",
-                    classes="restore-button"
-                )
-                if not self.all_archived_tasks:
-                    restore_btn.disabled = True
-                yield restore_btn
                 yield Button("Close [Esc]", variant="error", id="close-button", classes="close-button")
 
     def _create_list_items(self) -> List[ListItem]:
@@ -336,16 +316,12 @@ class ArchiveModal(ModalScreen):
         total_count = len(self.all_archived_tasks)
         if search_query:
             info_text.update(
-                f"{filtered_count} of {total_count} archived task{'s' if total_count != 1 else ''}"
+                f"{filtered_count} of {total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
             )
         else:
             info_text.update(
-                f"{total_count} archived task{'s' if total_count != 1 else ''}"
+                f"{total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
             )
-
-        # Update restore button state
-        restore_button = self.query_one("#restore-button", Button)
-        restore_button.disabled = len(self.filtered_tasks) == 0
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle task selection in the list view.
@@ -375,9 +351,7 @@ class ArchiveModal(ModalScreen):
         Args:
             event: The button pressed event
         """
-        if event.button.id == "restore-button":
-            self.action_restore()
-        elif event.button.id == "close-button":
+        if event.button.id == "close-button":
             self.action_close()
 
     def action_restore(self) -> None:
