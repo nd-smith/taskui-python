@@ -464,11 +464,17 @@ Implement Space key to toggle task completion with visual feedback.
 - Update task display for completed state
 - Update database
 
+**Logging Requirements:**
+- INFO: Task completion toggled (task_id, new state, timestamp)
+- DEBUG: Completion key press event
+- ERROR: Database update failures with exc_info=True
+
 **Success Criteria:**
 - Space toggles completion
 - Visual feedback (strikethrough, checkmark, opacity)
 - Completion timestamp saved
 - State persists
+- All completion events logged appropriately
 
 ---
 
@@ -482,11 +488,17 @@ Show parent task progress based on child completion.
 - Display "2/5" style indicators
 - Update on child changes
 
+**Logging Requirements:**
+- DEBUG: Progress calculation updates (task_id, completed_count, total_count)
+- DEBUG: Progress display refresh events
+- ERROR: Progress calculation errors with exc_info=True
+
 **Success Criteria:**
 - Parents show child progress
 - Updates in real-time
 - Doesn't auto-complete parents
 - Accurate calculations
+- Progress updates logged at DEBUG level
 
 ---
 
@@ -500,11 +512,18 @@ Implement 'A' key to archive completed tasks.
 - Update task display for archived state
 - Update trash icon percentage
 
+**Logging Requirements:**
+- INFO: Task archived (task_id, archive_timestamp)
+- DEBUG: Archive key press event
+- DEBUG: Trash icon percentage calculations
+- ERROR: Archive operation failures with exc_info=True
+
 **Success Criteria:**
 - 'A' archives completed tasks
 - Archived tasks show with 📦 icon
 - Reduced opacity for archived
 - Trash icon shows percentage and count
+- Archive operations logged appropriately
 
 ---
 
@@ -518,12 +537,19 @@ Implement number keys (1-3) to switch between lists.
 - Update column displays
 - Reset navigation state
 
+**Logging Requirements:**
+- INFO: List switched (from_list_id, to_list_id, list_name)
+- DEBUG: Number key press events
+- DEBUG: Column update and navigation reset events
+- ERROR: List switching failures with exc_info=True
+
 **Success Criteria:**
 - 1-3 keys switch lists
 - Column 1 updates with new list tasks
 - Column 2 clears
 - Selection resets
 - Active list highlighted
+- List switching events logged appropriately
 
 ---
 
@@ -537,11 +563,18 @@ Add Delete/Backspace key to delete selected task.
 - Confirmation dialog (optional)
 - Handle cascade deletion
 
+**Logging Requirements:**
+- INFO: Task deleted (task_id, has_children, cascade_count)
+- DEBUG: Delete key press event
+- DEBUG: Confirmation dialog interactions
+- ERROR: Deletion failures with exc_info=True
+
 **Success Criteria:**
 - Delete key removes task
 - Handles children appropriately
 - Updates UI immediately
 - Maintains selection position
+- All deletion events logged appropriately
 
 ---
 
@@ -557,11 +590,18 @@ Comprehensive error handling throughout the application.
 - Update all services with try/catch
 - Add user-friendly error messages
 
+**Logging Requirements:**
+- ERROR: All caught exceptions with exc_info=True and context
+- INFO: Error recovery attempts and outcomes
+- DEBUG: Error handling flow (try/catch boundaries)
+- CRITICAL: Unrecoverable errors requiring app shutdown
+
 **Success Criteria:**
 - No crashes on errors
 - Clear error messages
 - Database recovery on corruption
 - Graceful degradation
+- All errors logged with full context and stack traces
 
 ---
 
@@ -575,11 +615,19 @@ Import/export functionality for JSON backups.
 - CLI commands for backup/restore
 - Auto-backup on major operations
 
+**Logging Requirements:**
+- INFO: Backup created (file_path, task_count, list_count, size_bytes)
+- INFO: Restore initiated (file_path, validation_status)
+- DEBUG: Backup/restore progress (items_processed, total_items)
+- ERROR: Backup/restore failures with exc_info=True
+- WARNING: Data integrity issues during restore
+
 **Success Criteria:**
 - Can export entire database to JSON
 - Can import from JSON
 - Preserves all relationships
 - Command-line interface works
+- All backup/restore operations logged with progress tracking
 
 ---
 
@@ -594,11 +642,19 @@ Optimize database queries and UI rendering.
 - Implement query caching
 - Lazy loading for large lists
 
+**Logging Requirements:**
+- DEBUG: Query execution times (query_type, duration_ms, row_count)
+- DEBUG: Cache hit/miss events (cache_key, cache_status)
+- INFO: Performance threshold violations (operation, expected_ms, actual_ms)
+- WARNING: Slow operations exceeding performance targets
+- ERROR: Performance-related failures with exc_info=True
+
 **Success Criteria:**
 - <50ms navigation response
 - <100ms task creation
 - Handles 1000+ tasks smoothly
 - Memory usage stays low
+- Performance metrics logged for analysis and optimization
 
 ---
 
@@ -612,11 +668,18 @@ Implement settings management with .env support.
 - `.env.example`
 - Update app to use config
 
+**Logging Requirements:**
+- INFO: Configuration loaded (source, settings_count)
+- DEBUG: Individual setting values (key, value, source)
+- WARNING: Missing or invalid configuration values (using defaults)
+- ERROR: Configuration load failures with exc_info=True
+
 **Success Criteria:**
 - Settings load from .env
 - Defaults work without .env
 - Can configure all key settings
 - Settings documented
+- Configuration loading and validation logged
 
 ---
 
@@ -631,11 +694,18 @@ Complete test coverage for all components.
 - Integration tests
 - Performance benchmarks
 
+**Logging Requirements:**
+- DEBUG: Test execution flow (test_name, status, duration)
+- INFO: Test suite summary (total_tests, passed, failed, coverage_percent)
+- ERROR: Test failures with exc_info=True
+- WARNING: Coverage gaps or performance test failures
+
 **Success Criteria:**
 - >80% code coverage
 - All critical paths tested
 - UI snapshot tests pass
 - Performance benchmarks met
+- Test execution and results logged appropriately
 
 ---
 
@@ -652,11 +722,20 @@ Implement thermal printer integration via Raspberry Pi.
 - 'P' key handler
 - Mock printer for testing
 
+**Logging Requirements:**
+- INFO: Print job initiated (column, task_count, printer_address)
+- INFO: Print job completed (job_id, duration_ms, status)
+- DEBUG: Print key press event
+- DEBUG: Printer communication (connection, data_sent, response)
+- WARNING: Printer offline or connection issues
+- ERROR: Print failures with exc_info=True
+
 **Success Criteria:**
 - 'P' prints current column
 - Proper receipt formatting
 - Handles printer offline
 - Network communication works
+- All print operations and printer communication logged
 
 ---
 
@@ -670,11 +749,19 @@ Create standalone executable distribution.
 - Build scripts
 - Distribution documentation
 
+**Logging Requirements:**
+- INFO: Build process initiated (platform, build_mode, version)
+- INFO: Build completed (output_path, size_bytes, duration)
+- DEBUG: Build steps (collecting_dependencies, bundling, compressing)
+- WARNING: Build warnings (missing_files, size_exceeded)
+- ERROR: Build failures with exc_info=True
+
 **Success Criteria:**
 - Single executable builds
 - Runs on target platforms
 - Includes all resources
 - <50MB file size
+- Build process and outcomes logged
 
 ---
 
@@ -688,11 +775,18 @@ Add command-line arguments and operations.
 - Add Typer CLI commands
 - Help documentation
 
+**Logging Requirements:**
+- INFO: CLI command executed (command, arguments)
+- DEBUG: Command argument parsing (arg_name, arg_value)
+- DEBUG: Command execution flow
+- ERROR: Invalid arguments or command failures with exc_info=True
+
 **Success Criteria:**
 - --help shows usage
 - Can specify database path
 - Backup/restore commands work
 - Version command works
+- All CLI operations logged with arguments
 
 ---
 
@@ -706,11 +800,18 @@ Add in-app help panel (press '?').
 - Help text content
 - '?' key handler
 
+**Logging Requirements:**
+- DEBUG: Help panel opened
+- DEBUG: Help panel closed
+- DEBUG: Help key press event
+- ERROR: Help panel display failures with exc_info=True
+
 **Success Criteria:**
 - '?' shows help overlay
 - Lists all keyboard shortcuts
 - Escape closes help
 - Well-formatted display
+- Help panel interactions logged
 
 ---
 
