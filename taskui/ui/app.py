@@ -183,10 +183,9 @@ class TaskUI(App):
     # ==============================================================================
 
     def on_key(self, event: Key) -> None:
-        """Handle key events to manage tab navigation in main app vs modals.
+        """Handle tab navigation in main app vs modals.
 
-        Intercepts tab and shift+tab keys to provide direct column navigation
-        in the main app, while allowing normal form field navigation in modals.
+        Provides column navigation in main app, form navigation in modals.
 
         Args:
             event: The key event
@@ -249,10 +248,9 @@ class TaskUI(App):
     # ==============================================================================
 
     async def _ensure_default_list(self) -> None:
-        """Ensure that default lists (Work, Home, Personal) exist in the database.
+        """Ensure default lists (Work, Home, Personal) exist in the database.
 
-        Creates default lists if they don't exist. This supports the MVP
-        requirement for data persistence and app state restoration.
+        Creates default lists if they don't exist.
         """
         if not self._db_manager:
             return
@@ -291,14 +289,12 @@ class TaskUI(App):
         Returns:
             Flat list of tasks with parents followed by their children
         """
-        # Get top-level tasks
         top_level_tasks = await task_service.get_tasks_for_list(list_id, include_archived)
 
         # Build flat list with children
         tasks_with_children = []
         for parent in top_level_tasks:
             tasks_with_children.append(parent)
-            # Get children of this parent
             children = await task_service.get_children(parent.id, include_archived)
             tasks_with_children.extend(children)
 
@@ -384,10 +380,8 @@ class TaskUI(App):
         # Determine the column context for nesting rules
         nesting_column = self._get_nesting_column_from_id(self._focused_column_id)
 
-        # Get the currently selected task (if any)
         selected_task = column.get_selected_task()
 
-        # Show the modal
         modal = TaskCreationModal(
             mode="create_sibling",
             parent_task=selected_task,
@@ -405,7 +399,6 @@ class TaskUI(App):
         if not column:
             return
 
-        # Get the currently selected task
         selected_task = column.get_selected_task()
         if not selected_task:
             # Can't create a child without a parent selected
@@ -414,7 +407,6 @@ class TaskUI(App):
         # Determine the column context for nesting rules
         nesting_column = self._get_nesting_column_from_id(self._focused_column_id)
 
-        # Show the modal
         modal = TaskCreationModal(
             mode="create_child",
             parent_task=selected_task,
@@ -449,7 +441,6 @@ class TaskUI(App):
         Args:
             message: TaskCreated message containing task data
         """
-        # Extract the task data from message
         title = message.title
         notes = message.notes
         mode = message.mode
@@ -480,7 +471,6 @@ class TaskUI(App):
         Args:
             message: TaskCancelled message
         """
-        # Nothing to do when task creation is cancelled
         pass
 
     async def _handle_edit_task(self, task_id: UUID, title: str, notes: Optional[str]) -> None:
@@ -497,14 +487,9 @@ class TaskUI(App):
         try:
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
-                # Update the task
                 await task_service.update_task(task_id, title=title, notes=notes)
-                # Session context manager will auto-commit
 
-            # Notify user of successful edit
             self.notify(f"✓ Task updated: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
-
-            # Refresh UI to show the updated task
             await self._refresh_ui_after_task_change()
         except Exception as e:
             logger.error("Error updating task", exc_info=True)
@@ -554,9 +539,7 @@ class TaskUI(App):
                         column=column,
                         notes=notes
                     )
-                # Session context manager will auto-commit
 
-            # Notify user of successful creation
             self.notify(f"✓ Task created: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
         except Exception as e:
@@ -591,9 +574,7 @@ class TaskUI(App):
                     column=column,
                     notes=notes
                 )
-                # Session context manager will auto-commit
 
-            # Notify user of successful creation
             self.notify(f"✓ Subtask created: {title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
         except Exception as e:
@@ -628,11 +609,9 @@ class TaskUI(App):
                 await self._update_column2_for_selection(selected_task)
 
     async def _refresh_list_bar_for_list(self, list_id: UUID) -> None:
-        """Refresh only the specific list that changed in the list bar.
+        """Refresh the specific list in the list bar.
 
-        This method reloads only the affected list from the database with its current
-        task counts and completion percentage, then updates the list bar display.
-        Much more efficient than reloading all lists.
+        Reloads the affected list with current task counts and completion percentage.
 
         Args:
             list_id: UUID of the list to refresh
@@ -666,34 +645,14 @@ class TaskUI(App):
         self,
         clear_detail_panel: bool = False
     ) -> None:
-        """Standardized UI refresh after task modifications.
-        
-        This method handles the common pattern of refreshing all visible UI
-        components after any task operation to ensure consistency and prevent
-        bugs from forgotten refreshes.
-        
-        Always refreshes all visible columns to ensure UI consistency. The 
-        TaskColumn.set_tasks() optimization prevents unnecessary re-renders
-        when data is unchanged, so the performance cost of "over-refreshing"
-        is minimal (~2-4% extra queries, zero UI re-render overhead).
-        
-        This approach prioritizes:
-        - Bug prevention over micro-optimization
-        - Code simplicity over conditional complexity
-        - Consistent UX over selective updates
-        
+        """Refresh all UI components after task modifications.
+
+        Refreshes Column 1, Column 2 (if parent selected), detail panel,
+        and list bar. Uses set_tasks() optimization to prevent unnecessary
+        re-renders.
+
         Args:
-            clear_detail_panel: If True, clears Column 3 detail panel
-                               (useful after archiving/deleting tasks)
-        
-        Usage:
-            # After any task modification
-            await task_service.create_task(...)
-            await self._refresh_ui_after_task_change()
-            
-            # After archiving
-            await task_service.archive_task(...)
-            await self._refresh_ui_after_task_change(clear_detail_panel=True)
+            clear_detail_panel: Clear Column 3 after archiving/deleting
         """
         logger.debug(
             f"UI refresh: Refreshing all visible columns "
@@ -788,7 +747,6 @@ class TaskUI(App):
                 task_service = TaskService(session)
                 # Toggle the task completion status
                 await task_service.toggle_completion(selected_task.id)
-                # Session context manager will auto-commit
 
             # Determine completion status for notification
             completion_status = "completed" if not selected_task.is_completed else "reopened"
@@ -844,7 +802,6 @@ class TaskUI(App):
                 task_service = TaskService(session)
                 # Archive the task
                 await task_service.archive_task(selected_task.id)
-                # Session context manager will auto-commit
 
             # Notify user of successful archive
             self.notify(f"📦 Task archived: {selected_task.title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]}...", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
@@ -904,7 +861,6 @@ class TaskUI(App):
                 task_service = TaskService(session)
                 # Unarchive (restore) the task
                 restored_task = await task_service.unarchive_task(message.task_id)
-                # Session context manager will auto-commit
 
             logger.info(f"Task restored: {restored_task.title[:50]}")
 
@@ -1005,16 +961,13 @@ class TaskUI(App):
     # Message handlers
 
     async def on_task_column_task_selected(self, message: TaskColumn.TaskSelected) -> None:
-        """Handle task selection in columns to update Column 2 and Column 3.
+        """Handle task selection to update Column 2 and Column 3.
 
-        When a task is selected in Column 1, Column 2 updates to show
-        the children of that task with context-relative levels.
-        Column 3 is always updated to show details of the selected task.
+        Column 2 shows children (if selected in Column 1), Column 3 shows details.
 
         Args:
             message: TaskSelected message containing the selected task
         """
-        # Get the columns
         column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
         column3 = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
 
@@ -1155,16 +1108,13 @@ class TaskUI(App):
     async def on_list_bar_list_selected(self, message: ListBar.ListSelected) -> None:
         """Handle list selection from the list bar.
 
-        When a list is selected, Column 1 updates to show tasks from that list,
-        and Column 2 is cleared since no task is selected yet.
+        Updates Column 1 with list tasks, clears Column 2.
 
         Args:
             message: ListSelected message containing the selected list info
         """
-        # Update the current list ID
         self._current_list_id = message.list_id
 
-        # Get the columns
         column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
         column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
 
