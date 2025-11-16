@@ -60,16 +60,6 @@ class TaskColumn(Widget):
         border: thick {LEVEL_0_COLOR};
     }}
 
-    TaskColumn .column-header {{
-        width: 100%;
-        height: 1;
-        background: {SELECTION};
-        color: {FOREGROUND};
-        text-align: center;
-        border-bottom: solid {BORDER};
-        padding: 0 1;
-    }}
-
     TaskColumn .column-content {{
         width: 100%;
         height: 1fr;
@@ -118,9 +108,6 @@ class TaskColumn(Widget):
         Yields:
             Widgets that make up the column
         """
-        # Header
-        yield Static(self.header_title, classes="column-header", id=f"{self.column_id}-header")
-
         # Scrollable content area
         with VerticalScroll(classes="column-content", id=f"{self.column_id}-content"):
             yield Static(self.empty_message, classes="empty-message", id=f"{self.column_id}-empty")
@@ -299,10 +286,13 @@ class TaskColumn(Widget):
 
         Args:
             title: New header title
+
+        Note:
+            This method is a no-op since column headers have been removed.
+            Kept for backward compatibility.
         """
         self.header_title = title
-        header = self.query_one(f"#{self.column_id}-header", Static)
-        header.update(title)
+        # No-op: headers removed for space efficiency
 
     def navigate_up(self) -> None:
         """Navigate to the previous task in the list."""
