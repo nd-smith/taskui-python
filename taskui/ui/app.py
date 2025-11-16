@@ -8,6 +8,7 @@ This module contains the main TaskUI application with three-column layout:
 
 from typing import Optional, Any, List
 from uuid import UUID
+import asyncio
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -173,24 +174,10 @@ class TaskUI(App):
         self._db_manager = get_database_manager()
         await self._db_manager.initialize()
 
-        # Ensure default list exists and load initial state
+        # Ensure default list exists
+        # Note: _ensure_default_list() updates the ListBar which triggers
+        # on_list_bar_list_selected event, which loads tasks and sets focus
         await self._ensure_default_list()
-        await self._restore_app_state()
-
-        # Set initial focus to Column 1 (first column, leftmost)
-        self._set_column_focus(COLUMN_1_ID)
-        
-        # Explicitly trigger selection on column 1 after everything is loaded
-        def ensure_column1_selection():
-            try:
-                column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-                if column1._tasks and column1._selected_index >= 0:
-                    column1._update_selection(column1._selected_index)
-            except Exception as e:
-                # If it fails, try again after another refresh
-                self.call_after_refresh(ensure_column1_selection)
-        
-        self.call_after_refresh(ensure_column1_selection)
 
     async def _ensure_default_list(self) -> None:
         """Ensure that default lists (Work, Home, Personal) exist in the database.
@@ -248,7 +235,9 @@ class TaskUI(App):
                 )
 
             # Set tasks in Column 1
+            print(f"[DEBUG] _restore_app_state: Loading {len(tasks)} tasks into Column 1")
             column1.set_tasks(tasks)
+            print(f"[DEBUG] _restore_app_state: set_tasks completed")
 
         except Exception as e:
             # Log error but don't crash the app
@@ -445,6 +434,11 @@ class TaskUI(App):
                 selected_task = focused_column.get_selected_task()
                 if selected_task:
                     await self._update_column2_for_selection(selected_task)
+
+            # If we created a task in Column 2, also refresh Column 1 to update descendant counts
+            elif focused_column.column_id == COLUMN_2_ID:
+                column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+                await self._refresh_column_tasks(column1)
 
         # Refresh the list bar to update completion percentage (only for current list)
         if self._current_list_id:
@@ -855,6 +849,21 @@ class TaskUI(App):
                 task_service = TaskService(session)
                 # Get all descendants (children, grandchildren, etc.)
                 descendants = await task_service.get_all_descendants(parent_id, include_archived=False)
+
+                # Debug logging
+                from datetime import datetime
+                try:
+                    import os
+                    debug_dir = "debug"
+                    os.makedirs(debug_dir, exist_ok=True)
+                    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    with open(f"{debug_dir}/app_debug.log", "a") as f:
+                        f.write(f"[{timestamp}] _get_task_children({parent_id}): fetched {len(descendants)} descendants\n")
+                        for task in descendants:
+                            f.write(f"  - {task.title} (id={task.id}, parent_id={task.parent_id})\n")
+                except Exception:
+                    pass
+
                 return descendants
         except Exception as e:
             # TODO: Add proper error handling in Phase 3
@@ -918,6 +927,9 @@ class TaskUI(App):
                         include_archived=False
                     )
                     column1.set_tasks(tasks)
+                    # Note: set_tasks() now handles triggering selection automatically
+                    # when the column is focused, so no manual trigger needed
+
             except Exception as e:
                 # TODO: Add proper error handling in Phase 3
                 print(f"Error loading tasks for list: {e}")

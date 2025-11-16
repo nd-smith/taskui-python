@@ -139,3 +139,7 @@ taskui.db
 *.db-journal
 backup/
 *.backup
+
+# Debug logs
+debug/
+taskui/debug/
