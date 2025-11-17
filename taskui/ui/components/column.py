@@ -232,69 +232,45 @@ class TaskColumn(Widget):
             logger.debug(f"{self.column_id}: Container not ready - {e}")
             return
 
+        # Handle empty state
         if not self._tasks:
-            # Clear all existing task items
             existing_items = list(content_container.query(TaskItem))
             for widget in existing_items:
                 try:
                     widget.remove()
                 except Exception:
                     pass
-            # Show empty message
             empty_message.display = True
             return
 
-        # Hide empty message
         empty_message.display = False
 
-        # Clear all existing widgets to ensure correct order
+        # Group tasks and create items
+        parent_groups = self._group_tasks_by_parent(self._tasks)
+        task_items = self._create_task_items(self._tasks, parent_groups, self._selected_index)
+
+        # Mount widgets
         existing_items = list(content_container.query(TaskItem))
-        logger.debug(f"{self.column_id}: Clearing {len(existing_items)} existing widgets")
-
         if existing_items:
-            # Remove all TaskItem children
             content_container.remove_children(TaskItem)
-
-            # Defer mounting until after removal completes
-            def mount_widgets():
-                logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
-
-                # Group tasks by parent to determine last child status
-                parent_groups = self._group_tasks_by_parent(self._tasks)
-
-                # Create task items
-                task_items = self._create_task_items(self._tasks, parent_groups, self._selected_index)
-
-                # Mount all task items
-                for task_item in task_items:
-                    try:
-                        content_container.mount(task_item)
-                    except Exception as e:
-                        # This shouldn't happen with fresh widget creation
-                        logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
-
-                logger.debug(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
-
-            self.call_after_refresh(mount_widgets)
+            self.call_after_refresh(lambda: self._mount_task_items(content_container, task_items))
         else:
-            # No existing widgets, mount directly
-            logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
+            self._mount_task_items(content_container, task_items)
 
-            # Group tasks by parent to determine last child status
-            parent_groups = self._group_tasks_by_parent(self._tasks)
+    def _mount_task_items(self, container: VerticalScroll, task_items: List[TaskItem]) -> None:
+        """Mount task items in container.
 
-            # Create task items
-            task_items = self._create_task_items(self._tasks, parent_groups, self._selected_index)
-
-            # Mount all task items
-            for task_item in task_items:
-                try:
-                    content_container.mount(task_item)
-                except Exception as e:
-                    # This shouldn't happen with fresh widget creation
-                    logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
-
-            logger.debug(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
+        Args:
+            container: Container to mount items in
+            task_items: List of TaskItem widgets to mount
+        """
+        logger.debug(f"{self.column_id}: Mounting {len(task_items)} task items")
+        for task_item in task_items:
+            try:
+                container.mount(task_item)
+            except Exception as e:
+                logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
+        logger.debug(f"{self.column_id}: Mounting completed")
 
     def update_header(self, title: str) -> None:
         """Update the column header title.
