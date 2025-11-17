@@ -58,6 +58,10 @@ class TaskService:
         """
         self.session = session
 
+    # ==============================================================================
+    # CONVERSION HELPERS
+    # ==============================================================================
+
     @staticmethod
     def _orm_to_pydantic(task_orm: TaskORM) -> Task:
         """
@@ -109,6 +113,10 @@ class TaskService:
             completed_at=task.completed_at,
             archived_at=task.archived_at,
         )
+
+    # ==============================================================================
+    # VALIDATION HELPERS
+    # ==============================================================================
 
     async def _verify_list_exists(self, list_id: UUID) -> None:
         """
@@ -173,6 +181,10 @@ class TaskService:
             return 0
 
         return max(task.position for task in siblings) + 1
+
+    # ==============================================================================
+    # CREATE OPERATIONS
+    # ==============================================================================
 
     async def create_task(
         self,
@@ -302,6 +314,10 @@ class TaskService:
             logger.error(f"Failed to create child task: {e}", exc_info=True)
             raise
 
+    # ==============================================================================
+    # READ OPERATIONS
+    # ==============================================================================
+
     async def get_tasks_for_list(self, list_id: UUID, include_archived: bool = False) -> List[Task]:
         """
         Get all top-level tasks (level 0) for a task list.
@@ -319,33 +335,25 @@ class TaskService:
         # Verify list exists
         await self._verify_list_exists(list_id)
 
-        # Build query
-        query = select(TaskORM).where(
-            TaskORM.list_id == str(list_id),
-            TaskORM.parent_id.is_(None),  # Only top-level tasks
-        )
-
-        if not include_archived:
-            query = query.where(TaskORM.is_archived == False)
-
-        query = query.order_by(TaskORM.position)
+        # Build query using helper
+        if include_archived:
+            # Build query manually when including archived
+            query = (
+                select(TaskORM)
+                .where(TaskORM.list_id == str(list_id))
+                .where(TaskORM.parent_id.is_(None))
+                .order_by(TaskORM.position)
+            )
+        else:
+            # Use helper for active tasks only
+            query = self._query_top_level_tasks(list_id)
 
         # Execute query
         result = await self.session.execute(query)
         task_orms = result.scalars().all()
 
-        # Convert to Pydantic and update child counts
-        tasks = []
-        for task_orm in task_orms:
-            task = self._orm_to_pydantic(task_orm)
-
-            # Get child counts
-            child_count, completed_child_count = await self._get_child_counts(task.id)
-            task.update_child_counts(child_count, completed_child_count)
-
-            tasks.append(task)
-
-        return tasks
+        # Convert to Pydantic with counts using helper
+        return await self._fetch_tasks_with_counts(task_orms)
 
     async def get_children(self, parent_id: UUID, include_archived: bool = False) -> List[Task]:
         """
@@ -426,6 +434,10 @@ class TaskService:
 
         return descendants
 
+    # ==============================================================================
+    # COUNTING HELPERS
+    # ==============================================================================
+
     async def _get_child_counts(self, parent_id: UUID) -> tuple[int, int]:
         """
         Get the total and completed child counts for a task.
@@ -502,6 +514,10 @@ class TaskService:
             tasks.append(task)
         return tasks
 
+    # ==============================================================================
+    # QUERY HELPERS
+    # ==============================================================================
+
     def _query_active_tasks(self, list_id: UUID):
         """
         Build query for active (non-archived) tasks in a list.
@@ -577,6 +593,10 @@ class TaskService:
 
         return task
 
+    # ==============================================================================
+    # UPDATE OPERATIONS
+    # ==============================================================================
+
     async def update_task(
         self,
         task_id: UUID,
@@ -632,6 +652,10 @@ class TaskService:
             logger.error(f"Failed to update task {task_id}: {e}", exc_info=True)
             raise
 
+    # ==============================================================================
+    # DELETE/ARCHIVE OPERATIONS
+    # ==============================================================================
+
     async def delete_task(self, task_id: UUID) -> None:
         """
         Delete a task and all its descendants (cascade delete).
@@ -675,6 +699,10 @@ class TaskService:
         except Exception as e:
             logger.error(f"Failed to delete task {task_id}: {e}", exc_info=True)
             raise
+
+    # ==============================================================================
+    # HIERARCHY OPERATIONS
+    # ==============================================================================
 
     async def move_task(
         self,
