@@ -172,8 +172,67 @@ class TaskColumn(Widget):
                     pass
             self.call_after_refresh(trigger_selection)
 
+    def _group_tasks_by_parent(self, tasks: List[Task]) -> dict:
+        """Group tasks by parent ID for hierarchy visualization.
+
+        Args:
+            tasks: List of tasks to group
+
+        Returns:
+            Dictionary mapping parent_id (or "root") to list of children
+        """
+        parent_groups = {}
+        for task in tasks:
+            parent_id = task.parent_id or "root"
+            if parent_id not in parent_groups:
+                parent_groups[parent_id] = []
+            parent_groups[parent_id].append(task)
+        return parent_groups
+
+    def _create_task_items(
+        self,
+        tasks: List[Task],
+        parent_groups: dict,
+        selected_index: int
+    ) -> List[TaskItem]:
+        """Create TaskItem widgets for a list of tasks.
+
+        Args:
+            tasks: Tasks to create items for
+            parent_groups: Parent grouping for last-child detection
+            selected_index: Currently selected task index
+
+        Returns:
+            List of TaskItem widgets ready to mount
+        """
+        task_items = []
+        for i, task in enumerate(tasks):
+            parent_id = task.parent_id or "root"
+            siblings = parent_groups[parent_id]
+            is_last_child = task == siblings[-1] if siblings else False
+
+            task_item = TaskItem(
+                task=task,
+                is_last_child=is_last_child,
+                id=f"task-{task.id}"
+            )
+            task_item.selected = (i == selected_index)
+            task_items.append(task_item)
+
+        return task_items
+
     def _render_tasks(self) -> None:
-        """Render the task list with TaskItem widgets."""
+        """Render the task list with TaskItem widgets.
+
+        This method updates the visual display by:
+        - Grouping tasks by parent for hierarchy visualization
+        - Creating TaskItem widgets for each task
+        - Mounting the widgets in the scrollable container
+        - Managing the empty state message display
+
+        Returns:
+            None
+        """
         logger.debug(f"{self.column_id}: _render_tasks() called with {len(self._tasks)} tasks")
         try:
             content_container = self.query_one(f"#{self.column_id}-content", VerticalScroll)
@@ -183,103 +242,45 @@ class TaskColumn(Widget):
             logger.debug(f"{self.column_id}: Container not ready - {e}")
             return
 
+        # Handle empty state
         if not self._tasks:
-            # Clear all existing task items
             existing_items = list(content_container.query(TaskItem))
             for widget in existing_items:
                 try:
                     widget.remove()
                 except Exception:
                     pass
-            # Show empty message
             empty_message.display = True
             return
 
-        # Hide empty message
         empty_message.display = False
 
-        # Clear all existing widgets to ensure correct order
+        # Group tasks and create items
+        parent_groups = self._group_tasks_by_parent(self._tasks)
+        task_items = self._create_task_items(self._tasks, parent_groups, self._selected_index)
+
+        # Mount widgets
         existing_items = list(content_container.query(TaskItem))
-        logger.debug(f"{self.column_id}: Clearing {len(existing_items)} existing widgets")
-
         if existing_items:
-            # Remove all TaskItem children
             content_container.remove_children(TaskItem)
-
-            # Defer mounting until after removal completes
-            def mount_widgets():
-                logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
-
-                # Group tasks by parent to determine last child status
-                parent_groups = {}
-                for task in self._tasks:
-                    parent_id = task.parent_id or "root"
-                    if parent_id not in parent_groups:
-                        parent_groups[parent_id] = []
-                    parent_groups[parent_id].append(task)
-
-                # Render all tasks in correct order
-                for i, task in enumerate(self._tasks):
-                    # Determine if this is the last child in its parent group
-                    parent_id = task.parent_id or "root"
-                    siblings = parent_groups[parent_id]
-                    is_last_child = task == siblings[-1] if siblings else False
-
-                    task_id = f"task-{task.id}"
-
-                    # Create and mount task item
-                    task_item = TaskItem(
-                        task=task,
-                        is_last_child=is_last_child,
-                        id=task_id
-                    )
-                    task_item.selected = (i == self._selected_index)
-
-                    try:
-                        content_container.mount(task_item)
-                    except Exception as e:
-                        # This shouldn't happen with fresh widget creation
-                        logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
-
-                logger.debug(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
-
-            self.call_after_refresh(mount_widgets)
+            self.call_after_refresh(lambda: self._mount_task_items(content_container, task_items))
         else:
-            # No existing widgets, mount directly
-            logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
+            self._mount_task_items(content_container, task_items)
 
-            # Group tasks by parent to determine last child status
-            parent_groups = {}
-            for task in self._tasks:
-                parent_id = task.parent_id or "root"
-                if parent_id not in parent_groups:
-                    parent_groups[parent_id] = []
-                parent_groups[parent_id].append(task)
+    def _mount_task_items(self, container: VerticalScroll, task_items: List[TaskItem]) -> None:
+        """Mount task items in container.
 
-            # Render all tasks in correct order
-            for i, task in enumerate(self._tasks):
-                # Determine if this is the last child in its parent group
-                parent_id = task.parent_id or "root"
-                siblings = parent_groups[parent_id]
-                is_last_child = task == siblings[-1] if siblings else False
-
-                task_id = f"task-{task.id}"
-
-                # Create and mount task item
-                task_item = TaskItem(
-                    task=task,
-                    is_last_child=is_last_child,
-                    id=task_id
-                )
-                task_item.selected = (i == self._selected_index)
-
-                try:
-                    content_container.mount(task_item)
-                except Exception as e:
-                    # This shouldn't happen with fresh widget creation
-                    logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
-
-            logger.debug(f"{self.column_id}: _render_tasks() completed, {len(self._tasks)} widgets mounted")
+        Args:
+            container: Container to mount items in
+            task_items: List of TaskItem widgets to mount
+        """
+        logger.debug(f"{self.column_id}: Mounting {len(task_items)} task items")
+        for task_item in task_items:
+            try:
+                container.mount(task_item)
+            except Exception as e:
+                logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
+        logger.debug(f"{self.column_id}: Mounting completed")
 
     def update_header(self, title: str) -> None:
         """Update the column header title.
@@ -295,7 +296,14 @@ class TaskColumn(Widget):
         # No-op: headers removed for space efficiency
 
     def navigate_up(self) -> None:
-        """Navigate to the previous task in the list."""
+        """Navigate to the previous task in the list.
+
+        Moves the selection up by one position if not already at the first task.
+        If a task is selected, updates selection and emits TaskSelected message.
+
+        Returns:
+            None
+        """
         if not self._tasks:
             return
 
@@ -303,7 +311,14 @@ class TaskColumn(Widget):
             self._update_selection(self._selected_index - 1)
 
     def navigate_down(self) -> None:
-        """Navigate to the next task in the list."""
+        """Navigate to the next task in the list.
+
+        Moves the selection down by one position if not already at the last task.
+        If a task is selected, updates selection and emits TaskSelected message.
+
+        Returns:
+            None
+        """
         if not self._tasks:
             return
 
@@ -356,7 +371,14 @@ class TaskColumn(Widget):
         return None
 
     def clear_selection(self) -> None:
-        """Clear the current selection."""
+        """Clear the current selection.
+
+        Deselects the currently selected task item and resets the selection state.
+        Sets selected_index to -1 and selected_task_id to None.
+
+        Returns:
+            None
+        """
         if 0 <= self._selected_index < len(self._tasks):
             task_id = self._tasks[self._selected_index].id
             task_item = self.query_one(f"#task-{task_id}", TaskItem)
@@ -366,7 +388,23 @@ class TaskColumn(Widget):
         self.selected_task_id = None
 
     def on_focus(self) -> None:
-        """Handle focus event - ensure selection is properly activated."""
+        """Handle focus event - ensure selection is properly activated.
+
+        This method is called when the column receives keyboard focus. It:
+        - Updates visual state to show focus (border/styling)
+        - Ensures a valid task selection exists
+        - Handles the retry mechanism for widget mounting
+
+        The retry mechanism (ensure_selection) works as follows:
+        - Verifies that TaskItem widgets are mounted before selecting them
+        - Attempts up to 3 retries with call_after_refresh to wait for widgets
+        - Auto-selects the first task if no selection exists (_selected_index == -1)
+        - Triggers selection for existing selections to emit TaskSelected messages
+        - This is critical for dependent columns (e.g., Column 2 triggering Column 3)
+
+        Returns:
+            None
+        """
         logger.debug(f"{self.column_id}: on_focus() called, {len(self._tasks)} tasks, selected_index={self._selected_index}")
         self.focused = True
         self.add_class("focused")
@@ -413,22 +451,36 @@ class TaskColumn(Widget):
         self.call_after_refresh(ensure_selection)
 
     def on_blur(self) -> None:
-        """Handle blur (unfocus) event."""
+        """Handle blur (unfocus) event.
+
+        Called when the column loses keyboard focus. Updates visual state
+        by removing focus styling (border/highlighting).
+
+        Returns:
+            None
+        """
         self.focused = False
         self.remove_class("focused")
 
     def on_task_item_selected(self, message: TaskItem.Selected) -> None:
         """Handle task item selection from click.
 
+        Updates the column's selection when a TaskItem is clicked.
+        Finds the task by ID and updates selection, then ensures the
+        column regains focus for keyboard navigation.
+
         Args:
-            message: TaskItem.Selected message
+            message: TaskItem.Selected message containing task_id
+
+        Returns:
+            None
         """
         # Find the index of the selected task
         for i, task in enumerate(self._tasks):
             if task.id == message.task_id:
                 self._update_selection(i)
                 break
-        
+
         # Ensure column regains focus to maintain keyboard navigation
         self.focus()
 

@@ -34,7 +34,7 @@ class ListService:
         {"name": "Personal", "id": "00000000-0000-0000-0000-000000000003"},
     ]
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         """
         Initialize the list service.
 
@@ -114,22 +114,7 @@ class ListService:
         )
         list_orms = result.scalars().all()
 
-        task_lists = []
-        for list_orm in list_orms:
-            task_list = TaskList(
-                id=UUID(list_orm.id),
-                name=list_orm.name,
-                created_at=list_orm.created_at
-            )
-
-            # Update counts
-            task_count = await self._get_task_count(UUID(list_orm.id))
-            completed_count = await self._get_completed_count(UUID(list_orm.id))
-            task_list.update_counts(task_count, completed_count)
-
-            task_lists.append(task_list)
-
-        return task_lists
+        return await self._orms_to_pydantic_with_counts(list_orms)
 
     async def get_list_by_id(self, list_id: UUID) -> Optional[TaskList]:
         """
@@ -149,18 +134,7 @@ class ListService:
         if not list_orm:
             return None
 
-        task_list = TaskList(
-            id=UUID(list_orm.id),
-            name=list_orm.name,
-            created_at=list_orm.created_at
-        )
-
-        # Update counts
-        task_count = await self._get_task_count(list_id)
-        completed_count = await self._get_completed_count(list_id)
-        task_list.update_counts(task_count, completed_count)
-
-        return task_list
+        return await self._orm_to_pydantic_with_counts(list_orm)
 
     async def get_list_by_name(self, name: str) -> Optional[TaskList]:
         """
@@ -180,18 +154,7 @@ class ListService:
         if not list_orm:
             return None
 
-        task_list = TaskList(
-            id=UUID(list_orm.id),
-            name=list_orm.name,
-            created_at=list_orm.created_at
-        )
-
-        # Update counts
-        task_count = await self._get_task_count(UUID(list_orm.id))
-        completed_count = await self._get_completed_count(UUID(list_orm.id))
-        task_list.update_counts(task_count, completed_count)
-
-        return task_list
+        return await self._orm_to_pydantic_with_counts(list_orm)
 
     async def update_list(self, list_id: UUID, name: str) -> Optional[TaskList]:
         """
@@ -232,16 +195,7 @@ class ListService:
             await self.session.flush()
 
             # Return updated model
-            task_list = TaskList(
-                id=list_id,
-                name=name,
-                created_at=list_orm.created_at
-            )
-
-            # Update counts
-            task_count = await self._get_task_count(list_id)
-            completed_count = await self._get_completed_count(list_id)
-            task_list.update_counts(task_count, completed_count)
+            task_list = await self._orm_to_pydantic_with_counts(list_orm)
 
             logger.info(f"Updated list: id={list_id}, '{old_name}' → '{name}'")
             return task_list
@@ -324,6 +278,53 @@ class ListService:
         except Exception as e:
             logger.error(f"Failed to ensure default lists: {e}", exc_info=True)
             raise
+
+    async def _orm_to_pydantic_with_counts(
+        self,
+        list_orm: TaskListORM
+    ) -> TaskList:
+        """
+        Convert TaskListORM to Pydantic with counts populated.
+
+        Args:
+            list_orm: SQLAlchemy task list instance
+
+        Returns:
+            Pydantic TaskList with counts
+        """
+        list_id = UUID(list_orm.id)
+
+        task_list = TaskList(
+            id=list_id,
+            name=list_orm.name,
+            created_at=list_orm.created_at
+        )
+
+        # Get counts
+        task_count = await self._get_task_count(list_id)
+        completed_count = await self._get_completed_count(list_id)
+        task_list.update_counts(task_count, completed_count)
+
+        return task_list
+
+    async def _orms_to_pydantic_with_counts(
+        self,
+        list_orms: List[TaskListORM]
+    ) -> List[TaskList]:
+        """
+        Convert list of TaskListORMs to Pydantic with counts.
+
+        Args:
+            list_orms: List of SQLAlchemy task list instances
+
+        Returns:
+            List of Pydantic TaskLists with counts
+        """
+        task_lists = []
+        for list_orm in list_orms:
+            task_list = await self._orm_to_pydantic_with_counts(list_orm)
+            task_lists.append(task_list)
+        return task_lists
 
     async def _get_task_count(self, list_id: UUID) -> int:
         """

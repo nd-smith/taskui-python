@@ -241,8 +241,18 @@ class ArchiveModal(ModalScreen):
     def _create_list_items(self) -> List[ListItem]:
         """Create list items for archived tasks.
 
+        Converts the current filtered_tasks list into ListItem widgets for display
+        in the ListView. Each list item shows:
+        - Task title (truncated to 60 chars if necessary)
+        - Archived date formatted as YYYY-MM-DD HH:MM
+        - Unique ID based on task UUID for selection tracking
+
+        The ListItem ID format "task-<uuid>" is used by on_list_view_selected
+        to map ListView selections back to Task objects.
+
         Returns:
-            List of ListItem widgets for the ListView
+            List of ListItem widgets ready for ListView, or empty list if
+            filtered_tasks is empty
         """
         items = []
         for task in self.filtered_tasks:
@@ -261,7 +271,15 @@ class ArchiveModal(ModalScreen):
         return items
 
     def on_mount(self) -> None:
-        """Called when the modal is mounted."""
+        """Called when the modal is mounted.
+
+        Handles initial focus and selection:
+        - If archived tasks exist: Focus the task list and select the first task
+        - If no archived tasks: Focus the search input field
+        - Falls back gracefully if task list is unavailable
+
+        Logs the number of archived tasks for debugging purposes.
+        """
         logger.info(f"Archive modal opened with {len(self.all_archived_tasks)} archived tasks")
 
         # Focus the task list if there are tasks, otherwise focus search input
@@ -282,20 +300,114 @@ class ArchiveModal(ModalScreen):
             search_input.focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Handle search input changes.
+        """Handle search input changes and trigger task filtering.
+
+        This is the entry point for the search/filter functionality. When the user
+        types in the search input field, this method:
+        1. Validates that the event is from the search input
+        2. Normalizes the search query (strips whitespace, converts to lowercase)
+        3. Triggers task filtering via _filter_tasks
 
         Args:
-            event: The input changed event
+            event: The Input.Changed event containing the new search value
         """
         if event.input.id == "search-input":
             search_query = event.value.strip().lower()
             self._filter_tasks(search_query)
 
+    def _update_task_list_view(self, search_query: str = "") -> None:
+        """Update the task list view based on current filtered tasks.
+
+        This is a key helper method that manages the task list widget lifecycle.
+        It handles two scenarios:
+
+        1. When filtered_tasks is not empty:
+           - Recreates the ListView with filtered tasks
+           - Mounts it in the task list container
+           - Automatically selects the first task
+           - Focuses the list view for keyboard navigation
+
+        2. When filtered_tasks is empty:
+           - Displays an empty state message
+           - Clears selected task
+
+        Always updates the info text to reflect current filter state.
+
+        Args:
+            search_query: Current search query used for info text display.
+                         Empty string indicates no active filter.
+        """
+        list_container = self.query_one(".task-list-container")
+        list_container.remove_children()
+
+        if self.filtered_tasks:
+            list_view = ListView(
+                *self._create_list_items(),
+                id="task-list"
+            )
+            list_container.mount(list_view)
+            list_view.focus()
+            self.selected_task = self.filtered_tasks[0]
+        else:
+            empty_msg = Static(
+                "No matching tasks\n\nTry a different search term",
+                classes="empty-message"
+            )
+            list_container.mount(empty_msg)
+            self.selected_task = None
+
+        self._update_info_text(search_query)
+
+    def _update_info_text(self, search_query: str = "") -> None:
+        """Update the info text based on current filter state.
+
+        This helper method updates the status bar text to reflect:
+        - When no filter is active: Shows total number of archived tasks
+        - When a filter is active: Shows filtered count and total count
+
+        The info text also includes a reminder about the restore keyboard shortcut.
+        Handles proper pluralization for task count display.
+
+        Args:
+            search_query: Current search query string. If empty, shows total count only.
+                         If non-empty, shows filtered count vs total count.
+        """
+        info_text = self.query_one("#info-text", Static)
+        filtered_count = len(self.filtered_tasks)
+        total_count = len(self.all_archived_tasks)
+
+        plural = 's' if total_count != 1 else ''
+
+        if search_query:
+            info_text.update(
+                f"{filtered_count} of {total_count} archived task{plural} • Press R to restore"
+            )
+        else:
+            info_text.update(
+                f"{total_count} archived task{plural} • Press R to restore"
+            )
+
     def _filter_tasks(self, search_query: str) -> None:
         """Filter tasks based on search query.
 
+        This is the core search filtering logic that implements incremental filtering
+        as the user types. The search:
+        - Is case-insensitive (query is already lowercased by caller)
+        - Searches across task titles and notes fields
+        - Returns all tasks if query is empty
+        - Supports partial/substring matching
+
+        Search behavior:
+        - Empty query: Returns all archived tasks
+        - Non-empty query: Returns tasks where the query appears in either:
+          1. Task title (substring match)
+          2. Task notes/description (substring match, if notes exist)
+
+        After filtering, automatically updates the task list view and info text.
+
         Args:
-            search_query: The search string (case-insensitive)
+            search_query: The normalized search string (already lowercase, whitespace trimmed).
+                         Empty string means no filter applied.
         """
         if not search_query:
             self.filtered_tasks = self.all_archived_tasks
@@ -306,44 +418,24 @@ class ArchiveModal(ModalScreen):
                    (task.notes and search_query in task.notes.lower())
             ]
 
-        # Update the task list
-        list_container = self.query_one(".task-list-container")
-        list_container.remove_children()
-
-        if self.filtered_tasks:
-            list_view = ListView(
-                *self._create_list_items(),
-                id="task-list"
-            )
-            list_container.mount(list_view)
-            # Focus the new list view and select first task
-            list_view.focus()
-            self.selected_task = self.filtered_tasks[0] if self.filtered_tasks else None
-        else:
-            empty_msg = Static(
-                "No matching tasks\n\nTry a different search term",
-                classes="empty-message"
-            )
-            list_container.mount(empty_msg)
-
-        # Update info text
-        info_text = self.query_one("#info-text", Static)
-        filtered_count = len(self.filtered_tasks)
-        total_count = len(self.all_archived_tasks)
-        if search_query:
-            info_text.update(
-                f"{filtered_count} of {total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
-            )
-        else:
-            info_text.update(
-                f"{total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
-            )
+        self._update_task_list_view(search_query)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle task selection in the list view.
 
+        When a user selects a task in the ListView, this method:
+        1. Extracts the task UUID from the ListItem's ID (format: "task-<uuid>")
+        2. Parses the UUID from the string representation
+        3. Finds the corresponding Task object in filtered_tasks
+        4. Updates self.selected_task for use by restore action
+        5. Logs the selection for debugging
+
+        Handles errors gracefully:
+        - Invalid UUID format: Logs error and clears selection
+        - Missing task: Sets selected_task to None if not found
+
         Args:
-            event: The list view selected event
+            event: The ListView.Selected event containing the selected ListItem
         """
         # Extract task ID from ListItem ID
         item_id = event.item.id
@@ -364,14 +456,38 @@ class ArchiveModal(ModalScreen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events.
 
+        Routes button presses to appropriate action handlers:
+        - Close button (id="close-button"): Triggers action_close
+
         Args:
-            event: The button pressed event
+            event: The Button.Pressed event containing the button that was pressed
         """
         if event.button.id == "close-button":
             self.action_close()
 
     def action_restore(self) -> None:
-        """Restore (unarchive) the selected task."""
+        """Restore (unarchive) the selected task.
+
+        This method implements the restore functionality triggered by:
+        - Pressing the R key (keyboard shortcut)
+        - User selection via list navigation
+
+        The restore process:
+        1. Verifies a task is selected (from self.selected_task or ListView index)
+        2. Logs the restore action for audit trail
+        3. Emits a TaskRestored message with the task UUID
+        4. Dismisses the modal (parent app handles actual unarchiving)
+
+        Error handling:
+        - If no task is selected: Logs debug message and returns without action
+        - If ListView query fails: Gracefully falls back to self.selected_task
+
+        The actual unarchiving is handled by the parent component listening to
+        the TaskRestored message, allowing this modal to stay independent.
+
+        Returns:
+            None. Raises no exceptions; handles missing selection gracefully.
+        """
         # Get the selected task from ListView if not already set
         if not self.selected_task and self.filtered_tasks:
             try:
@@ -394,7 +510,20 @@ class ArchiveModal(ModalScreen):
         self.dismiss()
 
     def action_close(self) -> None:
-        """Close the archive modal."""
+        """Close the archive modal.
+
+        Triggered by:
+        - Pressing Escape key
+        - Clicking the Close button
+
+        This method:
+        1. Logs the close action
+        2. Posts an ArchiveClosed message for parent component notification
+        3. Dismisses the modal from the screen
+
+        The parent component can listen to ArchiveClosed to perform cleanup
+        if needed.
+        """
         logger.info("Archive modal closed")
         # Post ArchiveClosed message
         self.post_message(self.ArchiveClosed())
@@ -402,7 +531,16 @@ class ArchiveModal(ModalScreen):
         self.dismiss()
 
     class TaskRestored(Message):
-        """Message emitted when a task is restored."""
+        """Message emitted when a task is restored.
+
+        This message is posted when the user selects a task and presses R,
+        or when the restore action is triggered. The parent component should
+        listen to this message and handle the actual restoration (unarchiving)
+        of the task in the data model.
+
+        Attributes:
+            task_id: UUID of the task to restore
+        """
 
         def __init__(self, task_id: UUID) -> None:
             """Initialize the TaskRestored message.
@@ -414,5 +552,13 @@ class ArchiveModal(ModalScreen):
             self.task_id = task_id
 
     class ArchiveClosed(Message):
-        """Message emitted when archive modal is closed."""
+        """Message emitted when archive modal is closed.
+
+        This message is posted when the user closes the modal via:
+        - Pressing Escape key
+        - Clicking the Close button
+
+        The parent component can listen to this message to perform cleanup
+        or state updates if needed.
+        """
         pass
