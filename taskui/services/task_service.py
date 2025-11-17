@@ -49,7 +49,7 @@ class TaskService:
     nesting validation, and hierarchy management.
     """
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         """
         Initialize task service with database session.
 
@@ -415,7 +415,7 @@ class TaskService:
         descendants = []
 
         # Helper function for recursive traversal
-        async def collect_descendants(current_parent_id: UUID):
+        async def collect_descendants(current_parent_id: UUID) -> None:
             children = await self.get_children(current_parent_id, include_archived=include_archived)
             for child in children:
                 descendants.append(child)
