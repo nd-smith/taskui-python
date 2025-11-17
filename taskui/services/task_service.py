@@ -462,6 +462,46 @@ class TaskService:
             )
             raise
 
+    async def _fetch_task_with_counts(
+        self,
+        task_orm: TaskORM
+    ) -> Task:
+        """
+        Convert ORM task to Pydantic with child counts populated.
+
+        Args:
+            task_orm: SQLAlchemy task instance
+
+        Returns:
+            Pydantic Task with child counts
+        """
+        task = self._orm_to_pydantic(task_orm)
+
+        # Get child counts
+        child_count, completed_child_count = await self._get_child_counts(task.id)
+        task.update_child_counts(child_count, completed_child_count)
+
+        return task
+
+    async def _fetch_tasks_with_counts(
+        self,
+        task_orms: List[TaskORM]
+    ) -> List[Task]:
+        """
+        Convert list of ORM tasks to Pydantic with child counts.
+
+        Args:
+            task_orms: List of SQLAlchemy task instances
+
+        Returns:
+            List of Pydantic Tasks with child counts
+        """
+        tasks = []
+        for task_orm in task_orms:
+            task = await self._fetch_task_with_counts(task_orm)
+            tasks.append(task)
+        return tasks
+
     async def get_task_by_id(self, task_id: UUID) -> Optional[Task]:
         """
         Get a task by its ID.
