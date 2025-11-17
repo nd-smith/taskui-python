@@ -11,11 +11,12 @@ port = 9100
 timeout = 60
 
 # USB printer configuration (used when connection_type = usb)
-# Common device paths:
+# Set to 'auto' for automatic USB printer detection (recommended)
+# Or specify a device path:
 #   Linux: /dev/usb/lp0, /dev/usb/lp1
 #   macOS: /dev/cu.usbserial, /dev/tty.usbserial
-#   Windows: USB001, USB002, LPT1, COM1, etc.
-device_path = /dev/usb/lp0
+#   Windows: TM-T20III (printer name), USB001, USB002, LPT1, COM1
+device_path = auto
 
 # Print format options (minimal is recommended)
 detail_level = minimal

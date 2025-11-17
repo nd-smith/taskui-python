@@ -37,7 +37,7 @@ class PrinterConfig:
         port: int = 9100,
         timeout: int = 60,
         detail_level: DetailLevel = DetailLevel.MINIMAL,
-        device_path: str = "/dev/usb/lp0"
+        device_path: str = "auto"
     ):
         self.connection_type = connection_type.lower()
         self.host = host
@@ -81,7 +81,7 @@ class PrinterConfig:
         connection_type = printer_config.get('connection_type', 'network')
         logger.debug(f"Loaded printer config: connection_type={connection_type}, "
                     f"host={printer_config['host']}:{printer_config['port']}, "
-                    f"device_path={printer_config.get('device_path', '/dev/usb/lp0')}")
+                    f"device_path={printer_config.get('device_path', 'auto')}")
 
         return cls(
             connection_type=connection_type,
@@ -89,7 +89,7 @@ class PrinterConfig:
             port=printer_config['port'],
             timeout=printer_config['timeout'],
             detail_level=detail_level,
-            device_path=printer_config.get('device_path', '/dev/usb/lp0')
+            device_path=printer_config.get('device_path', 'auto')
         )
 
 
@@ -139,10 +139,24 @@ class PrinterService:
                 self.printer = Network(self.config.host, port=self.config.port, timeout=self.config.timeout)
                 logger.info(f"Successfully connected to network printer at {self.config.host}")
             else:  # USB
-                logger.debug(f"Attempting to connect to USB printer at {self.config.device_path}")
-                # For USB printers, the File class is used to write to device path
-                self.printer = File(self.config.device_path)
-                logger.info(f"Successfully connected to USB printer at {self.config.device_path}")
+                # Check if auto-detection is requested
+                if self.config.device_path.lower() in ("auto", ""):
+                    logger.debug("Attempting to auto-detect USB printer")
+                    # Auto-detect USB printer using Usb class (finds first available USB printer)
+                    # Common ESC/POS printer vendor IDs: Epson (0x04b8), Star (0x0519), others
+                    try:
+                        # Try Epson first (TM-T20III is 0x04b8:0x0e28)
+                        self.printer = Usb(0x04b8, 0x0e28)
+                        logger.info("Successfully connected to Epson USB printer via auto-detection")
+                    except:
+                        # If Epson fails, try generic auto-detection with no IDs (finds first printer)
+                        self.printer = Usb()
+                        logger.info("Successfully connected to USB printer via auto-detection")
+                else:
+                    logger.debug(f"Attempting to connect to USB printer at {self.config.device_path}")
+                    # For USB printers with specific device path, use File class
+                    self.printer = File(self.config.device_path)
+                    logger.info(f"Successfully connected to USB printer at {self.config.device_path}")
 
             self._connected = True
             return True

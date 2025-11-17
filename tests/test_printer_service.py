@@ -55,6 +55,17 @@ def usb_printer_config():
 
 
 @pytest.fixture
+def usb_auto_printer_config():
+    """Create a test USB printer config with auto-detection."""
+    return PrinterConfig(
+        connection_type="usb",
+        device_path="auto",
+        timeout=30,
+        detail_level=DetailLevel.MINIMAL
+    )
+
+
+@pytest.fixture
 def sample_task():
     """Create a sample task for testing."""
     return Task(
@@ -114,7 +125,7 @@ class TestPrinterConfig:
         assert config.port == 9100
         assert config.timeout == 60
         assert config.detail_level == DetailLevel.MINIMAL
-        assert config.device_path == "/dev/usb/lp0"
+        assert config.device_path == "auto"
 
     def test_network_config(self):
         """Test network printer configuration."""
@@ -156,7 +167,7 @@ class TestPrinterConfig:
         assert config.host == "192.168.50.99"
         assert config.port == 9100
         assert config.detail_level == DetailLevel.MINIMAL
-        assert config.device_path == "/dev/usb/lp0"
+        assert config.device_path == "auto"
 
 
 class TestPrinterService:
@@ -370,6 +381,46 @@ class TestPrinterService:
         assert mock_network_printer.text.called
         assert mock_network_printer.cut.called
         assert mock_network_printer.close.called
+
+    @patch('taskui.services.printer_service.Usb')
+    def test_usb_auto_detect_success(self, mock_usb_class, usb_auto_printer_config, mock_network_printer):
+        """Test successful USB printer auto-detection."""
+        mock_usb_class.return_value = mock_network_printer
+        service = PrinterService(usb_auto_printer_config)
+
+        result = service.connect()
+
+        assert result is True
+        assert service.is_connected()
+        # Should be called with Epson vendor/product IDs first
+        mock_usb_class.assert_called_with(0x04b8, 0x0e28)
+
+    @patch('taskui.services.printer_service.Usb')
+    def test_usb_auto_detect_fallback(self, mock_usb_class, usb_auto_printer_config, mock_network_printer):
+        """Test USB auto-detection fallback to generic when Epson fails."""
+        # First call with Epson IDs fails, second call without IDs succeeds
+        mock_usb_class.side_effect = [Exception("Epson not found"), mock_network_printer]
+        service = PrinterService(usb_auto_printer_config)
+
+        result = service.connect()
+
+        assert result is True
+        assert service.is_connected()
+        # Should be called twice: first with IDs, then without
+        assert mock_usb_class.call_count == 2
+        mock_usb_class.assert_any_call(0x04b8, 0x0e28)
+        mock_usb_class.assert_any_call()
+
+    @patch('taskui.services.printer_service.Usb')
+    def test_usb_auto_detect_failure(self, mock_usb_class, usb_auto_printer_config):
+        """Test USB auto-detection failure."""
+        mock_usb_class.side_effect = Exception("No USB printer found")
+        service = PrinterService(usb_auto_printer_config)
+
+        with pytest.raises(ConnectionError, match="Cannot connect to USB printer"):
+            service.connect()
+
+        assert not service.is_connected()
 
 
 class TestMockPrinter:
