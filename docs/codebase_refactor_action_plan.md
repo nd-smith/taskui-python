@@ -40,53 +40,59 @@ Following the successful refactoring of `app.py`, this plan targets the remainin
 
 ## Work Package Overview
 
+**Note**: Work packages are sized to fit within a single Claude Code context window for safer, more focused refactoring.
+
 | # | Package Name | Risk | Effort | Target Files | Lines Changed |
 |---|--------------|------|--------|--------------|---------------|
-| 1 | Extract Column Widget Helpers | 🟡 | 2h | column.py | ~80 |
+| 1a | Extract Column Parent Grouping | 🟡 | 0.5h | column.py | ~20 |
+| 1b | Extract Column Task Item Creation | 🟡 | 1h | column.py | ~40 |
+| 1c | Simplify Column Render Logic | 🟡 | 1h | column.py | ~30 |
 | 2 | Simplify Archive Modal Logic | 🟡 | 1.5h | archive_modal.py | ~40 |
 | 3 | Extract List Bar Tab Creation | 🟡 | 1h | list_bar.py | ~30 |
-| 4 | Add Service Layer Type Hints | 🟢 | 1h | task_service.py, list_service.py | ~50 |
-| 5 | Extract Task Service Query Patterns | 🟡 | 2.5h | task_service.py | ~100 |
-| 6 | Consolidate List Service ORM Conversion | 🟡 | 1.5h | list_service.py | ~60 |
-| 7 | Improve Task Service Organization | 🟡 | 2h | task_service.py | ~500 |
+| 4a | Add Type Hints to task_service.py | 🟢 | 1h | task_service.py | ~30 |
+| 4b | Add Type Hints to list_service.py | 🟢 | 0.5h | list_service.py | ~20 |
+| 5a | Extract Task Fetch Helpers | 🟡 | 1h | task_service.py | ~40 |
+| 5b | Extract Query Builder Helpers | 🟡 | 1h | task_service.py | ~35 |
+| 5c | Refactor Methods to Use Helpers | 🟡 | 1h | task_service.py | ~50 |
+| 6 | Consolidate List Service ORM | 🟡 | 1.5h | list_service.py | ~60 |
+| 7a | Add Section Markers to task_service | 🟢 | 0.5h | task_service.py | ~30 |
+| 7b | Reorganize task_service Methods | 🟡 | 1.5h | task_service.py | ~500 |
 | 8 | Extract Task Modal Context Logic | 🟢 | 1h | task_modal.py | ~30 |
-| 9 | Add Component Documentation | 🟢 | 2h | All UI components | ~100 |
+| 9a | Document column.py | 🟢 | 0.5h | column.py | ~20 |
+| 9b | Document archive_modal.py | 🟢 | 0.5h | archive_modal.py | ~15 |
+| 9c | Document list_bar.py | 🟢 | 0.5h | list_bar.py | ~15 |
+| 9d | Document task_modal.py | 🟢 | 0.5h | task_modal.py | ~15 |
+| 9e | Document task_item.py | 🟢 | 0.5h | task_item.py | ~15 |
+| 9f | Document detail_panel.py | 🟢 | 0.5h | detail_panel.py | ~10 |
 | 10 | Database Manager Cleanup | 🟡 | 1h | database.py | ~20 |
 
-**Total Estimated Time**: 15-17 hours
+**Total Work Packages**: 21 (split for optimal context window size)
+**Total Estimated Time**: 16-18 hours
 **Total Risk**: Mostly LOW-MEDIUM (no HIGH risk items in this plan)
 
 ---
 
-## Phase 1: UI Component Improvements (7 hours)
+## Phase 1: UI Component Improvements (8.5 hours)
 
 These changes focus on eliminating duplication and improving readability in UI components.
 
 ---
 
-### WP1: Extract Column Widget Helpers
+### WP1a: Extract Column Parent Grouping
 
 **Risk**: 🟡 MEDIUM
-**Effort**: 2 hours
+**Effort**: 0.5 hours
 **Dependencies**: None
 **Target**: `taskui/ui/components/column.py`
 
 #### Objective
-Eliminate duplicate code blocks in `_render_tasks()` and extract complex retry logic.
+Extract parent grouping logic that's duplicated in `_render_tasks()`.
 
 #### Issues Identified
 
-1. **Duplicate Widget Mounting Code** (lines 210-282):
-   - Nearly identical code blocks for mounting widgets
-   - One inside `mount_widgets()` callback, one inline
-   - ~70 lines duplicated
-
-2. **Complex Retry Logic** (lines 378-413):
-   - Nested function with mutable list for retry counter
-   - Could be extracted to separate method
-
-3. **Parent Grouping Logic Duplicated** (lines 213-219, 251-257):
-   - Same parent grouping code appears twice
+**Parent Grouping Logic Duplicated** (lines 213-219, 251-257):
+- Same parent grouping code appears twice in _render_tasks()
+- ~14 lines duplicated
 
 #### Changes
 
@@ -99,7 +105,7 @@ def _group_tasks_by_parent(self, tasks: List[Task]) -> dict:
         tasks: List of tasks to group
 
     Returns:
-        Dictionary mapping parent_id to list of children
+        Dictionary mapping parent_id (or "root") to list of children
     """
     parent_groups = {}
     for task in tasks:
@@ -109,6 +115,58 @@ def _group_tasks_by_parent(self, tasks: List[Task]) -> dict:
         parent_groups[parent_id].append(task)
     return parent_groups
 ```
+
+**Update _render_tasks() to use helper:**
+Replace both instances of the grouping loop with:
+```python
+parent_groups = self._group_tasks_by_parent(self._tasks)
+```
+
+#### Files Modified
+- `taskui/ui/components/column.py`
+
+#### Testing
+```bash
+# Run column-specific tests
+python3 -m pytest tests/test_ui_components.py -v -k column
+
+# Manual verification
+python3 -m taskui
+# Navigate through tasks
+# Verify tree lines display correctly
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] Parent grouping logic consolidated
+- [ ] Tree visualization works correctly
+- [ ] Lines of code reduced by ~10 lines
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP1b: Extract Column Task Item Creation
+
+**Risk**: 🟡 MEDIUM
+**Effort**: 1 hour
+**Dependencies**: WP1a
+**Target**: `taskui/ui/components/column.py`
+
+#### Objective
+Extract task item creation logic that's duplicated in two code paths.
+
+#### Issues Identified
+
+**Duplicate Widget Creation Code** (lines 222-243, 260-281):
+- Nearly identical loops creating TaskItem widgets
+- One inside `mount_widgets()` callback, one inline
+- ~40 lines duplicated
+
+#### Changes
 
 **Extract task item creation:**
 ```python
@@ -145,7 +203,56 @@ def _create_task_items(
     return task_items
 ```
 
-**Simplify _render_tasks():**
+**Update both code paths to use helper:**
+Replace the duplicate loops in both locations with:
+```python
+task_items = self._create_task_items(self._tasks, parent_groups, self._selected_index)
+for task_item in task_items:
+    content_container.mount(task_item)
+```
+
+#### Files Modified
+- `taskui/ui/components/column.py`
+
+#### Testing
+```bash
+# Run column-specific tests
+python3 -m pytest tests/test_ui_components.py -v -k column
+
+# Manual verification
+python3 -m taskui
+# Navigate through tasks
+# Create/delete tasks to trigger re-renders
+# Verify selection state preserved
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] Task item creation consolidated
+- [ ] Task rendering works correctly
+- [ ] Selection state preserved across re-renders
+- [ ] Lines of code reduced by ~35 lines
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP1c: Simplify Column Render Logic
+
+**Risk**: 🟡 MEDIUM
+**Effort**: 1 hour
+**Dependencies**: WP1a, WP1b
+**Target**: `taskui/ui/components/column.py`
+
+#### Objective
+Simplify the main `_render_tasks()` method using extracted helpers.
+
+#### Changes
+
+**Simplified _render_tasks():**
 ```python
 def _render_tasks(self) -> None:
     """Render the task list with TaskItem widgets."""
@@ -156,7 +263,12 @@ def _render_tasks(self) -> None:
 
     # Handle empty state
     if not self._tasks:
-        self._clear_task_items(content_container)
+        existing_items = list(content_container.query(TaskItem))
+        for widget in existing_items:
+            try:
+                widget.remove()
+            except Exception:
+                pass
         empty_message.display = True
         return
 
@@ -173,6 +285,21 @@ def _render_tasks(self) -> None:
         self.call_after_refresh(lambda: self._mount_task_items(content_container, task_items))
     else:
         self._mount_task_items(content_container, task_items)
+
+def _mount_task_items(self, container: VerticalScroll, task_items: List[TaskItem]) -> None:
+    """Mount task items in container.
+
+    Args:
+        container: Container to mount items in
+        task_items: List of TaskItem widgets to mount
+    """
+    logger.debug(f"{self.column_id}: Mounting {len(task_items)} task items")
+    for task_item in task_items:
+        try:
+            container.mount(task_item)
+        except Exception as e:
+            logger.error(f"{self.column_id}: ERROR mounting task widget: {e}", exc_info=True)
+    logger.debug(f"{self.column_id}: Mounting completed")
 ```
 
 #### Files Modified
@@ -195,10 +322,9 @@ python3 -m taskui
 
 #### Success Criteria
 - [ ] All tests pass
-- [ ] No duplicate code blocks in _render_tasks()
-- [ ] Task rendering works correctly
-- [ ] Selection state preserved across re-renders
-- [ ] Lines of code reduced by ~60 lines
+- [ ] _render_tasks() is simplified and readable
+- [ ] All functionality preserved
+- [ ] Total lines reduced by ~70 lines across WP1a-c
 
 #### Rollback
 ```bash
@@ -530,67 +656,214 @@ git revert HEAD
 
 ---
 
-### WP9: Add Component Documentation
+### WP9a: Document column.py
 
 **Risk**: 🟢 LOW
-**Effort**: 2 hours
-**Dependencies**: WP1-3, WP8
-**Target**: All UI component files
+**Effort**: 0.5 hours
+**Dependencies**: WP1a, WP1b, WP1c
+**Target**: `taskui/ui/components/column.py`
 
 #### Objective
-Add comprehensive module and method docstrings to UI components where missing.
-
-#### Changes
-
-1. **Ensure all methods have docstrings**
-2. **Add Args/Returns sections where missing**
-3. **Document non-obvious behavior**
-4. **Add examples for complex methods**
+Add comprehensive docstrings to column component.
 
 #### Focus Areas
-
-**column.py:**
 - Document retry mechanism in ensure_selection
-- Add docstrings to extracted helpers (from WP1)
-
-**archive_modal.py:**
-- Document search filtering logic
-- Add docstrings to extracted helpers (from WP2)
-
-**list_bar.py:**
-- Document tab creation and switching
-- Add docstrings to extracted helpers (from WP3)
-
-**task_modal.py:**
-- Document validation logic
-- Add docstrings to extracted helpers (from WP8)
-
-**task_item.py:**
-- Add more detailed render() docstring
-- Document color selection logic
-
-**detail_panel.py:**
-- Already well-documented, minor additions only
+- Add docstrings to extracted helpers
+- Ensure all public methods documented
+- Add Args/Returns sections
 
 #### Files Modified
-- All 6 UI component files
+- `taskui/ui/components/column.py`
 
 #### Testing
 ```bash
-# Verify docstrings parse correctly
 python3 -m pydoc taskui.ui.components.column
-python3 -m pydoc taskui.ui.components.archive_modal
-python3 -m pydoc taskui.ui.components.list_bar
-python3 -m pydoc taskui.ui.components.task_modal
-
-# Run tests
-python3 -m pytest tests/ -v
+python3 -m pytest tests/test_ui_components.py -v -k column
 ```
 
 #### Success Criteria
 - [ ] All tests pass
 - [ ] All public methods have docstrings
-- [ ] All docstrings include Args/Returns
+- [ ] pydoc output is readable
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP9b: Document archive_modal.py
+
+**Risk**: 🟢 LOW
+**Effort**: 0.5 hours
+**Dependencies**: WP2
+**Target**: `taskui/ui/components/archive_modal.py`
+
+#### Objective
+Add comprehensive docstrings to archive modal component.
+
+#### Focus Areas
+- Document search filtering logic
+- Add docstrings to extracted helpers
+- Document restore functionality
+
+#### Files Modified
+- `taskui/ui/components/archive_modal.py`
+
+#### Testing
+```bash
+python3 -m pydoc taskui.ui.components.archive_modal
+python3 -m pytest tests/test_archive_modal.py -v
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] All public methods have docstrings
+- [ ] pydoc output is readable
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP9c: Document list_bar.py
+
+**Risk**: 🟢 LOW
+**Effort**: 0.5 hours
+**Dependencies**: WP3
+**Target**: `taskui/ui/components/list_bar.py`
+
+#### Objective
+Add comprehensive docstrings to list bar component.
+
+#### Focus Areas
+- Document tab creation and switching
+- Add docstrings to extracted helpers
+- Document list selection logic
+
+#### Files Modified
+- `taskui/ui/components/list_bar.py`
+
+#### Testing
+```bash
+python3 -m pydoc taskui.ui.components.list_bar
+python3 -m pytest tests/test_list_bar.py -v
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] All public methods have docstrings
+- [ ] pydoc output is readable
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP9d: Document task_modal.py
+
+**Risk**: 🟢 LOW
+**Effort**: 0.5 hours
+**Dependencies**: WP8
+**Target**: `taskui/ui/components/task_modal.py`
+
+#### Objective
+Add comprehensive docstrings to task modal component.
+
+#### Focus Areas
+- Document validation logic
+- Add docstrings to extracted helpers
+- Document nesting limit checks
+
+#### Files Modified
+- `taskui/ui/components/task_modal.py`
+
+#### Testing
+```bash
+python3 -m pydoc taskui.ui.components.task_modal
+python3 -m pytest tests/test_task_modal.py -v
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] All public methods have docstrings
+- [ ] pydoc output is readable
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP9e: Document task_item.py
+
+**Risk**: 🟢 LOW
+**Effort**: 0.5 hours
+**Dependencies**: None
+**Target**: `taskui/ui/components/task_item.py`
+
+#### Objective
+Enhance docstrings in task item component.
+
+#### Focus Areas
+- Add more detailed render() docstring
+- Document color selection logic
+- Document tree line rendering
+
+#### Files Modified
+- `taskui/ui/components/task_item.py`
+
+#### Testing
+```bash
+python3 -m pydoc taskui.ui.components.task_item
+python3 -m pytest tests/test_ui_components.py -v -k task_item
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] All public methods have docstrings
+- [ ] pydoc output is readable
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP9f: Document detail_panel.py
+
+**Risk**: 🟢 LOW
+**Effort**: 0.5 hours
+**Dependencies**: None
+**Target**: `taskui/ui/components/detail_panel.py`
+
+#### Objective
+Minor docstring enhancements (already well-documented).
+
+#### Focus Areas
+- Verify all methods documented
+- Add any missing Args/Returns
+- Minor clarifications only
+
+#### Files Modified
+- `taskui/ui/components/detail_panel.py`
+
+#### Testing
+```bash
+python3 -m pydoc taskui.ui.components.detail_panel
+python3 -m pytest tests/ -v -k detail_panel
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] All public methods have docstrings
 - [ ] pydoc output is readable
 
 #### Rollback
@@ -606,15 +879,15 @@ These changes focus on reducing duplication and improving organization in servic
 
 ---
 
-### WP4: Add Service Layer Type Hints
+### WP4a: Add Type Hints to task_service.py
 
 **Risk**: 🟢 LOW
 **Effort**: 1 hour
 **Dependencies**: None
-**Target**: `taskui/services/task_service.py`, `taskui/services/list_service.py`
+**Target**: `taskui/services/task_service.py`
 
 #### Objective
-Add missing return type hints to all service methods for better IDE support and type checking.
+Add missing return type hints to all task service methods for better IDE support and type checking.
 
 #### Issues Identified
 
@@ -623,9 +896,7 @@ Add missing return type hints to all service methods for better IDE support and 
 
 #### Changes
 
-Add complete type hints to all methods in:
-- `TaskService`
-- `ListService`
+Add complete type hints to all methods in `TaskService`.
 
 Ensure all methods follow this pattern:
 ```python
@@ -634,24 +905,28 @@ async def method_name(self, param: Type) -> ReturnType:
     ...
 ```
 
+Focus on:
+- Public async methods (create, read, update, delete operations)
+- Private helper methods
+- Query builder methods
+
 #### Files Modified
 - `taskui/services/task_service.py`
-- `taskui/services/list_service.py`
 
 #### Testing
 ```bash
 # Run type checker
-python3 -m mypy taskui/services/ --ignore-missing-imports
+python3 -m mypy taskui/services/task_service.py --ignore-missing-imports
 
 # Run service tests
-python3 -m pytest tests/test_task_service.py tests/test_list_service.py -v
+python3 -m pytest tests/test_task_service.py -v
 ```
 
 #### Success Criteria
 - [ ] All tests pass
 - [ ] All methods have return type hints
 - [ ] All parameters have type hints
-- [ ] Mypy runs without errors (if used)
+- [ ] Mypy runs without errors for this file
 
 #### Rollback
 ```bash
@@ -660,35 +935,70 @@ git revert HEAD
 
 ---
 
-### WP5: Extract Task Service Query Patterns
+### WP4b: Add Type Hints to list_service.py
+
+**Risk**: 🟢 LOW
+**Effort**: 0.5 hours
+**Dependencies**: None
+**Target**: `taskui/services/list_service.py`
+
+#### Objective
+Add missing return type hints to all list service methods.
+
+#### Changes
+
+Add complete type hints to all methods in `ListService`.
+
+Focus on:
+- CRUD methods (create_list, get_all_lists, etc.)
+- Count helper methods
+- ensure_default_lists method
+
+#### Files Modified
+- `taskui/services/list_service.py`
+
+#### Testing
+```bash
+# Run type checker
+python3 -m mypy taskui/services/list_service.py --ignore-missing-imports
+
+# Run service tests
+python3 -m pytest tests/test_list_service.py -v
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] All methods have return type hints
+- [ ] All parameters have type hints
+- [ ] Mypy runs without errors for this file
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP5a: Extract Task Fetch Helpers
 
 **Risk**: 🟡 MEDIUM
-**Effort**: 2.5 hours
-**Dependencies**: WP4
+**Effort**: 1 hour
+**Dependencies**: WP4a
 **Target**: `taskui/services/task_service.py`
 
 #### Objective
-Eliminate repetitive database query patterns by extracting common operations.
+Extract helpers for fetching tasks with child counts (repeated 8+ times).
 
 #### Issues Identified
 
-1. **Repetitive task fetching with child counts** (appears 8+ times):
+**Repetitive task fetching with child counts** (appears 8+ times):
 ```python
 # Pattern repeated throughout:
-result = await self.session.execute(
-    select(TaskORM).where(TaskORM.id == str(task_id))
-)
-task_orm = result.scalar_one_or_none()
 task = self._orm_to_pydantic(task_orm)
 child_count = await self._count_children(task.id)
 completed_child_count = await self._count_completed_children(task.id)
 task.update_child_counts(child_count, completed_child_count)
 ```
-
-2. **Repetitive list filtering queries**:
-   - Active (non-archived) tasks
-   - Top-level tasks
-   - Tasks by parent
 
 #### Changes
 
@@ -734,7 +1044,54 @@ async def _fetch_tasks_with_counts(
     return tasks
 ```
 
-**Extract common query builders:**
+**Do NOT extract query builders yet** (that's WP5b).
+
+#### Files Modified
+- `taskui/services/task_service.py`
+
+#### Testing
+```bash
+# Run task service tests
+python3 -m pytest tests/test_task_service.py -v
+
+# Manual verification
+python3 -m taskui
+# Verify child counts display correctly
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] Fetch helpers extracted
+- [ ] No behavioral changes
+- [ ] Lines of code reduced by ~30 lines
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP5b: Extract Query Builder Helpers
+
+**Risk**: 🟡 MEDIUM
+**Effort**: 1 hour
+**Dependencies**: WP5a
+**Target**: `taskui/services/task_service.py`
+
+#### Objective
+Extract common query building patterns for active tasks, top-level tasks, and children.
+
+#### Issues Identified
+
+**Repetitive query patterns**:
+- Active (non-archived) tasks queries
+- Top-level tasks queries
+- Child tasks queries
+
+#### Changes
+
+**Extract query builders:**
 ```python
 def _query_active_tasks(self, list_id: UUID):
     """Build query for active (non-archived) tasks in a list.
@@ -783,9 +1140,47 @@ def _query_child_tasks(self, parent_id: UUID):
     )
 ```
 
-**Refactor methods to use helpers:**
+#### Files Modified
+- `taskui/services/task_service.py`
 
-Update methods like `get_tasks_for_list()`, `get_task_children()`, etc. to use these helpers.
+#### Testing
+```bash
+# Run task service tests
+python3 -m pytest tests/test_task_service.py -v
+
+# Manual verification
+python3 -m taskui
+# Verify queries work correctly
+```
+
+#### Success Criteria
+- [ ] All tests pass
+- [ ] Query builders extracted
+- [ ] No behavioral changes
+- [ ] Lines of code reduced by ~25 lines
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP5c: Refactor Methods to Use Helpers
+
+**Risk**: 🟡 MEDIUM
+**Effort**: 1 hour
+**Dependencies**: WP5a, WP5b
+**Target**: `taskui/services/task_service.py`
+
+#### Objective
+Update methods like `get_tasks_for_list()`, `get_task_children()`, etc. to use the extracted helpers.
+
+#### Changes
+
+Update approximately 6-8 methods to use:
+- `_fetch_task_with_counts()` and `_fetch_tasks_with_counts()` from WP5a
+- `_query_active_tasks()`, `_query_top_level_tasks()`, `_query_child_tasks()` from WP5b
 
 #### Files Modified
 - `taskui/services/task_service.py`
@@ -801,15 +1196,13 @@ python3 -m pytest tests/test_integration_mvp.py -v
 # Manual verification
 python3 -m taskui
 # Test all task operations
-# Verify child counts display correctly
 ```
 
 #### Success Criteria
 - [ ] All tests pass
-- [ ] Query patterns consolidated
+- [ ] All methods use helpers
 - [ ] No behavioral changes
-- [ ] Code is more DRY
-- [ ] Lines of code reduced by ~80 lines
+- [ ] Total lines reduced by ~80 lines across WP5a-c
 
 #### Rollback
 ```bash
@@ -965,15 +1358,15 @@ git revert HEAD
 
 ---
 
-### WP7: Improve Task Service Organization
+### WP7a: Add Section Markers to task_service
 
-**Risk**: 🟡 MEDIUM
-**Effort**: 2 hours
-**Dependencies**: WP5
+**Risk**: 🟢 LOW
+**Effort**: 0.5 hours
+**Dependencies**: WP5c
 **Target**: `taskui/services/task_service.py`
 
 #### Objective
-Reorganize task service methods into logical sections for better navigation.
+Add section marker comments to organize task service methods (no code movement yet).
 
 #### Approach
 
@@ -1083,15 +1476,67 @@ python3 -c "import taskui.services.task_service; print('OK')"
 
 # Run tests
 python3 -m pytest tests/test_task_service.py -v
+```
 
-# Verify no logic changes
+#### Success Criteria
+- [ ] All tests pass
+- [ ] Section markers added
+- [ ] File parses correctly
+- [ ] No logic changes
+
+#### Rollback
+```bash
+git revert HEAD
+```
+
+---
+
+### WP7b: Reorganize task_service Methods
+
+**Risk**: 🟡 MEDIUM
+**Effort**: 1.5 hours
+**Dependencies**: WP7a
+**Target**: `taskui/services/task_service.py`
+
+#### Objective
+Move methods to match section markers from WP7a.
+
+#### Approach
+
+Physically reorganize methods to match the sections:
+- CONVERSION HELPERS
+- VALIDATION HELPERS
+- QUERY HELPERS
+- CREATE OPERATIONS
+- READ OPERATIONS
+- UPDATE OPERATIONS
+- DELETE/ARCHIVE OPERATIONS
+- HIERARCHY OPERATIONS
+- COUNTING HELPERS
+
+**Important**: This is ONLY moving methods, no code changes.
+
+#### Files Modified
+- `taskui/services/task_service.py`
+
+#### Testing
+```bash
+# Verify file still parses
+python3 -c "import taskui.services.task_service; print('OK')"
+
+# Run tests
+python3 -m pytest tests/test_task_service.py -v
+
+# Run integration tests
+python3 -m pytest tests/test_integration_mvp.py -v
+
+# Manual verification
 python3 -m taskui
 ```
 
 #### Success Criteria
 - [ ] All tests pass
 - [ ] Methods organized in logical sections
-- [ ] Section markers clearly visible
 - [ ] No behavioral changes
 - [ ] Easier to navigate
 
@@ -1309,27 +1754,41 @@ Files targeted for refactoring:
 
 ## Timeline
 
-**Assuming dedicated work, ~3-4 days total:**
+**Assuming dedicated work, ~4-5 days total (work packages sized for single context windows):**
 
-**Day 1 (7 hours)**: Phase 1 - UI Component Improvements
-- WP1: Extract Column Widget Helpers (2h)
+**Day 1 (6 hours)**: Phase 1 Part 1 - UI Components
+- WP1a: Extract Column Parent Grouping (0.5h)
+- WP1b: Extract Column Task Item Creation (1h)
+- WP1c: Simplify Column Render Logic (1h)
 - WP2: Simplify Archive Modal Logic (1.5h)
 - WP3: Extract List Bar Tab Creation (1h)
 - WP8: Extract Task Modal Context Logic (1h)
-- WP9: Add Component Documentation (2h)
-- Checkpoint: Commit and tag `phase-1-ui-complete`
+- Checkpoint: Commit and tag `phase-1a-ui-refactor`
 
-**Day 2 (4 hours)**: Phase 2 Part 1 - Service Layer Foundation
-- WP4: Add Service Layer Type Hints (1h)
-- WP5: Extract Task Service Query Patterns (2.5h)
+**Day 2 (3 hours)**: Phase 1 Part 2 - UI Documentation
+- WP9a: Document column.py (0.5h)
+- WP9b: Document archive_modal.py (0.5h)
+- WP9c: Document list_bar.py (0.5h)
+- WP9d: Document task_modal.py (0.5h)
+- WP9e: Document task_item.py (0.5h)
+- WP9f: Document detail_panel.py (0.5h)
+- Checkpoint: Commit and tag `phase-1b-ui-docs`
+
+**Day 3 (4.5 hours)**: Phase 2 Part 1 - Service Layer Foundation
+- WP4a: Add Type Hints to task_service.py (1h)
+- WP4b: Add Type Hints to list_service.py (0.5h)
+- WP5a: Extract Task Fetch Helpers (1h)
+- WP5b: Extract Query Builder Helpers (1h)
+- WP5c: Refactor Methods to Use Helpers (1h)
 - Checkpoint: Commit and tag `phase-2a-services-foundation`
 
-**Day 3 (3.5 hours)**: Phase 2 Part 2 - Service Layer Organization
+**Day 4 (3.5 hours)**: Phase 2 Part 2 - Service Layer Organization
 - WP6: Consolidate List Service ORM Conversion (1.5h)
-- WP7: Improve Task Service Organization (2h)
+- WP7a: Add Section Markers to task_service (0.5h)
+- WP7b: Reorganize task_service Methods (1.5h)
 - Checkpoint: Commit and tag `phase-2b-services-complete`
 
-**Day 4 (1.5 hours)**: Phase 3 - Final Cleanup & Validation
+**Day 5 (1.5 hours)**: Phase 3 - Final Cleanup & Validation
 - WP10: Database Manager Cleanup (1h)
 - Final validation and testing (0.5h)
 - Documentation update
