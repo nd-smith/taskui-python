@@ -372,40 +372,6 @@ class TestDatabaseHelperFunctions:
     """Tests for helper functions."""
 
     @pytest.mark.asyncio
-    async def test_get_task_list_by_id(self, db_manager, sample_task_list, sample_list_id):
-        """Test retrieving task list by ID."""
-        async with db_manager.get_session() as session:
-            result = await db_manager.get_task_list_by_id(session, sample_list_id)
-
-            assert result is not None
-            assert result.id == str(sample_list_id)
-            assert result.name == "Work"
-
-    @pytest.mark.asyncio
-    async def test_get_task_list_by_id_not_found(self, db_manager):
-        """Test that get_task_list_by_id returns None for non-existent ID."""
-        async with db_manager.get_session() as session:
-            result = await db_manager.get_task_list_by_id(session, uuid4())
-            assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_task_by_id(self, db_manager, sample_task_list, sample_task, sample_task_id):
-        """Test retrieving task by ID."""
-        async with db_manager.get_session() as session:
-            result = await db_manager.get_task_by_id(session, sample_task_id)
-
-            assert result is not None
-            assert result.id == str(sample_task_id)
-            assert result.title == "Complete project documentation"
-
-    @pytest.mark.asyncio
-    async def test_get_task_by_id_not_found(self, db_manager):
-        """Test that get_task_by_id returns None for non-existent ID."""
-        async with db_manager.get_session() as session:
-            result = await db_manager.get_task_by_id(session, uuid4())
-            assert result is None
-
-    @pytest.mark.asyncio
     async def test_init_database_helper(self):
         """Test init_database convenience function."""
         db_manager = await init_database("sqlite+aiosqlite:///:memory:")

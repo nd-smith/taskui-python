@@ -5,7 +5,6 @@ Provides SQLAlchemy ORM models, async engine/session management, and database
 initialization for SQLite persistence.
 """
 
-import warnings
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -182,60 +181,6 @@ class DatabaseManager:
                 logger.error(f"Database session error, rolling back: {e}", exc_info=True)
                 await session.rollback()
                 raise
-
-    async def get_task_list_by_id(self, session: AsyncSession, list_id: UUID) -> Optional[TaskListORM]:
-        """
-        Retrieve a task list by ID.
-
-        .. deprecated:: 1.0
-            Use ListService.get_list_by_id() instead.
-            This method will be removed in version 2.0.
-
-        Args:
-            session: Active database session
-            list_id: UUID of the task list
-
-        Returns:
-            TaskListORM instance or None if not found
-        """
-        warnings.warn(
-            "DatabaseManager.get_task_list_by_id() is deprecated. "
-            "Use ListService.get_list_by_id() instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-
-        result = await session.execute(
-            select(TaskListORM).where(TaskListORM.id == str(list_id))
-        )
-        return result.scalar_one_or_none()
-
-    async def get_task_by_id(self, session: AsyncSession, task_id: UUID) -> Optional[TaskORM]:
-        """
-        Retrieve a task by ID.
-
-        .. deprecated:: 1.0
-            Use TaskService.get_task_by_id() instead.
-            This method will be removed in version 2.0.
-
-        Args:
-            session: Active database session
-            task_id: UUID of the task
-
-        Returns:
-            TaskORM instance or None if not found
-        """
-        warnings.warn(
-            "DatabaseManager.get_task_by_id() is deprecated. "
-            "Use TaskService.get_task_by_id() instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-
-        result = await session.execute(
-            select(TaskORM).where(TaskORM.id == str(task_id))
-        )
-        return result.scalar_one_or_none()
 
 
 # Global database manager instance
