@@ -174,27 +174,55 @@ class ListBar(Horizontal):
         self.tabs: List[ListTab] = []  # Initialize tabs list first
         self.active_list_id = active_list_id or (lists[0].id if lists else None)
 
+    def _create_tab_for_list(
+        self,
+        task_list: TaskList,
+        shortcut_number: int,
+        is_last: bool
+    ) -> ListTab:
+        """Create a ListTab widget for a task list.
+
+        Args:
+            task_list: Task list to create tab for
+            shortcut_number: Keyboard shortcut number (1-3)
+            is_last: Whether this is the last tab
+
+        Returns:
+            Configured ListTab widget
+        """
+        is_active = task_list.id == self.active_list_id
+        return ListTab(
+            task_list=task_list,
+            shortcut_number=shortcut_number,
+            is_active=is_active,
+            is_last=is_last
+        )
+
+    def _create_all_tabs(self) -> List[ListTab]:
+        """Create ListTab widgets for all lists.
+
+        Returns:
+            List of ListTab widgets
+        """
+        tabs = []
+        total_lists = len(self.lists)
+
+        for idx, task_list in enumerate(self.lists, start=1):
+            is_last = idx == total_lists
+            tab = self._create_tab_for_list(task_list, idx, is_last)
+            tabs.append(tab)
+
+        return tabs
+
     def compose(self):
         """Compose the list bar with list tabs.
 
         Yields:
             ListTab widgets for each list
         """
-        # Clear tabs list before composing to avoid duplicates on recompose
         self.tabs.clear()
-
-        total_lists = len(self.lists)
-        for idx, task_list in enumerate(self.lists, start=1):
-            is_active = task_list.id == self.active_list_id
-            is_last = idx == total_lists
-            tab = ListTab(
-                task_list=task_list,
-                shortcut_number=idx,
-                is_active=is_active,
-                is_last=is_last
-            )
-            self.tabs.append(tab)
-            yield tab
+        self.tabs = self._create_all_tabs()
+        yield from self.tabs
 
     def update_lists(self, lists: List[TaskList]) -> None:
         """Update the displayed lists.
@@ -207,25 +235,15 @@ class ListBar(Horizontal):
 
     def refresh_tabs(self) -> None:
         """Refresh all tabs to reflect current data."""
-        # Remove all existing tabs
+        # Remove existing tabs
         for child in list(self.children):
             child.remove()
 
-        # Clear tabs list
-        self.tabs.clear()
-
         # Create and mount new tabs
-        total_lists = len(self.lists)
-        for idx, task_list in enumerate(self.lists, start=1):
-            is_active = task_list.id == self.active_list_id
-            is_last = idx == total_lists
-            tab = ListTab(
-                task_list=task_list,
-                shortcut_number=idx,
-                is_active=is_active,
-                is_last=is_last
-            )
-            self.tabs.append(tab)
+        self.tabs.clear()
+        self.tabs = self._create_all_tabs()
+
+        for tab in self.tabs:
             self.mount(tab)
 
     def set_active_list(self, list_id: UUID) -> None:
