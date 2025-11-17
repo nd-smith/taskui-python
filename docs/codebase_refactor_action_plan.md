@@ -1639,10 +1639,10 @@ python3 -m pytest tests/ -v
 ```
 
 #### Success Criteria
-- [ ] All tests pass
-- [ ] Deprecation warnings in place
-- [ ] Documentation updated
-- [ ] No new usage of deprecated methods
+- [x] All tests pass
+- [x] Deprecation warnings in place
+- [x] Documentation updated
+- [x] No new usage of deprecated methods
 
 #### Rollback
 ```bash

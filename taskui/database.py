@@ -5,6 +5,7 @@ Provides SQLAlchemy ORM models, async engine/session management, and database
 initialization for SQLite persistence.
 """
 
+import warnings
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -186,6 +187,10 @@ class DatabaseManager:
         """
         Retrieve a task list by ID.
 
+        .. deprecated:: 1.0
+            Use ListService.get_list_by_id() instead.
+            This method will be removed in version 2.0.
+
         Args:
             session: Active database session
             list_id: UUID of the task list
@@ -193,6 +198,13 @@ class DatabaseManager:
         Returns:
             TaskListORM instance or None if not found
         """
+        warnings.warn(
+            "DatabaseManager.get_task_list_by_id() is deprecated. "
+            "Use ListService.get_list_by_id() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         result = await session.execute(
             select(TaskListORM).where(TaskListORM.id == str(list_id))
         )
@@ -202,6 +214,10 @@ class DatabaseManager:
         """
         Retrieve a task by ID.
 
+        .. deprecated:: 1.0
+            Use TaskService.get_task_by_id() instead.
+            This method will be removed in version 2.0.
+
         Args:
             session: Active database session
             task_id: UUID of the task
@@ -209,6 +225,13 @@ class DatabaseManager:
         Returns:
             TaskORM instance or None if not found
         """
+        warnings.warn(
+            "DatabaseManager.get_task_by_id() is deprecated. "
+            "Use TaskService.get_task_by_id() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         result = await session.execute(
             select(TaskORM).where(TaskORM.id == str(task_id))
         )
