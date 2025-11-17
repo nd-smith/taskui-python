@@ -44,6 +44,13 @@ LIST_BINDINGS = [
     Binding("3", "switch_list_3", "List 3", show=True),
 ]
 
+# List CRUD keybindings
+LIST_CRUD_BINDINGS = [
+    Binding("ctrl+n", "create_list", "New List", show=True),
+    Binding("ctrl+e", "edit_list", "Edit List", show=True),
+    Binding("ctrl+d", "delete_list", "Delete List", show=True),
+]
+
 # Printing keybindings
 PRINT_BINDINGS = [
     Binding("p,P", "print_column", "Print Column", show=True),
@@ -117,6 +124,7 @@ def get_all_bindings() -> list[Binding]:
         NAVIGATION_BINDINGS +
         TASK_ACTION_BINDINGS +
         LIST_BINDINGS +
+        LIST_CRUD_BINDINGS +
         PRINT_BINDINGS +
         APP_CONTROL_BINDINGS
     )

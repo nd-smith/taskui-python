@@ -96,6 +96,7 @@ LEVEL_2_COLOR = "#F92672"  # Pink/Red - Second nesting level (tertiary)
 
 YELLOW = "#E6DB74"   # Highlights and incomplete percentages
 ORANGE = "#FD971F"   # Warnings and archive indicators
+RED = "#F92672"      # Errors and critical warnings (matches LEVEL_2_COLOR)
 PURPLE = "#AE81FF"   # Informational text
 WHITE = "#F8F8F2"    # Pure white (same as FOREGROUND)
 

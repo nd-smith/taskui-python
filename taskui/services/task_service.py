@@ -839,6 +839,120 @@ class TaskService:
 
         return tasks
 
+    async def bulk_migrate_tasks(
+        self,
+        source_list_id: UUID,
+        target_list_id: UUID
+    ) -> int:
+        """
+        Migrate all tasks from one list to another.
+
+        This updates the list_id for all tasks (including archived tasks) from the
+        source list to the target list. The task hierarchy is preserved.
+
+        Args:
+            source_list_id: UUID of the source list
+            target_list_id: UUID of the target list
+
+        Returns:
+            Number of tasks migrated
+
+        Raises:
+            TaskListNotFoundError: If either list does not exist
+        """
+        from sqlalchemy import update
+
+        try:
+            logger.debug(
+                f"Bulk migrating tasks from list {source_list_id} to {target_list_id}"
+            )
+
+            # Verify both lists exist
+            await self._verify_list_exists(source_list_id)
+            await self._verify_list_exists(target_list_id)
+
+            # Update all tasks in the source list to point to the target list
+            result = await self.session.execute(
+                update(TaskORM)
+                .where(TaskORM.list_id == str(source_list_id))
+                .values(list_id=str(target_list_id))
+            )
+
+            migrated_count = result.rowcount
+
+            await self.session.flush()
+
+            logger.info(
+                f"Bulk migrated {migrated_count} tasks from list "
+                f"{source_list_id} to {target_list_id}"
+            )
+
+            return migrated_count
+        except TaskListNotFoundError:
+            # Already logged, just re-raise
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to bulk migrate tasks from {source_list_id} to {target_list_id}: {e}",
+                exc_info=True
+            )
+            raise
+
+    async def bulk_archive_tasks(self, list_id: UUID) -> int:
+        """
+        Archive all completed tasks in a list.
+
+        Only tasks that are completed and not already archived will be archived.
+        Incomplete tasks are not affected.
+
+        Args:
+            list_id: UUID of the task list
+
+        Returns:
+            Number of tasks archived
+
+        Raises:
+            TaskListNotFoundError: If list does not exist
+        """
+        from sqlalchemy import update
+
+        try:
+            logger.debug(f"Bulk archiving completed tasks in list {list_id}")
+
+            # Verify list exists
+            await self._verify_list_exists(list_id)
+
+            # Get current timestamp for archived_at
+            archived_at = datetime.utcnow()
+
+            # Update all completed, non-archived tasks in the list
+            result = await self.session.execute(
+                update(TaskORM)
+                .where(TaskORM.list_id == str(list_id))
+                .where(TaskORM.is_completed == True)  # noqa: E712
+                .where(TaskORM.is_archived == False)  # noqa: E712
+                .values(is_archived=True, archived_at=archived_at)
+            )
+
+            archived_count = result.rowcount
+
+            await self.session.flush()
+
+            logger.info(
+                f"Bulk archived {archived_count} completed tasks in list {list_id}"
+            )
+
+            return archived_count
+        except TaskListNotFoundError:
+            # Already logged, just re-raise
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to bulk archive tasks in list {list_id}: {e}",
+                exc_info=True
+            )
+            raise
+
     # ==============================================================================
     # HIERARCHY OPERATIONS
     # ==============================================================================
