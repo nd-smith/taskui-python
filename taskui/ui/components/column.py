@@ -172,6 +172,23 @@ class TaskColumn(Widget):
                     pass
             self.call_after_refresh(trigger_selection)
 
+    def _group_tasks_by_parent(self, tasks: List[Task]) -> dict:
+        """Group tasks by parent ID for hierarchy visualization.
+
+        Args:
+            tasks: List of tasks to group
+
+        Returns:
+            Dictionary mapping parent_id (or "root") to list of children
+        """
+        parent_groups = {}
+        for task in tasks:
+            parent_id = task.parent_id or "root"
+            if parent_id not in parent_groups:
+                parent_groups[parent_id] = []
+            parent_groups[parent_id].append(task)
+        return parent_groups
+
     def _render_tasks(self) -> None:
         """Render the task list with TaskItem widgets."""
         logger.debug(f"{self.column_id}: _render_tasks() called with {len(self._tasks)} tasks")
@@ -211,12 +228,7 @@ class TaskColumn(Widget):
                 logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
 
                 # Group tasks by parent to determine last child status
-                parent_groups = {}
-                for task in self._tasks:
-                    parent_id = task.parent_id or "root"
-                    if parent_id not in parent_groups:
-                        parent_groups[parent_id] = []
-                    parent_groups[parent_id].append(task)
+                parent_groups = self._group_tasks_by_parent(self._tasks)
 
                 # Render all tasks in correct order
                 for i, task in enumerate(self._tasks):
@@ -249,12 +261,7 @@ class TaskColumn(Widget):
             logger.debug(f"{self.column_id}: Mounting {len(self._tasks)} new widgets")
 
             # Group tasks by parent to determine last child status
-            parent_groups = {}
-            for task in self._tasks:
-                parent_id = task.parent_id or "root"
-                if parent_id not in parent_groups:
-                    parent_groups[parent_id] = []
-                parent_groups[parent_id].append(task)
+            parent_groups = self._group_tasks_by_parent(self._tasks)
 
             # Render all tasks in correct order
             for i, task in enumerate(self._tasks):
