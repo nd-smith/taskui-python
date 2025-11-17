@@ -1245,3 +1245,144 @@ class TestTaskServiceArchive:
         # Verify task remains archived
         assert updated_task.is_archived
         assert not updated_task.is_completed
+
+
+class TestTaskServiceSoftDelete:
+    """Tests for task soft delete operations."""
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_incomplete_task(self, db_session, sample_task_list, sample_list_id):
+        """Test soft deleting an incomplete task (unlike archive, this works)."""
+        service = TaskService(db_session)
+
+        # Create an incomplete task
+        task = await service.create_task(
+            title="Incomplete Task",
+            list_id=sample_list_id
+        )
+        assert not task.is_completed
+
+        # Soft delete the task (should work even though incomplete)
+        deleted_task = await service.soft_delete_task(task.id)
+
+        # Verify soft deleted (archived)
+        assert deleted_task.is_archived
+        assert deleted_task.archived_at is not None
+        assert not deleted_task.is_completed  # Should still be incomplete
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_completed_task(self, db_session, sample_task_list, sample_list_id):
+        """Test soft deleting a completed task."""
+        service = TaskService(db_session)
+
+        # Create and complete a task
+        task = await service.create_task(
+            title="Completed Task",
+            list_id=sample_list_id
+        )
+        completed_task = await service.toggle_completion(task.id)
+        assert completed_task.is_completed
+
+        # Soft delete the task
+        deleted_task = await service.soft_delete_task(task.id)
+
+        # Verify soft deleted (archived)
+        assert deleted_task.is_archived
+        assert deleted_task.archived_at is not None
+        assert deleted_task.is_completed  # Should still be completed
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_persistence(self, db_session, sample_task_list, sample_list_id):
+        """Test that soft delete status persists to database."""
+        service = TaskService(db_session)
+
+        # Create and soft delete a task
+        task = await service.create_task(
+            title="Test Task",
+            list_id=sample_list_id
+        )
+        await service.soft_delete_task(task.id)
+
+        # Query back from database
+        await db_session.flush()
+        retrieved_task = await service.get_task_by_id(task.id)
+
+        # Verify persisted as archived
+        assert retrieved_task.is_archived
+        assert retrieved_task.archived_at is not None
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_excludes_from_normal_queries(self, db_session, sample_task_list, sample_list_id):
+        """Test that soft deleted tasks are excluded from normal queries."""
+        service = TaskService(db_session)
+
+        # Create two tasks
+        task1 = await service.create_task("Task 1", sample_list_id)
+        task2 = await service.create_task("Task 2", sample_list_id)
+
+        # Soft delete one task
+        await service.soft_delete_task(task1.id)
+
+        # Get tasks (without archived)
+        tasks = await service.get_tasks_for_list(sample_list_id)
+
+        # Should only see task2
+        assert len(tasks) == 1
+        assert tasks[0].id == task2.id
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_can_be_restored(self, db_session, sample_task_list, sample_list_id):
+        """Test that soft deleted tasks can be restored via unarchive."""
+        service = TaskService(db_session)
+
+        # Create and soft delete a task
+        task = await service.create_task("Test Task", sample_list_id)
+        await service.soft_delete_task(task.id)
+
+        # Verify deleted (archived)
+        deleted_task = await service.get_task_by_id(task.id)
+        assert deleted_task.is_archived
+
+        # Restore via unarchive
+        restored_task = await service.unarchive_task(task.id)
+
+        # Verify restored
+        assert not restored_task.is_archived
+        assert restored_task.archived_at is None
+
+        # Should appear in normal queries now
+        tasks = await service.get_tasks_for_list(sample_list_id)
+        assert len(tasks) == 1
+        assert tasks[0].id == task.id
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_appears_in_archived_tasks(self, db_session, sample_task_list, sample_list_id):
+        """Test that soft deleted tasks appear in get_archived_tasks."""
+        service = TaskService(db_session)
+
+        # Create incomplete task and soft delete it
+        task1 = await service.create_task("Deleted Incomplete", sample_list_id)
+        await service.soft_delete_task(task1.id)
+
+        # Create completed task and archive it normally
+        task2 = await service.create_task("Archived Completed", sample_list_id)
+        await service.toggle_completion(task2.id)
+        await service.archive_task(task2.id)
+
+        # Get archived tasks
+        archived = await service.get_archived_tasks(sample_list_id)
+
+        # Both should appear
+        assert len(archived) == 2
+        archived_ids = {t.id for t in archived}
+        assert task1.id in archived_ids
+        assert task2.id in archived_ids
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_nonexistent_task(self, db_session):
+        """Test soft deleting a non-existent task raises error."""
+        service = TaskService(db_session)
+
+        # Try to soft delete non-existent task
+        with pytest.raises(TaskNotFoundError):
+            await service.soft_delete_task(uuid4())

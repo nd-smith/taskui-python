@@ -600,10 +600,49 @@ class TaskUI(App):
         except Exception as e:
             logger.error("Error loading archived tasks", exc_info=True)
 
-    def action_delete_task(self) -> None:
-        """Delete the selected task (Delete/Backspace key)."""
-        # TODO: Implement in Story 2.5
-        self.notify("Delete not yet implemented", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+    async def action_delete_task(self) -> None:
+        """Delete the selected task (Delete/Backspace key).
+
+        Soft deletes the task by archiving it. Unlike archive, this works on any task
+        (completed or not). Deleted tasks can be restored via the archive modal.
+        """
+        logger.debug("Delete key pressed")
+
+        if not self._can_perform_task_operation():
+            logger.debug("Cannot perform delete operation")
+            return
+
+        # Get the focused column
+        column = self._get_focused_column()
+        if not column:
+            logger.debug("No focused column found for delete")
+            return
+
+        # Get the currently selected task
+        selected_task = column.get_selected_task()
+        if not selected_task:
+            logger.debug("No task selected for delete")
+            return
+
+        if not self._has_db_manager():
+            logger.debug("No database manager available for delete")
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                # Soft delete the task (archives it without completion check)
+                await task_service.soft_delete_task(selected_task.id)
+
+            # Notify user of successful deletion
+            self._notify_task_success("deleted", selected_task.title, icon="🗑️")
+
+            # Refresh UI to remove deleted task and clear detail panel
+            await self._refresh_ui_after_task_change(clear_detail_panel=True)
+
+        except Exception as e:
+            logger.error("Error deleting task", exc_info=True)
+            self._notify_task_error("delete task")
 
     # ==============================================================================
     # ACTION HANDLERS - UTILITY

@@ -747,6 +747,48 @@ class TaskService:
         # Convert back to Pydantic with counts using helper
         return await self._fetch_task_with_counts(task_orm)
 
+    async def soft_delete_task(self, task_id: UUID) -> Task:
+        """
+        Soft delete a task by archiving it (works on any task, completed or not).
+
+        This provides a "delete" operation that is recoverable via the archive/restore
+        functionality. Unlike archive_task(), this does not require the task to be completed.
+
+        Args:
+            task_id: UUID of the task to soft delete
+
+        Returns:
+            Updated Task instance
+
+        Raises:
+            TaskNotFoundError: If task does not exist
+        """
+        # Get the task
+        task_orm = await self._get_task_or_raise(task_id)
+
+        # Archive the task (soft delete - no completion check)
+        task_orm.is_archived = True
+        task_orm.archived_at = datetime.utcnow()
+
+        logger.info(
+            f"Task soft-deleted (archived): task_id={task_id}, "
+            f"archive_timestamp={task_orm.archived_at.isoformat()}, "
+            f"was_completed={task_orm.is_completed}"
+        )
+
+        # Flush changes to database
+        try:
+            await self.session.flush()
+        except Exception as e:
+            logger.error(
+                f"Soft delete operation failed for task_id={task_id}",
+                exc_info=True
+            )
+            raise
+
+        # Convert back to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
+
     async def unarchive_task(self, task_id: UUID) -> Task:
         """
         Unarchive (restore) an archived task.
