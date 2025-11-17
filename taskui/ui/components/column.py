@@ -222,7 +222,17 @@ class TaskColumn(Widget):
         return task_items
 
     def _render_tasks(self) -> None:
-        """Render the task list with TaskItem widgets."""
+        """Render the task list with TaskItem widgets.
+
+        This method updates the visual display by:
+        - Grouping tasks by parent for hierarchy visualization
+        - Creating TaskItem widgets for each task
+        - Mounting the widgets in the scrollable container
+        - Managing the empty state message display
+
+        Returns:
+            None
+        """
         logger.debug(f"{self.column_id}: _render_tasks() called with {len(self._tasks)} tasks")
         try:
             content_container = self.query_one(f"#{self.column_id}-content", VerticalScroll)
@@ -286,7 +296,14 @@ class TaskColumn(Widget):
         # No-op: headers removed for space efficiency
 
     def navigate_up(self) -> None:
-        """Navigate to the previous task in the list."""
+        """Navigate to the previous task in the list.
+
+        Moves the selection up by one position if not already at the first task.
+        If a task is selected, updates selection and emits TaskSelected message.
+
+        Returns:
+            None
+        """
         if not self._tasks:
             return
 
@@ -294,7 +311,14 @@ class TaskColumn(Widget):
             self._update_selection(self._selected_index - 1)
 
     def navigate_down(self) -> None:
-        """Navigate to the next task in the list."""
+        """Navigate to the next task in the list.
+
+        Moves the selection down by one position if not already at the last task.
+        If a task is selected, updates selection and emits TaskSelected message.
+
+        Returns:
+            None
+        """
         if not self._tasks:
             return
 
@@ -347,7 +371,14 @@ class TaskColumn(Widget):
         return None
 
     def clear_selection(self) -> None:
-        """Clear the current selection."""
+        """Clear the current selection.
+
+        Deselects the currently selected task item and resets the selection state.
+        Sets selected_index to -1 and selected_task_id to None.
+
+        Returns:
+            None
+        """
         if 0 <= self._selected_index < len(self._tasks):
             task_id = self._tasks[self._selected_index].id
             task_item = self.query_one(f"#task-{task_id}", TaskItem)
@@ -357,7 +388,23 @@ class TaskColumn(Widget):
         self.selected_task_id = None
 
     def on_focus(self) -> None:
-        """Handle focus event - ensure selection is properly activated."""
+        """Handle focus event - ensure selection is properly activated.
+
+        This method is called when the column receives keyboard focus. It:
+        - Updates visual state to show focus (border/styling)
+        - Ensures a valid task selection exists
+        - Handles the retry mechanism for widget mounting
+
+        The retry mechanism (ensure_selection) works as follows:
+        - Verifies that TaskItem widgets are mounted before selecting them
+        - Attempts up to 3 retries with call_after_refresh to wait for widgets
+        - Auto-selects the first task if no selection exists (_selected_index == -1)
+        - Triggers selection for existing selections to emit TaskSelected messages
+        - This is critical for dependent columns (e.g., Column 2 triggering Column 3)
+
+        Returns:
+            None
+        """
         logger.debug(f"{self.column_id}: on_focus() called, {len(self._tasks)} tasks, selected_index={self._selected_index}")
         self.focused = True
         self.add_class("focused")
@@ -404,22 +451,36 @@ class TaskColumn(Widget):
         self.call_after_refresh(ensure_selection)
 
     def on_blur(self) -> None:
-        """Handle blur (unfocus) event."""
+        """Handle blur (unfocus) event.
+
+        Called when the column loses keyboard focus. Updates visual state
+        by removing focus styling (border/highlighting).
+
+        Returns:
+            None
+        """
         self.focused = False
         self.remove_class("focused")
 
     def on_task_item_selected(self, message: TaskItem.Selected) -> None:
         """Handle task item selection from click.
 
+        Updates the column's selection when a TaskItem is clicked.
+        Finds the task by ID and updates selection, then ensures the
+        column regains focus for keyboard navigation.
+
         Args:
-            message: TaskItem.Selected message
+            message: TaskItem.Selected message containing task_id
+
+        Returns:
+            None
         """
         # Find the index of the selected task
         for i, task in enumerate(self._tasks):
             if task.id == message.task_id:
                 self._update_selection(i)
                 break
-        
+
         # Ensure column regains focus to maintain keyboard navigation
         self.focus()
 
