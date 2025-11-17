@@ -189,6 +189,38 @@ class TaskColumn(Widget):
             parent_groups[parent_id].append(task)
         return parent_groups
 
+    def _create_task_items(
+        self,
+        tasks: List[Task],
+        parent_groups: dict,
+        selected_index: int
+    ) -> List[TaskItem]:
+        """Create TaskItem widgets for a list of tasks.
+
+        Args:
+            tasks: Tasks to create items for
+            parent_groups: Parent grouping for last-child detection
+            selected_index: Currently selected task index
+
+        Returns:
+            List of TaskItem widgets ready to mount
+        """
+        task_items = []
+        for i, task in enumerate(tasks):
+            parent_id = task.parent_id or "root"
+            siblings = parent_groups[parent_id]
+            is_last_child = task == siblings[-1] if siblings else False
+
+            task_item = TaskItem(
+                task=task,
+                is_last_child=is_last_child,
+                id=f"task-{task.id}"
+            )
+            task_item.selected = (i == selected_index)
+            task_items.append(task_item)
+
+        return task_items
+
     def _render_tasks(self) -> None:
         """Render the task list with TaskItem widgets."""
         logger.debug(f"{self.column_id}: _render_tasks() called with {len(self._tasks)} tasks")
@@ -230,23 +262,11 @@ class TaskColumn(Widget):
                 # Group tasks by parent to determine last child status
                 parent_groups = self._group_tasks_by_parent(self._tasks)
 
-                # Render all tasks in correct order
-                for i, task in enumerate(self._tasks):
-                    # Determine if this is the last child in its parent group
-                    parent_id = task.parent_id or "root"
-                    siblings = parent_groups[parent_id]
-                    is_last_child = task == siblings[-1] if siblings else False
+                # Create task items
+                task_items = self._create_task_items(self._tasks, parent_groups, self._selected_index)
 
-                    task_id = f"task-{task.id}"
-
-                    # Create and mount task item
-                    task_item = TaskItem(
-                        task=task,
-                        is_last_child=is_last_child,
-                        id=task_id
-                    )
-                    task_item.selected = (i == self._selected_index)
-
+                # Mount all task items
+                for task_item in task_items:
                     try:
                         content_container.mount(task_item)
                     except Exception as e:
@@ -263,23 +283,11 @@ class TaskColumn(Widget):
             # Group tasks by parent to determine last child status
             parent_groups = self._group_tasks_by_parent(self._tasks)
 
-            # Render all tasks in correct order
-            for i, task in enumerate(self._tasks):
-                # Determine if this is the last child in its parent group
-                parent_id = task.parent_id or "root"
-                siblings = parent_groups[parent_id]
-                is_last_child = task == siblings[-1] if siblings else False
+            # Create task items
+            task_items = self._create_task_items(self._tasks, parent_groups, self._selected_index)
 
-                task_id = f"task-{task.id}"
-
-                # Create and mount task item
-                task_item = TaskItem(
-                    task=task,
-                    is_last_child=is_last_child,
-                    id=task_id
-                )
-                task_item.selected = (i == self._selected_index)
-
+            # Mount all task items
+            for task_item in task_items:
                 try:
                     content_container.mount(task_item)
                 except Exception as e:
