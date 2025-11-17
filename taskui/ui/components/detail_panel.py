@@ -168,8 +168,10 @@ class DetailPanel(Widget):
     def compose(self):
         """Compose the panel layout.
 
+        Creates the scrollable content area with an empty message placeholder.
+
         Yields:
-            Widgets that make up the panel
+            Static widgets that form the panel's initial structure
         """
         # Scrollable content area
         with VerticalScroll(classes="panel-content", id=f"{self.column_id}-content"):
@@ -191,7 +193,11 @@ class DetailPanel(Widget):
         self._render_details()
 
     def _render_details(self) -> None:
-        """Render the task details."""
+        """Render the task details to the content container.
+
+        Updates the panel by removing old detail widgets and mounting new ones,
+        or showing the empty message if no task is selected.
+        """
         content_container = self.query_one(f"#{self.column_id}-content", VerticalScroll)
         empty_message = self.query_one(f"#{self.column_id}-empty", Static)
 
@@ -329,9 +335,15 @@ class DetailPanel(Widget):
         return None
 
     def on_focus(self) -> None:
-        """Handle focus event."""
+        """Handle widget focus event.
+
+        Adds the 'focused' CSS class to highlight the panel as focused.
+        """
         self.add_class("focused")
 
     def on_blur(self) -> None:
-        """Handle blur (unfocus) event."""
+        """Handle widget blur (unfocus) event.
+
+        Removes the 'focused' CSS class when the panel loses focus.
+        """
         self.remove_class("focused")
