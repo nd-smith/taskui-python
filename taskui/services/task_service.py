@@ -372,30 +372,24 @@ class TaskService:
         # Verify parent exists
         await self._get_task_or_raise(parent_id)
 
-        # Build query
-        query = select(TaskORM).where(TaskORM.parent_id == str(parent_id))
-
-        if not include_archived:
-            query = query.where(TaskORM.is_archived == False)
-
-        query = query.order_by(TaskORM.position)
+        # Build query using helper
+        if include_archived:
+            # Build query manually when including archived
+            query = (
+                select(TaskORM)
+                .where(TaskORM.parent_id == str(parent_id))
+                .order_by(TaskORM.position)
+            )
+        else:
+            # Use helper for active tasks only
+            query = self._query_child_tasks(parent_id)
 
         # Execute query
         result = await self.session.execute(query)
         task_orms = result.scalars().all()
 
-        # Convert to Pydantic and update child counts
-        tasks = []
-        for task_orm in task_orms:
-            task = self._orm_to_pydantic(task_orm)
-
-            # Get child counts
-            child_count, completed_child_count = await self._get_child_counts(task.id)
-            task.update_child_counts(child_count, completed_child_count)
-
-            tasks.append(task)
-
-        return tasks
+        # Convert to Pydantic with counts using helper
+        return await self._fetch_tasks_with_counts(task_orms)
 
     async def get_all_descendants(
         self,
@@ -585,13 +579,8 @@ class TaskService:
         if not task_orm:
             return None
 
-        task = self._orm_to_pydantic(task_orm)
-
-        # Get child counts
-        child_count, completed_child_count = await self._get_child_counts(task.id)
-        task.update_child_counts(child_count, completed_child_count)
-
-        return task
+        # Convert to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
 
     # ==============================================================================
     # UPDATE OPERATIONS
@@ -636,12 +625,8 @@ class TaskService:
             # Flush changes to database
             await self.session.flush()
 
-            # Convert back to Pydantic model
-            task = self._orm_to_pydantic(task_orm)
-
-            # Get child counts
-            child_count, completed_child_count = await self._get_child_counts(task.id)
-            task.update_child_counts(child_count, completed_child_count)
+            # Convert back to Pydantic with counts using helper
+            task = await self._fetch_task_with_counts(task_orm)
 
             logger.info(f"Updated task: id={task_id}, title='{task.title}'")
             return task
@@ -828,12 +813,8 @@ class TaskService:
         # Flush changes
         await self.session.flush()
 
-        # Return updated task
-        task = self._orm_to_pydantic(task_orm)
-        child_count, completed_child_count = await self._get_child_counts(task.id)
-        task.update_child_counts(child_count, completed_child_count)
-
-        return task
+        # Return updated task with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
 
     async def _update_descendant_levels(
         self,
@@ -916,14 +897,8 @@ class TaskService:
             )
             raise
 
-        # Convert back to Pydantic model
-        task = self._orm_to_pydantic(task_orm)
-
-        # Get child counts
-        child_count, completed_child_count = await self._get_child_counts(task.id)
-        task.update_child_counts(child_count, completed_child_count)
-
-        return task
+        # Convert back to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
 
     async def archive_task(self, task_id: UUID) -> Task:
         """
@@ -968,14 +943,8 @@ class TaskService:
             )
             raise
 
-        # Convert back to Pydantic model
-        task = self._orm_to_pydantic(task_orm)
-
-        # Get child counts
-        child_count, completed_child_count = await self._get_child_counts(task.id)
-        task.update_child_counts(child_count, completed_child_count)
-
-        return task
+        # Convert back to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
 
     async def unarchive_task(self, task_id: UUID) -> Task:
         """
@@ -1011,14 +980,8 @@ class TaskService:
             )
             raise
 
-        # Convert back to Pydantic model
-        task = self._orm_to_pydantic(task_orm)
-
-        # Get child counts
-        child_count, completed_child_count = await self._get_child_counts(task.id)
-        task.update_child_counts(child_count, completed_child_count)
-
-        return task
+        # Convert back to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
 
     async def get_archived_tasks(
         self,
@@ -1065,16 +1028,8 @@ class TaskService:
         result = await self.session.execute(query)
         task_orms = result.scalars().all()
 
-        # Convert to Pydantic
-        tasks = []
-        for task_orm in task_orms:
-            task = self._orm_to_pydantic(task_orm)
-
-            # Get child counts
-            child_count, completed_child_count = await self._get_child_counts(task.id)
-            task.update_child_counts(child_count, completed_child_count)
-
-            tasks.append(task)
+        # Convert to Pydantic with counts using helper
+        tasks = await self._fetch_tasks_with_counts(task_orms)
 
         logger.debug(
             f"Retrieved {len(tasks)} archived tasks for list_id={list_id}"
