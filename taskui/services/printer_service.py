@@ -11,13 +11,105 @@ from datetime import datetime
 import logging
 from pathlib import Path
 from enum import Enum
+import platform
 
 from escpos.printer import Network, Usb, File
+try:
+    from escpos.printer import Win32Raw
+    HAS_WIN32 = True
+except ImportError:
+    HAS_WIN32 = False
 
 from taskui.models import Task
 from taskui.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+class WindowsPortPrinter:
+    """
+    Simple Windows printer wrapper that writes directly to printer port.
+    Used as fallback when pywin32 is not available.
+    """
+
+    def __init__(self, port_name: str):
+        """
+        Initialize Windows port printer.
+
+        Args:
+            port_name: Windows port name (e.g., "USB001", "LPT1")
+        """
+        self.port_name = port_name
+        self.device_file = None
+
+        # Try to open the port for writing
+        try:
+            # On Windows, ports can be accessed as special files
+            self.device_file = open(f"\\\\.\\{port_name}", "wb", buffering=0)
+            logger.debug(f"Opened Windows printer port: {port_name}")
+        except Exception as e:
+            logger.error(f"Failed to open port {port_name}: {e}")
+            raise ConnectionError(f"Cannot open Windows printer port {port_name}: {e}")
+
+    def _raw(self, data: bytes):
+        """Write raw bytes to printer port."""
+        if self.device_file:
+            try:
+                self.device_file.write(data)
+                self.device_file.flush()
+            except Exception as e:
+                logger.error(f"Failed to write to printer port: {e}")
+                raise
+
+    def text(self, txt: str):
+        """Print text."""
+        self._raw(txt.encode('utf-8'))
+
+    def ln(self, count: int = 1):
+        """Print line feed."""
+        self._raw(b'\n' * count)
+
+    def cut(self):
+        """Cut paper (ESC/POS command)."""
+        # ESC i - Full cut
+        self._raw(b'\x1b\x69')
+
+    def set(self, align: str = 'left', font: str = 'a',
+            bold: bool = False, underline: int = 0,
+            width: int = 1, height: int = 1, invert: bool = False):
+        """Set text formatting (ESC/POS commands)."""
+        # ESC a n - Set alignment
+        if align == 'center':
+            self._raw(b'\x1b\x61\x01')
+        elif align == 'right':
+            self._raw(b'\x1b\x61\x02')
+        else:
+            self._raw(b'\x1b\x61\x00')
+
+        # ESC E n - Bold
+        if bold:
+            self._raw(b'\x1b\x45\x01')
+        else:
+            self._raw(b'\x1b\x45\x00')
+
+        # ESC - n - Underline
+        if underline:
+            self._raw(b'\x1b\x2d\x01')
+        else:
+            self._raw(b'\x1b\x2d\x00')
+
+    def close(self):
+        """Close the printer port."""
+        if self.device_file:
+            try:
+                self.device_file.close()
+            except:
+                pass
+            self.device_file = None
+
+    def __del__(self):
+        """Cleanup on deletion."""
+        self.close()
 
 
 class DetailLevel(Enum):
@@ -142,21 +234,85 @@ class PrinterService:
                 # Check if auto-detection is requested
                 if self.config.device_path.lower() in ("auto", ""):
                     logger.debug("Attempting to auto-detect USB printer")
-                    # Auto-detect USB printer using Usb class (finds first available USB printer)
-                    # Common ESC/POS printer vendor IDs: Epson (0x04b8), Star (0x0519), others
-                    try:
-                        # Try Epson first (TM-T20III is 0x04b8:0x0e28)
-                        self.printer = Usb(0x04b8, 0x0e28)
-                        logger.info("Successfully connected to Epson USB printer via auto-detection")
-                    except:
-                        # If Epson fails, try generic auto-detection with no IDs (finds first printer)
-                        self.printer = Usb()
-                        logger.info("Successfully connected to USB printer via auto-detection")
+
+                    # On Windows, use Win32Raw or WindowsPortPrinter
+                    if platform.system() == "Windows":
+                        # Try common Epson TM-T20III printer names and ports
+                        printer_names = [
+                            "TM-T20III",
+                            "EPSON TM-T20III",
+                            "Epson TM-T20III Receipt",
+                            "TM-T20III Receipt"
+                        ]
+                        ports = ["USB001", "USB002", "USB003"]
+
+                        connected = False
+
+                        # Try Win32Raw first if available
+                        if HAS_WIN32:
+                            for name in printer_names:
+                                try:
+                                    logger.debug(f"Trying Windows printer (Win32Raw): {name}")
+                                    self.printer = Win32Raw(name)
+                                    logger.info(f"Successfully connected to Windows printer: {name}")
+                                    connected = True
+                                    break
+                                except Exception as e:
+                                    logger.debug(f"Failed to connect to {name}: {e}")
+                                    continue
+
+                        # If Win32Raw not available or failed, try WindowsPortPrinter
+                        if not connected:
+                            for port in ports:
+                                try:
+                                    logger.debug(f"Trying Windows printer port: {port}")
+                                    self.printer = WindowsPortPrinter(port)
+                                    logger.info(f"Successfully connected to Windows printer port: {port}")
+                                    connected = True
+                                    break
+                                except Exception as e:
+                                    logger.debug(f"Failed to connect to {port}: {e}")
+                                    continue
+
+                        if not connected:
+                            raise ConnectionError(
+                                "Could not find Epson TM-T20III printer. "
+                                "Please set device_path to your printer port (e.g., USB001) in config."
+                            )
+                    else:
+                        # On Linux/macOS, use direct USB access
+                        # Common ESC/POS printer vendor IDs: Epson (0x04b8), Star (0x0519), others
+                        try:
+                            # Try Epson TM-T20III first (0x04b8:0x0e27)
+                            self.printer = Usb(0x04b8, 0x0e27)
+                            logger.info("Successfully connected to Epson TM-T20III USB printer via auto-detection")
+                        except:
+                            # If Epson fails, try generic auto-detection with no IDs (finds first printer)
+                            self.printer = Usb()
+                            logger.info("Successfully connected to USB printer via auto-detection")
                 else:
                     logger.debug(f"Attempting to connect to USB printer at {self.config.device_path}")
-                    # For USB printers with specific device path, use File class
-                    self.printer = File(self.config.device_path)
-                    logger.info(f"Successfully connected to USB printer at {self.config.device_path}")
+
+                    # Check if it's a Windows printer name/port or a device path
+                    if platform.system() == "Windows" and not self.config.device_path.startswith("/"):
+                        # Try Win32Raw first if available
+                        if HAS_WIN32:
+                            try:
+                                self.printer = Win32Raw(self.config.device_path)
+                                logger.info(f"Successfully connected to Windows printer: {self.config.device_path}")
+                            except Exception as e:
+                                logger.debug(f"Win32Raw failed, trying WindowsPortPrinter: {e}")
+                                # Fallback to WindowsPortPrinter
+                                self.printer = WindowsPortPrinter(self.config.device_path)
+                                logger.info(f"Successfully connected to Windows printer port: {self.config.device_path}")
+                        else:
+                            # Use WindowsPortPrinter directly
+                            self.printer = WindowsPortPrinter(self.config.device_path)
+                            logger.info(f"Successfully connected to Windows printer port: {self.config.device_path}")
+                    else:
+                        # Treat as device path for File class
+                        self.printer = File(self.config.device_path)
+                        logger.info(f"Successfully connected to USB printer at {self.config.device_path}")
 
             self._connected = True
             return True
