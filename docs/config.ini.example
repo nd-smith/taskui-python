@@ -2,10 +2,19 @@
 # Copy this file to ~/.taskui/config.ini and customize as needed
 
 [printer]
-# Thermal printer network configuration
+# Printer connection type: 'network' or 'usb'
+connection_type = network
+
+# Network printer configuration (used when connection_type = network)
 host = 192.168.50.99
 port = 9100
 timeout = 60
+
+# USB printer configuration (used when connection_type = usb)
+# Common device paths:
+#   Linux: /dev/usb/lp0, /dev/usb/lp1
+#   macOS: /dev/cu.usbserial, /dev/tty.usbserial
+device_path = /dev/usb/lp0
 
 # Print format options (minimal is recommended)
 detail_level = minimal

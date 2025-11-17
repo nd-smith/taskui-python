@@ -34,10 +34,12 @@ class TestConfig:
         config = Config(Path("/tmp/nonexistent_config.ini"))
         printer_config = config.get_printer_config()
 
+        assert printer_config['connection_type'] == 'network'
         assert printer_config['host'] == '192.168.50.99'
         assert printer_config['port'] == 9100
         assert printer_config['timeout'] == 60
         assert printer_config['detail_level'] == 'minimal'
+        assert printer_config['device_path'] == '/dev/usb/lp0'
 
     def test_config_file_parsing(self):
         """Test parsing valid config file."""
@@ -108,11 +110,65 @@ host = 192.168.1.200
             # Specified value
             assert printer_config['host'] == '192.168.1.200'
             # Default values
+            assert printer_config['connection_type'] == 'network'
             assert printer_config['port'] == 9100
             assert printer_config['timeout'] == 60
             assert printer_config['detail_level'] == 'minimal'
+            assert printer_config['device_path'] == '/dev/usb/lp0'
         finally:
             config_path.unlink()
+
+    def test_usb_printer_config_file(self):
+        """Test USB printer configuration from file."""
+        # Create config for USB printer
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ini') as f:
+            f.write("""
+[printer]
+connection_type = usb
+device_path = /dev/usb/lp1
+timeout = 45
+detail_level = minimal
+""")
+            config_path = Path(f.name)
+
+        try:
+            config = Config(config_path)
+            printer_config = config.get_printer_config()
+
+            assert printer_config['connection_type'] == 'usb'
+            assert printer_config['device_path'] == '/dev/usb/lp1'
+            assert printer_config['timeout'] == 45
+            assert printer_config['detail_level'] == 'minimal'
+        finally:
+            config_path.unlink()
+
+    def test_usb_environment_variable_override(self):
+        """Test USB environment variables override config file."""
+        # Create temporary config file
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ini') as f:
+            f.write("""
+[printer]
+connection_type = network
+device_path = /dev/usb/lp0
+""")
+            config_path = Path(f.name)
+
+        try:
+            # Set environment variables
+            os.environ['TASKUI_PRINTER_CONNECTION_TYPE'] = 'usb'
+            os.environ['TASKUI_PRINTER_DEVICE_PATH'] = '/dev/usb/lp2'
+
+            config = Config(config_path)
+            printer_config = config.get_printer_config()
+
+            # Environment variables should override file values
+            assert printer_config['connection_type'] == 'usb'
+            assert printer_config['device_path'] == '/dev/usb/lp2'
+        finally:
+            # Clean up
+            config_path.unlink()
+            os.environ.pop('TASKUI_PRINTER_CONNECTION_TYPE', None)
+            os.environ.pop('TASKUI_PRINTER_DEVICE_PATH', None)
 
     def test_get_methods(self):
         """Test generic get methods."""
@@ -178,10 +234,12 @@ class TestPrinterConfigIntegration:
         # Use non-existent path to trigger defaults
         config = PrinterConfig.from_config_file(Path("/tmp/nonexistent.ini"))
 
+        assert config.connection_type == 'network'
         assert config.host == '192.168.50.99'
         assert config.port == 9100
         assert config.timeout == 60
         assert config.detail_level == DetailLevel.MINIMAL
+        assert config.device_path == '/dev/usb/lp0'
 
     def test_from_config_file_with_values(self):
         """Test loading PrinterConfig from actual config file."""
@@ -225,6 +283,31 @@ detail_level = INVALID_LEVEL
             config = PrinterConfig.from_config_file(config_path)
 
             # Should fall back to MINIMAL
+            assert config.detail_level == DetailLevel.MINIMAL
+        finally:
+            config_path.unlink()
+
+    def test_from_config_file_usb_printer(self):
+        """Test loading USB PrinterConfig from config file."""
+        from taskui.services.printer_service import PrinterConfig, DetailLevel
+
+        # Create temporary config file for USB printer
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ini') as f:
+            f.write("""
+[printer]
+connection_type = usb
+device_path = /dev/usb/lp2
+timeout = 45
+detail_level = minimal
+""")
+            config_path = Path(f.name)
+
+        try:
+            config = PrinterConfig.from_config_file(config_path)
+
+            assert config.connection_type == 'usb'
+            assert config.device_path == '/dev/usb/lp2'
+            assert config.timeout == 45
             assert config.detail_level == DetailLevel.MINIMAL
         finally:
             config_path.unlink()

@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from enum import Enum
 
-from escpos.printer import Network
+from escpos.printer import Network, Usb, File
 
 from taskui.models import Task
 from taskui.logging_config import get_logger
@@ -32,15 +32,23 @@ class PrinterConfig:
 
     def __init__(
         self,
+        connection_type: str = "network",
         host: str = "192.168.50.99",
         port: int = 9100,
         timeout: int = 60,
-        detail_level: DetailLevel = DetailLevel.MINIMAL
+        detail_level: DetailLevel = DetailLevel.MINIMAL,
+        device_path: str = "/dev/usb/lp0"
     ):
+        self.connection_type = connection_type.lower()
         self.host = host
         self.port = port
         self.timeout = timeout
         self.detail_level = detail_level
+        self.device_path = device_path
+
+        # Validate connection type
+        if self.connection_type not in ("network", "usb"):
+            raise ValueError(f"Invalid connection_type: {connection_type}. Must be 'network' or 'usb'")
 
     @classmethod
     def from_config_file(cls, config_path: Optional[Path] = None) -> "PrinterConfig":
@@ -70,13 +78,18 @@ class PrinterConfig:
             logger.warning(f"Invalid detail_level '{detail_level_str}', using MINIMAL")
             detail_level = DetailLevel.MINIMAL
 
-        logger.debug(f"Loaded printer config: {printer_config['host']}:{printer_config['port']}")
+        connection_type = printer_config.get('connection_type', 'network')
+        logger.debug(f"Loaded printer config: connection_type={connection_type}, "
+                    f"host={printer_config['host']}:{printer_config['port']}, "
+                    f"device_path={printer_config.get('device_path', '/dev/usb/lp0')}")
 
         return cls(
+            connection_type=connection_type,
             host=printer_config['host'],
             port=printer_config['port'],
             timeout=printer_config['timeout'],
-            detail_level=detail_level
+            detail_level=detail_level,
+            device_path=printer_config.get('device_path', '/dev/usb/lp0')
         )
 
 
@@ -96,13 +109,19 @@ class PrinterService:
             config: PrinterConfig instance with connection details
         """
         self.config = config
-        self.printer = None  # Will be Network printer instance
+        self.printer = None  # Will be Network or USB printer instance
         self._connected = False
 
-        logger.info(
-            f"PrinterService initialized for {config.host}:{config.port}, "
-            f"detail_level={config.detail_level.value}"
-        )
+        if config.connection_type == "network":
+            logger.info(
+                f"PrinterService initialized for network printer at {config.host}:{config.port}, "
+                f"detail_level={config.detail_level.value}"
+            )
+        else:
+            logger.info(
+                f"PrinterService initialized for USB printer at {config.device_path}, "
+                f"detail_level={config.detail_level.value}"
+            )
 
     def connect(self) -> bool:
         """
@@ -114,18 +133,27 @@ class PrinterService:
         Raises:
             ConnectionError: If unable to connect to printer
         """
-        logger.debug(f"Attempting to connect to printer at {self.config.host}:{self.config.port}")
-
         try:
-            self.printer = Network(self.config.host, port=self.config.port, timeout=self.config.timeout)
+            if self.config.connection_type == "network":
+                logger.debug(f"Attempting to connect to network printer at {self.config.host}:{self.config.port}")
+                self.printer = Network(self.config.host, port=self.config.port, timeout=self.config.timeout)
+                logger.info(f"Successfully connected to network printer at {self.config.host}")
+            else:  # USB
+                logger.debug(f"Attempting to connect to USB printer at {self.config.device_path}")
+                # For USB printers, the File class is used to write to device path
+                self.printer = File(self.config.device_path)
+                logger.info(f"Successfully connected to USB printer at {self.config.device_path}")
+
             self._connected = True
-            logger.info(f"Successfully connected to printer at {self.config.host}")
             return True
 
         except Exception as e:
             logger.error(f"Failed to connect to printer: {e}", exc_info=True)
             self._connected = False
-            raise ConnectionError(f"Cannot connect to printer at {self.config.host}:{self.config.port}") from e
+            if self.config.connection_type == "network":
+                raise ConnectionError(f"Cannot connect to network printer at {self.config.host}:{self.config.port}") from e
+            else:
+                raise ConnectionError(f"Cannot connect to USB printer at {self.config.device_path}") from e
 
     def disconnect(self):
         """Disconnect from thermal printer."""
@@ -286,12 +314,20 @@ if __name__ == "__main__":
 
     setup_logging()
 
-    # Example configuration
+    # Example configuration for network printer
     config = PrinterConfig(
+        connection_type="network",
         host="192.168.50.99",
         port=9100,
         detail_level=DetailLevel.MINIMAL
     )
+
+    # Example configuration for USB printer (uncomment to test USB)
+    # config = PrinterConfig(
+    #     connection_type="usb",
+    #     device_path="/dev/usb/lp0",
+    #     detail_level=DetailLevel.MINIMAL
+    # )
 
     # Create mock task for testing
     from taskui.models import Task
