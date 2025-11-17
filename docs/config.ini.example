@@ -14,6 +14,7 @@ timeout = 60
 # Common device paths:
 #   Linux: /dev/usb/lp0, /dev/usb/lp1
 #   macOS: /dev/cu.usbserial, /dev/tty.usbserial
+#   Windows: USB001, USB002, LPT1, COM1, etc.
 device_path = /dev/usb/lp0
 
 # Print format options (minimal is recommended)
