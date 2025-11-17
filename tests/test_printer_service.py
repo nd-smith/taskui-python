@@ -392,8 +392,8 @@ class TestPrinterService:
 
         assert result is True
         assert service.is_connected()
-        # Should be called with Epson vendor/product IDs first
-        mock_usb_class.assert_called_with(0x04b8, 0x0e28)
+        # Should be called with Epson TM-T20III vendor/product IDs first
+        mock_usb_class.assert_called_with(0x04b8, 0x0e27)
 
     @patch('taskui.services.printer_service.Usb')
     def test_usb_auto_detect_fallback(self, mock_usb_class, usb_auto_printer_config, mock_network_printer):
@@ -408,7 +408,7 @@ class TestPrinterService:
         assert service.is_connected()
         # Should be called twice: first with IDs, then without
         assert mock_usb_class.call_count == 2
-        mock_usb_class.assert_any_call(0x04b8, 0x0e28)
+        mock_usb_class.assert_any_call(0x04b8, 0x0e27)
         mock_usb_class.assert_any_call()
 
     @patch('taskui.services.printer_service.Usb')

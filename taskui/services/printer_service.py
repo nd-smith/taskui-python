@@ -145,9 +145,9 @@ class PrinterService:
                     # Auto-detect USB printer using Usb class (finds first available USB printer)
                     # Common ESC/POS printer vendor IDs: Epson (0x04b8), Star (0x0519), others
                     try:
-                        # Try Epson first (TM-T20III is 0x04b8:0x0e28)
-                        self.printer = Usb(0x04b8, 0x0e28)
-                        logger.info("Successfully connected to Epson USB printer via auto-detection")
+                        # Try Epson TM-T20III first (0x04b8:0x0e27)
+                        self.printer = Usb(0x04b8, 0x0e27)
+                        logger.info("Successfully connected to Epson TM-T20III USB printer via auto-detection")
                     except:
                         # If Epson fails, try generic auto-detection with no IDs (finds first printer)
                         self.printer = Usb()
