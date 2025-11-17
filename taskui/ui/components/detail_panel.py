@@ -20,6 +20,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from taskui.models import Task
+from taskui.logging_config import get_logger
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -36,6 +37,9 @@ from taskui.ui.theme import (
     PURPLE,
     get_level_color,
 )
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class DetailPanel(Widget):
@@ -188,6 +192,14 @@ class DetailPanel(Widget):
             task: Task object to display, or None to show empty state
             hierarchy: List of tasks from root to current task (for hierarchy path)
         """
+        if task:
+            logger.debug(
+                f"DetailPanel: Setting task '{task.title[:50]}' (id={task.id}, level={task.level}), "
+                f"hierarchy_depth={len(hierarchy) if hierarchy else 0}"
+            )
+        else:
+            logger.debug("DetailPanel: Clearing task (no task selected)")
+
         self.current_task = task
         self.task_hierarchy = hierarchy or []
         self._render_details()
@@ -208,12 +220,18 @@ class DetailPanel(Widget):
         if not self.current_task:
             # Show empty message
             empty_message.display = True
+            logger.debug("DetailPanel: Rendered empty state")
             return
 
         # Hide empty message
         empty_message.display = False
 
         task = self.current_task
+        logger.debug(
+            f"DetailPanel: Rendering task details - id={task.id}, "
+            f"completed={task.is_completed}, archived={task.is_archived}, "
+            f"has_notes={bool(task.notes)}, has_parent={bool(task.parent_id)}"
+        )
 
         # Build the detail sections
         details_text = self._build_details_text(task)
@@ -221,6 +239,7 @@ class DetailPanel(Widget):
         # Mount the details as a single Static widget
         detail_widget = Static(details_text, classes="section", markup=True)
         content_container.mount(detail_widget)
+        logger.debug("DetailPanel: Detail widgets mounted successfully")
 
     def _build_details_text(self, task: Task) -> str:
         """Build the formatted text for task details.
@@ -328,17 +347,23 @@ class DetailPanel(Widget):
         Returns:
             Warning message string or None
         """
+        warning = None
         if task.level == 1:
-            return "Maximum nesting depth for Column 1 (2 levels)"
+            warning = "Maximum nesting depth for Column 1 (2 levels)"
         elif task.level == 2:
-            return "Maximum nesting depth reached (3 levels)"
-        return None
+            warning = "Maximum nesting depth reached (3 levels)"
+
+        if warning:
+            logger.debug(f"DetailPanel: Nesting warning for task {task.id}: {warning}")
+
+        return warning
 
     def on_focus(self) -> None:
         """Handle widget focus event.
 
         Adds the 'focused' CSS class to highlight the panel as focused.
         """
+        logger.debug(f"DetailPanel: Focused (current_task={self.current_task.title[:30] if self.current_task else 'None'})")
         self.add_class("focused")
 
     def on_blur(self) -> None:
@@ -346,4 +371,5 @@ class DetailPanel(Widget):
 
         Removes the 'focused' CSS class when the panel loses focus.
         """
+        logger.debug("DetailPanel: Blurred (lost focus)")
         self.remove_class("focused")

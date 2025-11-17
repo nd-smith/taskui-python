@@ -224,6 +224,10 @@ class TaskCreationModal(ModalScreen):
                     f"Cannot create child: Parent at level {parent_task.level} "
                     f"has reached max nesting depth ({max_depth}) for {column.value}"
                 )
+                logger.warning(
+                    f"TaskModal: Nesting limit violation - parent_id={parent_task.id}, "
+                    f"parent_level={parent_task.level}, column={column.value}, max_depth={max_depth}"
+                )
 
     def compose(self) -> ComposeResult:
         """Compose the modal layout.
@@ -392,7 +396,13 @@ class TaskCreationModal(ModalScreen):
             - Logs the validation error for debugging purposes
             - The error message is displayed to the user in the modal's context area
         """
-        logger.info(f"Task modal opened in {self.mode} mode")
+        context_info = ""
+        if self.mode == "edit" and self.edit_task:
+            context_info = f", edit_task_id={self.edit_task.id}"
+        elif self.parent_task:
+            context_info = f", parent_id={self.parent_task.id}, column={self.column.value}"
+
+        logger.info(f"TaskModal: Opened in {self.mode} mode{context_info}")
 
         # Focus the title input
         title_input = self.query_one("#title-input", Input)
@@ -400,7 +410,7 @@ class TaskCreationModal(ModalScreen):
 
         # Disable save button if there's a validation error
         if self.validation_error:
-            logger.debug(f"Validation error in modal: {self.validation_error}")
+            logger.warning(f"TaskModal: Save button disabled due to validation error: {self.validation_error}")
             save_button = self.query_one("#save-button", Button)
             save_button.disabled = True
 
@@ -410,6 +420,7 @@ class TaskCreationModal(ModalScreen):
         Args:
             event: The button pressed event
         """
+        logger.debug(f"TaskModal: Button pressed - {event.button.id}")
         if event.button.id == "save-button":
             self.action_save()
         elif event.button.id == "cancel-button":
@@ -452,11 +463,14 @@ class TaskCreationModal(ModalScreen):
 
         # Validate title
         if not title:
-            logger.debug("Save cancelled: empty title")
+            logger.warning(f"TaskModal: Save validation failed - empty title (mode={self.mode})")
             # Show error - could add a validation label here
             return
 
-        logger.info(f"Task {self.mode} saved: {title[:50]}")
+        logger.info(
+            f"TaskModal: Task {self.mode} saved - title='{title[:50]}', "
+            f"has_notes={bool(notes)}, notes_length={len(notes) if notes else 0}"
+        )
 
         # Post TaskCreated message
         self.post_message(
@@ -485,7 +499,7 @@ class TaskCreationModal(ModalScreen):
             - Dismisses the modal, returning to the previous screen
             - Does not validate or persist any user input
         """
-        logger.info("Task modal cancelled")
+        logger.info(f"TaskModal: Cancelled (mode={self.mode})")
         # Post TaskCancelled message
         self.post_message(self.TaskCancelled())
         # Dismiss modal
@@ -509,6 +523,7 @@ class TaskCreationModal(ModalScreen):
         """
         # Enter key in title input should save
         if event.input.id == "title-input":
+            logger.debug("TaskModal: Enter pressed in title field, triggering save")
             self.action_save()
 
     class TaskCreated(Message):

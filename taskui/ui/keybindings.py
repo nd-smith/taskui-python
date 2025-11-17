@@ -12,6 +12,11 @@ from typing import Optional
 from textual.app import ComposeResult
 from textual.binding import Binding
 
+from taskui.logging_config import get_logger
+
+# Initialize logger for this module
+logger = get_logger(__name__)
+
 
 # Navigation keybindings
 NAVIGATION_BINDINGS = [
@@ -72,9 +77,12 @@ def get_next_column(current_column_id: str) -> Optional[str]:
     try:
         current_index = COLUMN_ORDER.index(current_column_id)
         next_index = (current_index + 1) % len(COLUMN_ORDER)
-        return COLUMN_ORDER[next_index]
+        next_column = COLUMN_ORDER[next_index]
+        logger.debug(f"Keybindings: Navigate next column - from {current_column_id} to {next_column}")
+        return next_column
     except ValueError:
         # If current column not found, return first column
+        logger.warning(f"Keybindings: Unknown column {current_column_id}, defaulting to first column")
         return COLUMN_ORDER[0]
 
 
@@ -90,9 +98,12 @@ def get_prev_column(current_column_id: str) -> Optional[str]:
     try:
         current_index = COLUMN_ORDER.index(current_column_id)
         prev_index = (current_index - 1) % len(COLUMN_ORDER)
-        return COLUMN_ORDER[prev_index]
+        prev_column = COLUMN_ORDER[prev_index]
+        logger.debug(f"Keybindings: Navigate previous column - from {current_column_id} to {prev_column}")
+        return prev_column
     except ValueError:
         # If current column not found, return last column
+        logger.warning(f"Keybindings: Unknown column {current_column_id}, defaulting to last column")
         return COLUMN_ORDER[-1]
 
 

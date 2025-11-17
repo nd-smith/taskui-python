@@ -26,6 +26,7 @@ from rich.text import Text
 from rich.console import RenderableType
 
 from taskui.models import TaskList
+from taskui.logging_config import get_logger
 from taskui.ui.theme import (
     LEVEL_0_COLOR,
     FOREGROUND,
@@ -37,6 +38,9 @@ from taskui.ui.theme import (
     HOVER_OPACITY,
     with_alpha,
 )
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class ListTab(Widget):
@@ -322,6 +326,7 @@ class ListBar(Horizontal):
         Args:
             lists: New list of TaskList models
         """
+        logger.debug(f"ListBar: Updating lists, count={len(lists)}")
         self.lists = lists
         self.refresh_tabs()
 
@@ -339,6 +344,8 @@ class ListBar(Horizontal):
         - The display is fully synchronized with the underlying data
         - No orphaned widgets remain in the widget tree
         """
+        logger.debug(f"ListBar: Refreshing tabs, list_count={len(self.lists)}, active_list_id={self.active_list_id}")
+
         # Remove existing tabs
         for child in list(self.children):
             child.remove()
@@ -349,6 +356,8 @@ class ListBar(Horizontal):
 
         for tab in self.tabs:
             self.mount(tab)
+
+        logger.debug(f"ListBar: Tabs refreshed, tab_count={len(self.tabs)}")
 
     def set_active_list(self, list_id: UUID) -> None:
         """Set the active list and update tab highlighting.
@@ -368,16 +377,22 @@ class ListBar(Horizontal):
         Args:
             list_id: UUID of the list to make active
         """
-        self.active_list_id = list_id
-        # Note: watch_active_list_id() will automatically update tab highlighting
-
         # Find and emit the selected list
+        list_name = None
         for task_list in self.lists:
             if task_list.id == list_id:
+                list_name = task_list.name
+                logger.info(f"ListBar: Setting active list '{list_name}' (id={list_id})")
                 self.post_message(
                     self.ListSelected(list_id=list_id, list_name=task_list.name)
                 )
                 break
+
+        if not list_name:
+            logger.warning(f"ListBar: Attempted to set active list with unknown id={list_id}")
+
+        self.active_list_id = list_id
+        # Note: watch_active_list_id() will automatically update tab highlighting
 
     def select_list_by_number(self, number: int) -> bool:
         """Select a list by its shortcut number (1-3).
@@ -399,9 +414,12 @@ class ListBar(Horizontal):
         """
         if 1 <= number <= len(self.lists):
             selected_list = self.lists[number - 1]
+            logger.debug(f"ListBar: Selected list by shortcut [{number}]: '{selected_list.name}' (id={selected_list.id})")
             self.set_active_list(selected_list.id)
             return True
-        return False
+        else:
+            logger.warning(f"ListBar: Invalid list number {number}, available lists: {len(self.lists)}")
+            return False
 
     def watch_active_list_id(self, list_id: Optional[UUID]) -> None:
         """React to active list ID changes and update tab highlighting.
@@ -422,6 +440,13 @@ class ListBar(Horizontal):
         Args:
             list_id: New active list ID (None for no active list)
         """
+        logger.debug(f"ListBar: Active list ID changed to {list_id}, updating {len(self.tabs)} tabs")
+
         if list_id:
+            active_count = 0
             for tab in self.tabs:
                 tab.active = (tab.list_id == list_id)
+                if tab.active:
+                    active_count += 1
+
+            logger.debug(f"ListBar: Tab highlighting updated, active_tabs={active_count}")

@@ -713,7 +713,8 @@ class TaskUI(App):
         """
         try:
             return self.query_one(f"#{self._focused_column_id}", TaskColumn)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not get focused column: {e}")
             return None
 
     # ==============================================================================

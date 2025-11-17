@@ -17,6 +17,7 @@ from textual.message import Message
 from rich.text import Text
 
 from taskui.models import Task
+from taskui.logging_config import get_logger
 from taskui.ui.theme import (
     get_level_color,
     FOREGROUND,
@@ -29,6 +30,9 @@ from taskui.ui.theme import (
     HOVER_OPACITY,
     with_alpha,
 )
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class TaskItem(Widget):
@@ -97,6 +101,11 @@ class TaskItem(Widget):
         # Set level-specific CSS class
         self.add_class(f"level-{task.level}")
 
+        logger.debug(
+            f"TaskItem: Created for task '{task.title[:30]}' (id={task.id}, level={task.level}, "
+            f"completed={task.is_completed}, archived={task.is_archived})"
+        )
+
     def on_mount(self) -> None:
         """Fade in the task item when mounted."""
         self.styles.animate("opacity", value=1.0, duration=0.3, easing="out_cubic")
@@ -116,6 +125,10 @@ class TaskItem(Widget):
         Args:
             task: Updated Task object
         """
+        logger.debug(
+            f"TaskItem: Updating task '{task.title[:30]}' (id={task.id}, "
+            f"completed={task.is_completed}, archived={task.is_archived})"
+        )
         self._task_model = task
         self.refresh()
 
@@ -205,6 +218,7 @@ class TaskItem(Widget):
 
     def on_click(self) -> None:
         """Handle click event on the task item."""
+        logger.debug(f"TaskItem: Clicked, selecting task '{self._task_model.title[:30]}' (id={self.task_id})")
         self.selected = True
         self.post_message(self.Selected(self.task_id))
 
@@ -240,6 +254,9 @@ class TaskItem(Widget):
         Args:
             selected: New selection state
         """
+        logger.debug(
+            f"TaskItem: Selection changed to {selected} for task '{self._task_model.title[:30]}' (id={self.task_id})"
+        )
         if selected:
             self.add_class("selected")
         else:
