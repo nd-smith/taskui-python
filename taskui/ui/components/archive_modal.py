@@ -290,8 +290,9 @@ class ArchiveModal(ModalScreen):
                 # Select the first task by default
                 if len(self.filtered_tasks) > 0:
                     self.selected_task = self.filtered_tasks[0]
-            except Exception:
+            except Exception as e:
                 # Fallback to search input if list not available
+                logger.warning(f"ArchiveModal: Failed to focus task list on mount, falling back to search input", exc_info=True)
                 search_input = self.query_one("#search-input", Input)
                 search_input.focus()
         else:
@@ -313,6 +314,7 @@ class ArchiveModal(ModalScreen):
         """
         if event.input.id == "search-input":
             search_query = event.value.strip().lower()
+            logger.debug(f"ArchiveModal: Search input changed, query='{search_query}'")
             self._filter_tasks(search_query)
 
     def _update_task_list_view(self, search_query: str = "") -> None:
@@ -341,6 +343,10 @@ class ArchiveModal(ModalScreen):
         list_container.remove_children()
 
         if self.filtered_tasks:
+            logger.debug(
+                f"ArchiveModal: Updating task list view with {len(self.filtered_tasks)} filtered tasks, "
+                f"query='{search_query}'"
+            )
             list_view = ListView(
                 *self._create_list_items(),
                 id="task-list"
@@ -348,7 +354,9 @@ class ArchiveModal(ModalScreen):
             list_container.mount(list_view)
             list_view.focus()
             self.selected_task = self.filtered_tasks[0]
+            logger.debug(f"ArchiveModal: First task auto-selected: '{self.selected_task.title[:30]}'")
         else:
+            logger.debug(f"ArchiveModal: No matching tasks for query '{search_query}', showing empty state")
             empty_msg = Static(
                 "No matching tasks\n\nTry a different search term",
                 classes="empty-message"
@@ -411,12 +419,17 @@ class ArchiveModal(ModalScreen):
         """
         if not search_query:
             self.filtered_tasks = self.all_archived_tasks
+            logger.debug(f"ArchiveModal: Filter cleared, showing all {len(self.filtered_tasks)} tasks")
         else:
             self.filtered_tasks = [
                 task for task in self.all_archived_tasks
                 if search_query in task.title.lower() or
                    (task.notes and search_query in task.notes.lower())
             ]
+            logger.debug(
+                f"ArchiveModal: Filtered tasks, query='{search_query}', "
+                f"results={len(self.filtered_tasks)}/{len(self.all_archived_tasks)}"
+            )
 
         self._update_task_list_view(search_query)
 
@@ -494,7 +507,8 @@ class ArchiveModal(ModalScreen):
                 list_view = self.query_one("#task-list", ListView)
                 if list_view.index is not None and list_view.index < len(self.filtered_tasks):
                     self.selected_task = self.filtered_tasks[list_view.index]
-            except Exception:
+            except Exception as e:
+                logger.warning(f"ArchiveModal: Failed to get selected task from ListView", exc_info=True)
                 pass
 
         if not self.selected_task:
