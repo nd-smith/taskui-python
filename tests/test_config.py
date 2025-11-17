@@ -39,7 +39,7 @@ class TestConfig:
         assert printer_config['port'] == 9100
         assert printer_config['timeout'] == 60
         assert printer_config['detail_level'] == 'minimal'
-        assert printer_config['device_path'] == '/dev/usb/lp0'
+        assert printer_config['device_path'] == 'auto'
 
     def test_config_file_parsing(self):
         """Test parsing valid config file."""
@@ -114,7 +114,7 @@ host = 192.168.1.200
             assert printer_config['port'] == 9100
             assert printer_config['timeout'] == 60
             assert printer_config['detail_level'] == 'minimal'
-            assert printer_config['device_path'] == '/dev/usb/lp0'
+            assert printer_config['device_path'] == 'auto'
         finally:
             config_path.unlink()
 
@@ -239,7 +239,7 @@ class TestPrinterConfigIntegration:
         assert config.port == 9100
         assert config.timeout == 60
         assert config.detail_level == DetailLevel.MINIMAL
-        assert config.device_path == '/dev/usb/lp0'
+        assert config.device_path == 'auto'
 
     def test_from_config_file_with_values(self):
         """Test loading PrinterConfig from actual config file."""

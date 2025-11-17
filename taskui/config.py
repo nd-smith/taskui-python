@@ -71,7 +71,7 @@ class Config:
             'detail_level': os.getenv('TASKUI_PRINTER_DETAIL_LEVEL') or
                            self._config.get('printer', 'detail_level', fallback='minimal'),
             'device_path': os.getenv('TASKUI_PRINTER_DEVICE_PATH') or
-                          self._config.get('printer', 'device_path', fallback='/dev/usb/lp0'),
+                          self._config.get('printer', 'device_path', fallback='auto'),
         }
 
         logger.debug(f"Printer config: connection_type={config['connection_type']}, "
