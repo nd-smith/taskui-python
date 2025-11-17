@@ -291,6 +291,54 @@ class ArchiveModal(ModalScreen):
             search_query = event.value.strip().lower()
             self._filter_tasks(search_query)
 
+    def _update_task_list_view(self, search_query: str = "") -> None:
+        """Update the task list view based on current filtered tasks.
+
+        Args:
+            search_query: Current search query (for info text)
+        """
+        list_container = self.query_one(".task-list-container")
+        list_container.remove_children()
+
+        if self.filtered_tasks:
+            list_view = ListView(
+                *self._create_list_items(),
+                id="task-list"
+            )
+            list_container.mount(list_view)
+            list_view.focus()
+            self.selected_task = self.filtered_tasks[0]
+        else:
+            empty_msg = Static(
+                "No matching tasks\n\nTry a different search term",
+                classes="empty-message"
+            )
+            list_container.mount(empty_msg)
+            self.selected_task = None
+
+        self._update_info_text(search_query)
+
+    def _update_info_text(self, search_query: str = "") -> None:
+        """Update the info text based on current filter state.
+
+        Args:
+            search_query: Current search query
+        """
+        info_text = self.query_one("#info-text", Static)
+        filtered_count = len(self.filtered_tasks)
+        total_count = len(self.all_archived_tasks)
+
+        plural = 's' if total_count != 1 else ''
+
+        if search_query:
+            info_text.update(
+                f"{filtered_count} of {total_count} archived task{plural} • Press R to restore"
+            )
+        else:
+            info_text.update(
+                f"{total_count} archived task{plural} • Press R to restore"
+            )
+
     def _filter_tasks(self, search_query: str) -> None:
         """Filter tasks based on search query.
 
@@ -306,38 +354,7 @@ class ArchiveModal(ModalScreen):
                    (task.notes and search_query in task.notes.lower())
             ]
 
-        # Update the task list
-        list_container = self.query_one(".task-list-container")
-        list_container.remove_children()
-
-        if self.filtered_tasks:
-            list_view = ListView(
-                *self._create_list_items(),
-                id="task-list"
-            )
-            list_container.mount(list_view)
-            # Focus the new list view and select first task
-            list_view.focus()
-            self.selected_task = self.filtered_tasks[0] if self.filtered_tasks else None
-        else:
-            empty_msg = Static(
-                "No matching tasks\n\nTry a different search term",
-                classes="empty-message"
-            )
-            list_container.mount(empty_msg)
-
-        # Update info text
-        info_text = self.query_one("#info-text", Static)
-        filtered_count = len(self.filtered_tasks)
-        total_count = len(self.all_archived_tasks)
-        if search_query:
-            info_text.update(
-                f"{filtered_count} of {total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
-            )
-        else:
-            info_text.update(
-                f"{total_count} archived task{'s' if total_count != 1 else ''} • Press R to restore"
-            )
+        self._update_task_list_view(search_query)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle task selection in the list view.
