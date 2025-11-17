@@ -706,6 +706,8 @@ class TaskUI(App):
     def _get_focused_column(self) -> Optional[TaskColumn]:
         """Get the currently focused column widget.
 
+        Note: Queries UI state.
+
         Returns:
             TaskColumn widget or None if no column is focused
         """
@@ -763,6 +765,8 @@ class TaskUI(App):
 
     def _get_nesting_column_from_id(self, column_id: str) -> NestingColumn:
         """Convert column ID to NestingColumn enum.
+
+        Note: Converts enum.
 
         Args:
             column_id: The UI column ID
@@ -941,6 +945,8 @@ class TaskUI(App):
     async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID, include_archived: bool = False) -> List[Task]:
         """Get top-level tasks and their children for a list (2 levels).
 
+        Note: Fetches from database.
+
         Args:
             task_service: TaskService instance
             list_id: UUID of the task list
@@ -962,6 +968,8 @@ class TaskUI(App):
 
     async def _get_task_hierarchy(self, task_id: UUID) -> List[Task]:
         """Get the complete hierarchy path from root to the specified task.
+
+        Note: Fetches from database.
 
         Args:
             task_id: UUID of the task
@@ -1000,6 +1008,8 @@ class TaskUI(App):
 
     async def _get_task_children(self, parent_id: UUID) -> List[Task]:
         """Get all descendants of a task in hierarchical order.
+
+        Note: Fetches from database.
 
         Args:
             parent_id: UUID of the parent task
@@ -1123,9 +1133,9 @@ class TaskUI(App):
                 return
 
             # Find and update just that list in self._lists
-            for i, task_list in enumerate(self._lists):
-                if task_list.id == list_id:
-                    self._lists[i] = updated_list
+            for index, cached_list in enumerate(self._lists):
+                if cached_list.id == list_id:
+                    self._lists[index] = updated_list
                     break
 
             # Update the list bar with the modified list
