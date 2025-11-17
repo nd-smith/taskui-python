@@ -26,6 +26,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.serena/
 
 # PyInstaller
 *.manifest
@@ -103,6 +104,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.serena/
+.github/
 
 # Spyder project settings
 .spyderproject
@@ -145,3 +148,5 @@ debug/
 taskui/debug/
 taskui/claudedocs/
 claudedocs
+docs/archive
+

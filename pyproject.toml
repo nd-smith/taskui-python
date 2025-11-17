@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "TaskUI Team"}
+    {name = "nsmkd"}
 ]
 keywords = ["task", "todo", "tui", "terminal", "productivity"]
 classifiers = [
