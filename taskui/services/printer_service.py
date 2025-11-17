@@ -11,8 +11,14 @@ from datetime import datetime
 import logging
 from pathlib import Path
 from enum import Enum
+import platform
 
 from escpos.printer import Network, Usb, File
+try:
+    from escpos.printer import Win32Raw
+    HAS_WIN32 = True
+except ImportError:
+    HAS_WIN32 = False
 
 from taskui.models import Task
 from taskui.logging_config import get_logger
@@ -142,21 +148,54 @@ class PrinterService:
                 # Check if auto-detection is requested
                 if self.config.device_path.lower() in ("auto", ""):
                     logger.debug("Attempting to auto-detect USB printer")
-                    # Auto-detect USB printer using Usb class (finds first available USB printer)
-                    # Common ESC/POS printer vendor IDs: Epson (0x04b8), Star (0x0519), others
-                    try:
-                        # Try Epson TM-T20III first (0x04b8:0x0e27)
-                        self.printer = Usb(0x04b8, 0x0e27)
-                        logger.info("Successfully connected to Epson TM-T20III USB printer via auto-detection")
-                    except:
-                        # If Epson fails, try generic auto-detection with no IDs (finds first printer)
-                        self.printer = Usb()
-                        logger.info("Successfully connected to USB printer via auto-detection")
+
+                    # On Windows, use Win32Raw which works with Windows print spooler
+                    if platform.system() == "Windows" and HAS_WIN32:
+                        # Try common Epson TM-T20III printer names on Windows
+                        printer_names = [
+                            "TM-T20III",
+                            "EPSON TM-T20III",
+                            "Epson TM-T20III Receipt",
+                            "TM-T20III Receipt"
+                        ]
+
+                        connected = False
+                        for name in printer_names:
+                            try:
+                                logger.debug(f"Trying Windows printer: {name}")
+                                self.printer = Win32Raw(name)
+                                logger.info(f"Successfully connected to Windows printer: {name}")
+                                connected = True
+                                break
+                            except Exception as e:
+                                logger.debug(f"Failed to connect to {name}: {e}")
+                                continue
+
+                        if not connected:
+                            raise ConnectionError("Could not find Epson TM-T20III printer. Please check printer name in Windows Settings.")
+                    else:
+                        # On Linux/macOS, use direct USB access
+                        # Common ESC/POS printer vendor IDs: Epson (0x04b8), Star (0x0519), others
+                        try:
+                            # Try Epson TM-T20III first (0x04b8:0x0e27)
+                            self.printer = Usb(0x04b8, 0x0e27)
+                            logger.info("Successfully connected to Epson TM-T20III USB printer via auto-detection")
+                        except:
+                            # If Epson fails, try generic auto-detection with no IDs (finds first printer)
+                            self.printer = Usb()
+                            logger.info("Successfully connected to USB printer via auto-detection")
                 else:
                     logger.debug(f"Attempting to connect to USB printer at {self.config.device_path}")
-                    # For USB printers with specific device path, use File class
-                    self.printer = File(self.config.device_path)
-                    logger.info(f"Successfully connected to USB printer at {self.config.device_path}")
+
+                    # Check if it's a Windows printer name or a device path
+                    if platform.system() == "Windows" and HAS_WIN32 and not self.config.device_path.startswith("/"):
+                        # Treat as Windows printer name
+                        self.printer = Win32Raw(self.config.device_path)
+                        logger.info(f"Successfully connected to Windows printer: {self.config.device_path}")
+                    else:
+                        # Treat as device path for File class
+                        self.printer = File(self.config.device_path)
+                        logger.info(f"Successfully connected to USB printer at {self.config.device_path}")
 
             self._connected = True
             return True
