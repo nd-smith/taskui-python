@@ -42,6 +42,7 @@ LIST_BINDINGS = [
     Binding("1", "switch_list_1", "List 1", show=True),
     Binding("2", "switch_list_2", "List 2", show=True),
     Binding("3", "switch_list_3", "List 3", show=True),
+    Binding("4", "switch_list_4", "List 4", show=True)
 ]
 
 # List CRUD keybindings

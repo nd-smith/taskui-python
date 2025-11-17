@@ -865,6 +865,10 @@ class TaskUI(App):
         """Switch to list 3 (3 key)."""
         self._switch_to_list(3)
 
+    def action_switch_list_4(self) -> None:
+        """Switch to list 4 (4 key)."""
+        self._switch_to_list(4)
+
     # ==============================================================================
     # ACTION HANDLERS - LIST MANAGEMENT
     # ==============================================================================
