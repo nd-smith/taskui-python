@@ -259,6 +259,44 @@ class TaskCreationModal(ModalScreen):
         else:  # create_sibling
             return "➕ Create New Task"
 
+    def _get_edit_context_text(self) -> str:
+        """Get context text for edit mode.
+
+        Returns:
+            Context string for editing an existing task
+        """
+        if not self.edit_task:
+            return ""
+        return f"Editing: {self.edit_task.title[:40]}..."
+
+    def _get_child_context_text(self) -> str:
+        """Get context text for child creation.
+
+        Returns:
+            Context string for creating a child task
+        """
+        if not self.parent_task:
+            return ""
+
+        child_level = NestingRules.get_allowed_child_level(self.parent_task, self.column)
+        return (
+            f"Creating child under: {self.parent_task.title[:30]}...\n"
+            f"New task level: {child_level} | Column: {self.column.value}"
+        )
+
+    def _get_sibling_context_text(self) -> str:
+        """Get context text for sibling creation.
+
+        Returns:
+            Context string for creating a sibling task
+        """
+        if self.parent_task:
+            return (
+                f"Creating sibling at level: {self.parent_task.level} | "
+                f"Column: {self.column.value}"
+            )
+        return f"Creating new top-level task | Column: {self.column.value}"
+
     def _get_context_text(self) -> str:
         """Get the context information text.
 
@@ -269,22 +307,11 @@ class TaskCreationModal(ModalScreen):
             return ""
 
         if self.mode == "edit":
-            return f"Editing: {self.edit_task.title[:40]}..." if self.edit_task else ""
-
-        if self.mode == "create_child" and self.parent_task:
-            child_level = NestingRules.get_allowed_child_level(self.parent_task, self.column)
-            return (
-                f"Creating child under: {self.parent_task.title[:30]}...\n"
-                f"New task level: {child_level} | Column: {self.column.value}"
-            )
-
-        if self.mode == "create_sibling" and self.parent_task:
-            return (
-                f"Creating sibling at level: {self.parent_task.level} | "
-                f"Column: {self.column.value}"
-            )
-
-        return f"Creating new top-level task | Column: {self.column.value}"
+            return self._get_edit_context_text()
+        elif self.mode == "create_child":
+            return self._get_child_context_text()
+        else:  # create_sibling
+            return self._get_sibling_context_text()
 
     def on_mount(self) -> None:
         """Called when the modal is mounted."""
