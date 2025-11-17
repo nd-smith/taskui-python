@@ -238,6 +238,144 @@ class ListService:
             logger.error(f"Failed to delete list {list_id}: {e}", exc_info=True)
             raise
 
+    async def get_list_count(self) -> int:
+        """
+        Get the total number of task lists.
+
+        Returns:
+            Count of task lists
+        """
+        result = await self.session.execute(
+            select(func.count(TaskListORM.id))
+        )
+        return result.scalar_one()
+
+    async def migrate_tasks_and_delete_list(
+        self,
+        source_list_id: UUID,
+        target_list_id: UUID
+    ) -> bool:
+        """
+        Migrate all tasks from source list to target list, then delete source list.
+
+        This operation is atomic - if any step fails, the entire operation is rolled back.
+
+        Args:
+            source_list_id: UUID of the list to delete
+            target_list_id: UUID of the list to migrate tasks to
+
+        Returns:
+            True if successful, False if source list not found
+
+        Raises:
+            ValueError: If source and target are the same, target doesn't exist,
+                       or attempting to delete the last list
+        """
+        try:
+            logger.debug(
+                f"Migrating tasks from list {source_list_id} to {target_list_id} "
+                f"and deleting source list"
+            )
+
+            # Validate source and target are different
+            if source_list_id == target_list_id:
+                raise ValueError("Source and target lists must be different")
+
+            # Verify source list exists
+            source_list = await self.get_list_by_id(source_list_id)
+            if not source_list:
+                logger.warning(f"Migration failed - source list not found: {source_list_id}")
+                return False
+
+            # Verify target list exists
+            target_list = await self.get_list_by_id(target_list_id)
+            if not target_list:
+                raise ValueError(f"Target list with id {target_list_id} not found")
+
+            # Prevent deletion of last list
+            list_count = await self.get_list_count()
+            if list_count <= 1:
+                raise ValueError("Cannot delete the last remaining list")
+
+            # Migrate all tasks from source to target
+            from taskui.services.task_service import TaskService
+            task_service = TaskService(self.session)
+            migrated_count = await task_service.bulk_migrate_tasks(
+                source_list_id,
+                target_list_id
+            )
+
+            # Delete the source list (now empty)
+            await self.delete_list(source_list_id)
+
+            logger.info(
+                f"Successfully migrated {migrated_count} tasks from list "
+                f"'{source_list.name}' to '{target_list.name}' and deleted source list"
+            )
+            return True
+        except ValueError:
+            # Already logged, just re-raise
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to migrate tasks and delete list {source_list_id}: {e}",
+                exc_info=True
+            )
+            raise
+
+    async def archive_tasks_and_delete_list(self, list_id: UUID) -> bool:
+        """
+        Archive all completed tasks in the list, then delete the list.
+
+        This operation is atomic - if any step fails, the entire operation is rolled back.
+        Only completed tasks will be archived; incomplete tasks will be deleted with the list.
+
+        Args:
+            list_id: UUID of the list to delete
+
+        Returns:
+            True if successful, False if list not found
+
+        Raises:
+            ValueError: If attempting to delete the last list
+        """
+        try:
+            logger.debug(f"Archiving tasks and deleting list {list_id}")
+
+            # Verify list exists
+            task_list = await self.get_list_by_id(list_id)
+            if not task_list:
+                logger.warning(f"Archive/delete failed - list not found: {list_id}")
+                return False
+
+            # Prevent deletion of last list
+            list_count = await self.get_list_count()
+            if list_count <= 1:
+                raise ValueError("Cannot delete the last remaining list")
+
+            # Archive all completed tasks in the list
+            from taskui.services.task_service import TaskService
+            task_service = TaskService(self.session)
+            archived_count = await task_service.bulk_archive_tasks(list_id)
+
+            # Delete the list (will cascade delete remaining tasks)
+            await self.delete_list(list_id)
+
+            logger.info(
+                f"Successfully archived {archived_count} completed tasks "
+                f"and deleted list '{task_list.name}'"
+            )
+            return True
+        except ValueError:
+            # Already logged, just re-raise
+            raise
+        except Exception as e:
+            logger.error(
+                f"Failed to archive tasks and delete list {list_id}: {e}",
+                exc_info=True
+            )
+            raise
+
     async def ensure_default_lists(self) -> List[TaskList]:
         """
         Ensure default lists (Work, Home, Personal) exist.

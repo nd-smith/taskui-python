@@ -25,6 +25,8 @@ from taskui.ui.components.task_modal import TaskCreationModal
 from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
+from taskui.ui.components.list_management_modal import ListManagementModal
+from taskui.ui.components.list_delete_modal import ListDeleteModal
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -363,6 +365,136 @@ class TaskUI(App):
 
             except Exception as e:
                 logger.error("Error loading tasks for list", exc_info=True)
+
+    async def on_list_management_modal_list_saved(self, message: ListManagementModal.ListSaved) -> None:
+        """Handle list creation/editing from the list management modal.
+
+        Args:
+            message: ListSaved message containing list data
+        """
+        if not self._has_db_manager():
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                list_service = ListService(session)
+
+                if message.mode == "create":
+                    # Create new list
+                    new_list = await list_service.create_list(message.name)
+                    logger.info(f"Created new list: {new_list.name} (id={new_list.id})")
+                    self.notify(f"✓ Created list: {message.name}", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+                elif message.mode == "edit" and message.edit_list:
+                    # Update existing list
+                    updated_list = await list_service.update_list(message.edit_list.id, message.name)
+                    if updated_list:
+                        logger.info(f"Updated list: {updated_list.name} (id={updated_list.id})")
+                        self.notify(f"✓ Updated list: {message.name}", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+            # Refresh the lists
+            await self._refresh_lists()
+
+        except ValueError as e:
+            # Handle duplicate name errors
+            logger.warning(f"List save failed: {e}")
+            self.notify(str(e), severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+        except Exception as e:
+            logger.error("Error saving list", exc_info=True)
+            self.notify("Failed to save list", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+
+    async def on_list_management_modal_list_cancelled(self, message: ListManagementModal.ListCancelled) -> None:
+        """Handle list creation/editing cancellation.
+
+        Args:
+            message: ListCancelled message
+        """
+        pass
+
+    async def on_list_delete_modal_delete_confirmed(self, message: ListDeleteModal.DeleteConfirmed) -> None:
+        """Handle list deletion confirmation from the delete modal.
+
+        Args:
+            message: DeleteConfirmed message containing deletion options
+        """
+        if not self._has_db_manager():
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                list_service = ListService(session)
+
+                if message.option == "migrate":
+                    # Migrate tasks to another list
+                    if not message.target_list_id:
+                        self.notify("No target list selected", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+                        return
+
+                    success = await list_service.migrate_tasks_and_delete_list(
+                        message.list_to_delete.id,
+                        message.target_list_id
+                    )
+
+                    if success:
+                        logger.info(f"Migrated tasks and deleted list: {message.list_to_delete.name}")
+                        self.notify(
+                            f"✓ Migrated tasks and deleted list: {message.list_to_delete.name}",
+                            severity="information",
+                            timeout=NOTIFICATION_TIMEOUT_MEDIUM
+                        )
+
+                elif message.option == "archive":
+                    # Archive completed tasks, delete the rest
+                    success = await list_service.archive_tasks_and_delete_list(message.list_to_delete.id)
+
+                    if success:
+                        logger.info(f"Archived tasks and deleted list: {message.list_to_delete.name}")
+                        self.notify(
+                            f"✓ Archived tasks and deleted list: {message.list_to_delete.name}",
+                            severity="information",
+                            timeout=NOTIFICATION_TIMEOUT_MEDIUM
+                        )
+
+                elif message.option == "delete_all":
+                    # Delete all tasks (cascade)
+                    success = await list_service.delete_list(message.list_to_delete.id)
+
+                    if success:
+                        logger.info(f"Deleted list and all tasks: {message.list_to_delete.name}")
+                        self.notify(
+                            f"✓ Deleted list: {message.list_to_delete.name}",
+                            severity="information",
+                            timeout=NOTIFICATION_TIMEOUT_MEDIUM
+                        )
+
+            # Refresh the lists
+            await self._refresh_lists()
+
+            # If the deleted list was the current list, switch to the first available list
+            if self._current_list_id == message.list_to_delete.id:
+                if self._lists:
+                    self._current_list_id = self._lists[0].id
+                    # Update the list bar (this will trigger on_list_bar_list_selected)
+                    list_bar = self.query_one(ListBar)
+                    list_bar.set_active_list(self._current_list_id)
+                else:
+                    self._current_list_id = None
+
+        except ValueError as e:
+            # Handle validation errors (e.g., last list)
+            logger.warning(f"List deletion failed: {e}")
+            self.notify(str(e), severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+        except Exception as e:
+            logger.error("Error deleting list", exc_info=True)
+            self.notify("Failed to delete list", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+
+    async def on_list_delete_modal_delete_cancelled(self, message: ListDeleteModal.DeleteCancelled) -> None:
+        """Handle list deletion cancellation.
+
+        Args:
+            message: DeleteCancelled message
+        """
+        pass
 
     # ==============================================================================
     # ACTION HANDLERS - NAVIGATION
@@ -734,6 +866,76 @@ class TaskUI(App):
         self._switch_to_list(3)
 
     # ==============================================================================
+    # ACTION HANDLERS - LIST MANAGEMENT
+    # ==============================================================================
+
+    def action_create_list(self) -> None:
+        """Create a new list (Ctrl+N)."""
+        logger.debug("Create list action triggered")
+
+        # Open the list management modal in create mode
+        modal = ListManagementModal(mode="create")
+        self.push_screen(modal)
+
+    def action_edit_list(self) -> None:
+        """Edit the current list (Ctrl+E)."""
+        logger.debug("Edit list action triggered")
+
+        if not self._current_list_id:
+            self.notify("No list selected", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        # Get the current list
+        current_list = None
+        for lst in self._lists:
+            if lst.id == self._current_list_id:
+                current_list = lst
+                break
+
+        if not current_list:
+            self.notify("Current list not found", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        # Open the list management modal in edit mode
+        modal = ListManagementModal(mode="edit", edit_list=current_list)
+        self.push_screen(modal)
+
+    def action_delete_list(self) -> None:
+        """Delete the current list (Ctrl+D)."""
+        logger.debug("Delete list action triggered")
+
+        if not self._current_list_id:
+            self.notify("No list selected", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        # Get the current list
+        current_list = None
+        for lst in self._lists:
+            if lst.id == self._current_list_id:
+                current_list = lst
+                break
+
+        if not current_list:
+            self.notify("Current list not found", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        # Check if this is the last list
+        if len(self._lists) <= 1:
+            self.notify(
+                "Cannot delete the last list",
+                severity="warning",
+                timeout=NOTIFICATION_TIMEOUT_MEDIUM
+            )
+            return
+
+        # Open the list delete modal
+        modal = ListDeleteModal(
+            list_to_delete=current_list,
+            available_lists=self._lists
+        )
+        self.push_screen(modal)
+
+    # ==============================================================================
     # PRIVATE HELPERS - FOCUS & NAVIGATION
     # ==============================================================================
 
@@ -995,6 +1197,40 @@ class TaskUI(App):
             # Create a fallback UUID for graceful degradation
             from uuid import uuid4
             self._current_list_id = uuid4()
+
+    async def _refresh_lists(self) -> None:
+        """Refresh the list of task lists from the database and update the UI.
+
+        Reloads all lists and updates the list bar display.
+        """
+        if not self._has_db_manager():
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                list_service = ListService(session)
+                self._lists = await list_service.get_all_lists()
+
+                # Update the list bar with the loaded lists
+                list_bar = self.query_one(ListBar)
+                list_bar.update_lists(self._lists)
+
+                # If current list still exists, keep it selected
+                if self._current_list_id:
+                    list_exists = any(lst.id == self._current_list_id for lst in self._lists)
+                    if list_exists:
+                        list_bar.set_active_list(self._current_list_id)
+                    elif self._lists:
+                        # Current list was deleted, switch to first available list
+                        self._current_list_id = self._lists[0].id
+                        list_bar.set_active_list(self._current_list_id)
+                elif self._lists:
+                    # No current list set, use first one
+                    self._current_list_id = self._lists[0].id
+                    list_bar.set_active_list(self._current_list_id)
+
+        except Exception as e:
+            logger.error("Error refreshing lists", exc_info=True)
 
     async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID, include_archived: bool = False) -> List[Task]:
         """Get top-level tasks and their children for a list (2 levels).
