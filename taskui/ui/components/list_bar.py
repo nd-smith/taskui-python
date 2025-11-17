@@ -347,8 +347,10 @@ class ListBar(Horizontal):
         self.tabs.clear()
         self.tabs = self._create_all_tabs()
 
-        for tab in self.tabs:
-            self.mount(tab)
+        # Only mount tabs if this widget is already mounted
+        if self.is_mounted:
+            for tab in self.tabs:
+                self.mount(tab)
 
     def set_active_list(self, list_id: UUID) -> None:
         """Set the active list and update tab highlighting.

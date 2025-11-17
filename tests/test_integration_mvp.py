@@ -351,7 +351,6 @@ class TestMVPIntegration:
             assert "Parent for Column 2 Test" in column2.header_title
 
 
-    @pytest.mark.skip(reason="Bug: Edit operation not refreshing column view with updated task")
     @pytest.mark.asyncio
     async def test_all_crud_operations_end_to_end(self):
         """Test all CRUD operations work end-to-end through the app.
@@ -548,7 +547,6 @@ class TestMVPIntegration:
             assert column1._selected_index == 1
 
 
-    @pytest.mark.skip(reason="Bug: Column 2 not receiving task updates from Column 1 selection events")
     @pytest.mark.asyncio
     async def test_column2_updates_on_column1_selection(self):
         """Test that Column 2 updates when selection changes in Column 1.
@@ -729,7 +727,6 @@ class TestMVPIntegration:
             assert column1._tasks[0].title == "Work Task"
 
 
-    @pytest.mark.skip(reason="Bug: validation_error not being set on modal for nesting violations")
     @pytest.mark.asyncio
     async def test_nesting_limit_enforcement(self):
         """Test that nesting limits are enforced properly.
@@ -766,15 +763,14 @@ class TestMVPIntegration:
 
             # Select level 1 task in Column 1
             # Should NOT be able to create child (would be level 2 in Column 1)
-            column1._selected_index = 0
-            parent = column1.get_selected_task()
+            # After creating Level 0 and Level 1 tasks, column1 shows both in a flat list:
+            # Index 0: Level 0 task
+            # Index 1: Level 1 task (child of Level 0)
+            column1._selected_index = 1
+            level1_task = column1.get_selected_task()
 
-            # Get the first child
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                children = await task_service.get_children(parent.id)
-                assert len(children) == 1
-                level1_task = children[0]
+            # Verify we selected the level 1 task
+            assert level1_task.level == 1
 
             # Try to create child of level 1 task in Column 1
             # This should be blocked by nesting rules

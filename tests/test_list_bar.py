@@ -142,7 +142,6 @@ class TestListBar:
 
         assert list_bar.active_list_id == lists[0].id
 
-    @pytest.mark.skip(reason="Bug: ListBar.update_lists() tries to mount widgets before ListBar is mounted")
     def test_list_bar_update_lists(self, make_task_list):
         """Test updating lists in ListBar."""
         initial_lists = [make_task_list(name="Work")]
