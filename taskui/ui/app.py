@@ -165,48 +165,6 @@ class TaskUI(App):
 
         yield Footer()
 
-    # ==============================================================================
-    # ACTION HANDLERS - UTILITY
-    # ==============================================================================
-
-    def action_help(self) -> None:
-        """Show help information."""
-        # Show notification with basic help info (full help screen not yet implemented)
-        self.notify(
-            "Keybindings shown in footer. N=New Task, C=Child, E=Edit, Space=Complete, A=Archive, V=View Archives",
-            severity="information",
-            timeout=NOTIFICATION_TIMEOUT_LONG
-        )
-
-    # ==============================================================================
-    # EVENT HANDLERS
-    # ==============================================================================
-
-    def on_key(self, event: Key) -> None:
-        """Handle tab navigation in main app vs modals.
-
-        Provides column navigation in main app, form navigation in modals.
-
-        Args:
-            event: The key event
-        """
-        logger.debug(f"Key pressed: {event.key}, screen_stack_size={len(self.screen_stack)}")
-
-        # Only intercept tab/shift+tab when not in a modal (screen stack size is 1)
-        if len(self.screen_stack) == SCREEN_STACK_SIZE_MAIN_APP:
-            if event.key == "tab":
-                # Prevent default focus cycling and handle column navigation
-                logger.debug("Tab key: navigating to next column")
-                event.prevent_default()
-                event.stop()
-                self.action_navigate_next_column()
-            elif event.key == "shift+tab":
-                # Prevent default focus cycling and handle column navigation
-                logger.debug("Shift+Tab key: navigating to previous column")
-                event.prevent_default()
-                event.stop()
-                self.action_navigate_prev_column()
-
     async def on_mount(self) -> None:
         """Called when app is mounted and ready."""
         logger.info("TaskUI application mounted, initializing...")
@@ -244,142 +202,153 @@ class TaskUI(App):
         logger.info("TaskUI application ready")
 
     # ==============================================================================
-    # PRIVATE HELPERS - DATA FETCHING
+    # EVENT HANDLERS
     # ==============================================================================
 
-    async def _ensure_default_list(self) -> None:
-        """Ensure default lists (Work, Home, Personal) exist in the database.
+    def on_key(self, event: Key) -> None:
+        """Handle tab navigation in main app vs modals.
 
-        Creates default lists if they don't exist.
+        Provides column navigation in main app, form navigation in modals.
+
+        Args:
+            event: The key event
         """
+        logger.debug(f"Key pressed: {event.key}, screen_stack_size={len(self.screen_stack)}")
+
+        # Only intercept tab/shift+tab when not in a modal (screen stack size is 1)
+        if len(self.screen_stack) == SCREEN_STACK_SIZE_MAIN_APP:
+            if event.key == "tab":
+                # Prevent default focus cycling and handle column navigation
+                logger.debug("Tab key: navigating to next column")
+                event.prevent_default()
+                event.stop()
+                self.action_navigate_next_column()
+            elif event.key == "shift+tab":
+                # Prevent default focus cycling and handle column navigation
+                logger.debug("Shift+Tab key: navigating to previous column")
+                event.prevent_default()
+                event.stop()
+                self.action_navigate_prev_column()
+
+    async def on_task_column_task_selected(self, message: TaskColumn.TaskSelected) -> None:
+        """Handle task selection to update Column 2 and Column 3.
+
+        Column 2 shows children (if selected in Column 1), Column 3 shows details.
+
+        Args:
+            message: TaskSelected message containing the selected task
+        """
+        column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+        column3 = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
+
+        # Update Column 3 with task details (for any selected task from any column)
+        await self._update_column3_for_selection(message.task)
+
+        # Update Column 2 only for selections from Column 1
+        if message.column_id == COLUMN_1_ID:
+            await self._update_column2_for_selection(message.task)
+
+    async def on_task_creation_modal_task_created(self, message: TaskCreationModal.TaskCreated) -> None:
+        """Handle TaskCreated message from the task creation modal.
+
+        Args:
+            message: TaskCreated message containing task data
+        """
+        title = message.title
+        notes = message.notes
+        mode = message.mode
+        parent_task = message.parent_task
+        column = message.column
+        edit_task = message.edit_task
+
+        if not title:
+            return
+
+        # Handle edit mode
+        if mode == "edit" and edit_task is not None:
+            await self._handle_edit_task(edit_task.id, title, notes)
+            return
+
+        # Handle create modes (create_sibling, create_child)
+        if mode == "create_sibling":
+            await self._handle_create_sibling_task(title, notes, parent_task, column)
+        elif mode == "create_child":
+            await self._handle_create_child_task(title, notes, parent_task, column)
+
+        # Refresh UI to show the new task
+        await self._refresh_ui_after_task_change()
+
+    async def on_task_creation_modal_task_cancelled(self, message: TaskCreationModal.TaskCancelled) -> None:
+        """Handle TaskCancelled message from the task creation modal.
+
+        Args:
+            message: TaskCancelled message
+        """
+        pass
+
+    async def on_archive_modal_task_restored(self, message: ArchiveModal.TaskRestored) -> None:
+        """Handle task restore from archive modal.
+
+        Args:
+            message: The TaskRestored message with task_id
+        """
+        logger.debug(f"Handling restore for task_id={message.task_id}")
+
         if not self._has_db_manager():
+            logger.debug("No database manager available for restore")
             return
 
         try:
             async with self._db_manager.get_session() as session:
-                list_service = ListService(session)
+                task_service = TaskService(session)
+                # Unarchive (restore) the task
+                restored_task = await task_service.unarchive_task(message.task_id)
 
-                # Ensure default lists exist (creates them if needed)
-                self._lists = await list_service.ensure_default_lists()
+            logger.info(f"Task restored: {restored_task.title[:50]}")
 
-                # Set the current list to the first one
-                if self._lists:
-                    self._current_list_id = self._lists[0].id
+            # Notify user of successful restore
+            self._notify_task_success("restored", restored_task.title)
 
-                    # Update the list bar with the loaded lists
-                    list_bar = self.query_one(ListBar)
-                    list_bar.update_lists(self._lists)
-                    list_bar.set_active_list(self._current_list_id)
+            # Refresh UI to show the restored task
+            await self._refresh_ui_after_task_change()
 
         except Exception as e:
-            # Log error but don't crash the app
-            logger.error("Error ensuring default lists", exc_info=True)
-            # Create a fallback UUID for graceful degradation
-            from uuid import uuid4
-            self._current_list_id = uuid4()
+            logger.error("Error restoring task from archive", exc_info=True)
+            self._notify_task_error("restore task")
 
-    async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID, include_archived: bool = False) -> List[Task]:
-        """Get top-level tasks and their children for a list (2 levels).
+    async def on_list_bar_list_selected(self, message: ListBar.ListSelected) -> None:
+        """Handle list selection from the list bar.
 
-        Args:
-            task_service: TaskService instance
-            list_id: UUID of the task list
-            include_archived: Whether to include archived tasks
-
-        Returns:
-            Flat list of tasks with parents followed by their children
-        """
-        top_level_tasks = await task_service.get_tasks_for_list(list_id, include_archived)
-
-        # Build flat list with children
-        tasks_with_children = []
-        for parent in top_level_tasks:
-            tasks_with_children.append(parent)
-            children = await task_service.get_children(parent.id, include_archived)
-            tasks_with_children.extend(children)
-
-        return tasks_with_children
-
-    # ==============================================================================
-    # PRIVATE HELPERS - FOCUS & NAVIGATION
-    # ==============================================================================
-
-    def _set_column_focus(self, column_id: str) -> None:
-        """Set focus to a specific column.
+        Updates Column 1 with list tasks, clears Column 2.
 
         Args:
-            column_id: ID of the column to focus
+            message: ListSelected message containing the selected list info
         """
-        try:
-            # Column 3 is a DetailPanel, columns 1 and 2 are TaskColumns
-            if column_id == COLUMN_3_ID:
-                column = self.query_one(f"#{column_id}", DetailPanel)
-            else:
-                column = self.query_one(f"#{column_id}", TaskColumn)
-            column.focus()
-            self._focused_column_id = column_id
-            logger.debug(f"Focus changed to column: {column_id}")
-        except Exception as e:
-            # Column not found or not focusable, ignore
-            logger.debug(f"Could not set focus to column {column_id}: {e}")
+        self._current_list_id = message.list_id
 
-    def _get_focused_column(self) -> Optional[TaskColumn]:
-        """Get the currently focused column widget.
+        column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+        column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
 
-        Returns:
-            TaskColumn widget or None if no column is focused
-        """
-        try:
-            return self.query_one(f"#{self._focused_column_id}", TaskColumn)
-        except Exception:
-            return None
+        # Clear Column 2 (no task selected yet)
+        column2.set_tasks([])
+        column2.update_header("Subtasks")
 
-    # ==============================================================================
-    # PRIVATE HELPERS - TASK OPERATIONS
-    # ==============================================================================
+        # Load tasks for the selected list into Column 1 (with 2 levels of hierarchy)
+        if self._db_manager and self._current_list_id:
+            try:
+                async with self._db_manager.get_session() as session:
+                    task_service = TaskService(session)
+                    tasks = await self._get_tasks_with_children(
+                        task_service,
+                        self._current_list_id,
+                        include_archived=False
+                    )
+                    column1.set_tasks(tasks)
+                    # Note: set_tasks() now handles triggering selection automatically
+                    # when the column is focused, so no manual trigger needed
 
-    def _has_db_manager(self) -> bool:
-        """Check if database manager is initialized.
-
-        Returns:
-            True if database manager is available
-        """
-        return self._db_manager is not None
-
-    def _can_perform_task_operation(self) -> bool:
-        """Check if prerequisites for task operations are met.
-
-        Returns:
-            True if database manager and current list are available
-        """
-        return self._db_manager is not None and self._current_list_id is not None
-
-    def _notify_task_success(self, action: str, title: str, icon: str = "✓") -> None:
-        """Show success notification for task operation.
-
-        Args:
-            action: Action performed (e.g., "created", "updated", "archived")
-            title: Task title to display (will be truncated)
-            icon: Icon to display (default: "✓")
-        """
-        truncated = title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]
-        self.notify(
-            f"{icon} Task {action}: {truncated}...",
-            severity="information",
-            timeout=NOTIFICATION_TIMEOUT_SHORT
-        )
-
-    def _notify_task_error(self, action: str) -> None:
-        """Show error notification for task operation.
-
-        Args:
-            action: Action that failed (e.g., "create task", "toggle completion")
-        """
-        self.notify(
-            f"Failed to {action}",
-            severity="error",
-            timeout=NOTIFICATION_TIMEOUT_MEDIUM
-        )
+            except Exception as e:
+                logger.error("Error loading tasks for list", exc_info=True)
 
     # ==============================================================================
     # ACTION HANDLERS - NAVIGATION
@@ -460,287 +429,6 @@ class TaskUI(App):
             column=nesting_column
         )
         self.push_screen(modal)
-
-    # ==============================================================================
-    # PRIVATE HELPERS - TASK OPERATIONS
-    # ==============================================================================
-
-    def _get_nesting_column_from_id(self, column_id: str) -> NestingColumn:
-        """Convert column ID to NestingColumn enum.
-
-        Args:
-            column_id: The UI column ID
-
-        Returns:
-            NestingColumn enum value
-        """
-        if column_id == COLUMN_1_ID:
-            return NestingColumn.COLUMN1
-        elif column_id == COLUMN_2_ID:
-            return NestingColumn.COLUMN2
-        else:
-            # Default to COLUMN1 for column 3 or unknown
-            return NestingColumn.COLUMN1
-
-    async def on_task_creation_modal_task_created(self, message: TaskCreationModal.TaskCreated) -> None:
-        """Handle TaskCreated message from the task creation modal.
-
-        Args:
-            message: TaskCreated message containing task data
-        """
-        title = message.title
-        notes = message.notes
-        mode = message.mode
-        parent_task = message.parent_task
-        column = message.column
-        edit_task = message.edit_task
-
-        if not title:
-            return
-
-        # Handle edit mode
-        if mode == "edit" and edit_task is not None:
-            await self._handle_edit_task(edit_task.id, title, notes)
-            return
-
-        # Handle create modes (create_sibling, create_child)
-        if mode == "create_sibling":
-            await self._handle_create_sibling_task(title, notes, parent_task, column)
-        elif mode == "create_child":
-            await self._handle_create_child_task(title, notes, parent_task, column)
-
-        # Refresh UI to show the new task
-        await self._refresh_ui_after_task_change()
-
-    async def on_task_creation_modal_task_cancelled(self, message: TaskCreationModal.TaskCancelled) -> None:
-        """Handle TaskCancelled message from the task creation modal.
-
-        Args:
-            message: TaskCancelled message
-        """
-        pass
-
-    async def _handle_edit_task(self, task_id: UUID, title: str, notes: Optional[str]) -> None:
-        """Update an existing task in the database.
-
-        Args:
-            task_id: UUID of the task to update
-            title: New title for the task
-            notes: New notes for the task (can be None)
-        """
-        if not self._has_db_manager():
-            return
-
-        try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                await task_service.update_task(task_id, title=title, notes=notes)
-
-            # Notify user of successful edit
-            self._notify_task_success("updated", title)
-
-            # Refresh UI to show the updated task
-            await self._refresh_ui_after_task_change()
-        except Exception as e:
-            logger.error("Error updating task", exc_info=True)
-            self._notify_task_error("update task")
-
-    async def _handle_create_sibling_task(
-        self,
-        title: str,
-        notes: Optional[str],
-        parent_task: Optional[Task],
-        column: NestingColumn
-    ) -> None:
-        """Create a new sibling task at the same level as the selected task.
-
-        Args:
-            title: New task title
-            notes: Optional task notes
-            parent_task: The currently selected task (sibling reference)
-            column: Column context for nesting rules
-        """
-        if not self._can_perform_task_operation():
-            return
-
-        try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-
-                if parent_task is None:
-                    # No task selected, create a top-level task
-                    await task_service.create_task(
-                        title=title,
-                        list_id=self._current_list_id,
-                        notes=notes
-                    )
-                elif parent_task.parent_id is None:
-                    # Selected task is top-level, create another top-level task
-                    await task_service.create_task(
-                        title=title,
-                        list_id=self._current_list_id,
-                        notes=notes
-                    )
-                else:
-                    # Selected task has a parent, create a sibling under the same parent
-                    await task_service.create_child_task(
-                        parent_id=parent_task.parent_id,
-                        title=title,
-                        column=column,
-                        notes=notes
-                    )
-
-            # Notify user of successful creation
-            self._notify_task_success("created", title)
-
-        except Exception as e:
-            logger.error("Error creating sibling task", exc_info=True)
-            self._notify_task_error("create task")
-
-    async def _handle_create_child_task(
-        self,
-        title: str,
-        notes: Optional[str],
-        parent_task: Optional[Task],
-        column: NestingColumn
-    ) -> None:
-        """Create a new child task under the selected task.
-
-        Args:
-            title: New task title
-            notes: Optional task notes
-            parent_task: The parent task (must not be None)
-            column: Column context for nesting rules
-        """
-        if not self._db_manager or not parent_task:
-            return
-
-        try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                # Create a child task under the selected parent
-                await task_service.create_child_task(
-                    parent_id=parent_task.id,
-                    title=title,
-                    column=column,
-                    notes=notes
-                )
-
-            # Notify user of successful creation
-            self._notify_task_success("created", title)
-
-        except Exception as e:
-            logger.error("Error creating child task", exc_info=True)
-            self._notify_task_error("create subtask")
-
-    # ==============================================================================
-    # PRIVATE HELPERS - UI UPDATES
-    # ==============================================================================
-
-    async def _refresh_column_tasks(self, column: TaskColumn) -> None:
-        """Refresh tasks in a column from the database.
-
-        Args:
-            column: TaskColumn widget to refresh
-        """
-        # For Column 1, reload top-level tasks with their children (2 levels)
-        if column.column_id == COLUMN_1_ID and self._current_list_id:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                tasks = await self._get_tasks_with_children(
-                    task_service,
-                    self._current_list_id,
-                    include_archived=False
-                )
-                column.set_tasks(tasks)
-        # For Column 2, we need to reload children of the selected Column 1 task
-        elif column.column_id == COLUMN_2_ID:
-            column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            selected_task = column1.get_selected_task()
-            if selected_task:
-                await self._update_column2_for_selection(selected_task)
-
-    async def _refresh_list_bar_for_list(self, list_id: UUID) -> None:
-        """Refresh the specific list in the list bar.
-
-        Reloads the affected list with current task counts and completion percentage.
-
-        Args:
-            list_id: UUID of the list to refresh
-        """
-        if not self._has_db_manager():
-            return
-
-        try:
-            async with self._db_manager.get_session() as session:
-                list_service = ListService(session)
-                # Reload only the affected list (3 queries: 1 list + 1 task count + 1 completed count)
-                updated_list = await list_service.get_list_by_id(list_id)
-
-            if not updated_list:
-                return
-
-            # Find and update just that list in self._lists
-            for i, task_list in enumerate(self._lists):
-                if task_list.id == list_id:
-                    self._lists[i] = updated_list
-                    break
-
-            # Update the list bar with the modified list
-            list_bar = self.query_one(ListBar)
-            list_bar.update_lists(self._lists)
-
-        except Exception as e:
-            logger.error(f"Error refreshing list bar for list {list_id}", exc_info=True)
-
-    async def _refresh_ui_after_task_change(
-        self,
-        clear_detail_panel: bool = False
-    ) -> None:
-        """Refresh all UI components after task modifications.
-
-        Refreshes Column 1, Column 2 (if parent selected), detail panel,
-        and list bar. Uses set_tasks() optimization to prevent unnecessary
-        re-renders.
-
-        Args:
-            clear_detail_panel: Clear Column 3 after archiving/deleting
-        """
-        logger.debug(
-            f"UI refresh: Refreshing all visible columns "
-            f"(clear_detail_panel={clear_detail_panel})"
-        )
-
-        # Refresh Column 1 (top-level tasks)
-        column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-        await self._refresh_column_tasks(column1)
-        logger.debug("UI refresh: Column 1 refreshed")
-
-        # Refresh Column 2 if a parent is selected (children view)
-        selected_task = column1.get_selected_task()
-        if selected_task:
-            logger.debug(
-                f"UI refresh: Refreshing Column 2 for parent task {selected_task.id}"
-            )
-            column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
-            await self._refresh_column_tasks(column2)
-        else:
-            logger.debug("UI refresh: Skipping Column 2 (no parent selected)")
-
-        # Clear detail panel if requested (e.g., after archiving)
-        if clear_detail_panel:
-            logger.debug("UI refresh: Clearing detail panel")
-            detail_panel = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
-            detail_panel.clear()
-
-        # Refresh list bar (completion percentages)
-        if self._current_list_id:
-            logger.debug(
-                f"UI refresh: Refreshing list bar for list {self._current_list_id}"
-            )
-            await self._refresh_list_bar_for_list(self._current_list_id)
-
-        logger.debug("UI refresh: Complete")
 
     def action_edit_task(self) -> None:
         """Edit the selected task (E key).
@@ -898,65 +586,23 @@ class TaskUI(App):
         except Exception as e:
             logger.error("Error loading archived tasks", exc_info=True)
 
-    async def on_archive_modal_task_restored(self, message: ArchiveModal.TaskRestored) -> None:
-        """Handle task restore from archive modal.
-
-        Args:
-            message: The TaskRestored message with task_id
-        """
-        logger.debug(f"Handling restore for task_id={message.task_id}")
-
-        if not self._has_db_manager():
-            logger.debug("No database manager available for restore")
-            return
-
-        try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                # Unarchive (restore) the task
-                restored_task = await task_service.unarchive_task(message.task_id)
-
-            logger.info(f"Task restored: {restored_task.title[:50]}")
-
-            # Notify user of successful restore
-            self._notify_task_success("restored", restored_task.title)
-
-            # Refresh UI to show the restored task
-            await self._refresh_ui_after_task_change()
-
-        except Exception as e:
-            logger.error("Error restoring task from archive", exc_info=True)
-            self._notify_task_error("restore task")
-
     def action_delete_task(self) -> None:
         """Delete the selected task (Delete/Backspace key)."""
         # TODO: Implement in Story 2.5
         self.notify("Delete not yet implemented", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
 
     # ==============================================================================
-    # ACTION HANDLERS - LIST SWITCHING
+    # ACTION HANDLERS - UTILITY
     # ==============================================================================
 
-    def _switch_to_list(self, list_number: int) -> None:
-        """Switch to specified list number.
-
-        Args:
-            list_number: List number to switch to (1-3)
-        """
-        list_bar = self.query_one(ListBar)
-        list_bar.select_list_by_number(list_number)
-
-    def action_switch_list_1(self) -> None:
-        """Switch to list 1 (1 key)."""
-        self._switch_to_list(1)
-
-    def action_switch_list_2(self) -> None:
-        """Switch to list 2 (2 key)."""
-        self._switch_to_list(2)
-
-    def action_switch_list_3(self) -> None:
-        """Switch to list 3 (3 key)."""
-        self._switch_to_list(3)
+    def action_help(self) -> None:
+        """Show help information."""
+        # Show notification with basic help info (full help screen not yet implemented)
+        self.notify(
+            "Keybindings shown in footer. N=New Task, C=Child, E=Edit, Space=Complete, A=Archive, V=View Archives",
+            severity="information",
+            timeout=NOTIFICATION_TIMEOUT_LONG
+        )
 
     async def action_print_column(self) -> None:
         """Print the selected task card to thermal printer (P key).
@@ -1018,63 +664,312 @@ class TaskUI(App):
         # This action is reserved for future custom cancel behaviors if needed.
         pass
 
-    # Message handlers
+    # ==============================================================================
+    # ACTION HANDLERS - LIST SWITCHING
+    # ==============================================================================
 
-    async def on_task_column_task_selected(self, message: TaskColumn.TaskSelected) -> None:
-        """Handle task selection to update Column 2 and Column 3.
+    def action_switch_list_1(self) -> None:
+        """Switch to list 1 (1 key)."""
+        self._switch_to_list(1)
 
-        Column 2 shows children (if selected in Column 1), Column 3 shows details.
+    def action_switch_list_2(self) -> None:
+        """Switch to list 2 (2 key)."""
+        self._switch_to_list(2)
 
-        Args:
-            message: TaskSelected message containing the selected task
-        """
-        column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-        column3 = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
+    def action_switch_list_3(self) -> None:
+        """Switch to list 3 (3 key)."""
+        self._switch_to_list(3)
 
-        # Update Column 3 with task details (for any selected task from any column)
-        await self._update_column3_for_selection(message.task)
+    # ==============================================================================
+    # PRIVATE HELPERS - FOCUS & NAVIGATION
+    # ==============================================================================
 
-        # Update Column 2 only for selections from Column 1
-        if message.column_id == COLUMN_1_ID:
-            await self._update_column2_for_selection(message.task)
-
-    async def _update_column3_for_selection(self, selected_task: Task) -> None:
-        """Update Column 3 to show details of the selected task.
-
-        Args:
-            selected_task: The task selected in Column 1 or Column 2
-        """
-        column3 = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
-
-        # Get the hierarchy path (from root to selected task)
-        hierarchy = await self._get_task_hierarchy(selected_task.id)
-
-        # Update Column 3 with task details
-        column3.set_task(selected_task, hierarchy)
-
-    async def _update_column2_for_selection(self, selected_task: Task) -> None:
-        """Update Column 2 to show children of the selected task.
+    def _set_column_focus(self, column_id: str) -> None:
+        """Set focus to a specific column.
 
         Args:
-            selected_task: The task selected in Column 1
+            column_id: ID of the column to focus
         """
-        column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
+        try:
+            # Column 3 is a DetailPanel, columns 1 and 2 are TaskColumns
+            if column_id == COLUMN_3_ID:
+                column = self.query_one(f"#{column_id}", DetailPanel)
+            else:
+                column = self.query_one(f"#{column_id}", TaskColumn)
+            column.focus()
+            self._focused_column_id = column_id
+            logger.debug(f"Focus changed to column: {column_id}")
+        except Exception as e:
+            # Column not found or not focusable, ignore
+            logger.debug(f"Could not set focus to column {column_id}: {e}")
 
-        # Get children of the selected task
-        children = await self._get_task_children(selected_task.id)
+    def _get_focused_column(self) -> Optional[TaskColumn]:
+        """Get the currently focused column widget.
 
-        # Adjust levels to be context-relative (children start at level 0)
-        adjusted_children = self._make_levels_context_relative(children, selected_task.level)
+        Note: Queries UI state.
 
-        # Update Column 2 header
-        header_title = f"{selected_task.title} Subtasks"
-        column2.update_header(header_title)
+        Returns:
+            TaskColumn widget or None if no column is focused
+        """
+        try:
+            return self.query_one(f"#{self._focused_column_id}", TaskColumn)
+        except Exception:
+            return None
 
-        # Update Column 2 with children
-        column2.set_tasks(adjusted_children)
+    # ==============================================================================
+    # PRIVATE HELPERS - TASK OPERATIONS
+    # ==============================================================================
+
+    def _has_db_manager(self) -> bool:
+        """Check if database manager is initialized.
+
+        Returns:
+            True if database manager is available
+        """
+        return self._db_manager is not None
+
+    def _can_perform_task_operation(self) -> bool:
+        """Check if prerequisites for task operations are met.
+
+        Returns:
+            True if database manager and current list are available
+        """
+        return self._db_manager is not None and self._current_list_id is not None
+
+    def _notify_task_success(self, action: str, title: str, icon: str = "✓") -> None:
+        """Show success notification for task operation.
+
+        Args:
+            action: Action performed (e.g., "created", "updated", "archived")
+            title: Task title to display (will be truncated)
+            icon: Icon to display (default: "✓")
+        """
+        truncated = title[:MAX_TITLE_LENGTH_IN_NOTIFICATION]
+        self.notify(
+            f"{icon} Task {action}: {truncated}...",
+            severity="information",
+            timeout=NOTIFICATION_TIMEOUT_SHORT
+        )
+
+    def _notify_task_error(self, action: str) -> None:
+        """Show error notification for task operation.
+
+        Args:
+            action: Action that failed (e.g., "create task", "toggle completion")
+        """
+        self.notify(
+            f"Failed to {action}",
+            severity="error",
+            timeout=NOTIFICATION_TIMEOUT_MEDIUM
+        )
+
+    def _get_nesting_column_from_id(self, column_id: str) -> NestingColumn:
+        """Convert column ID to NestingColumn enum.
+
+        Note: Converts enum.
+
+        Args:
+            column_id: The UI column ID
+
+        Returns:
+            NestingColumn enum value
+        """
+        if column_id == COLUMN_1_ID:
+            return NestingColumn.COLUMN1
+        elif column_id == COLUMN_2_ID:
+            return NestingColumn.COLUMN2
+        else:
+            # Default to COLUMN1 for column 3 or unknown
+            return NestingColumn.COLUMN1
+
+    def _get_parent_id_for_sibling(self, parent_task: Optional[Task]) -> Optional[UUID]:
+        """Determine parent ID for creating a sibling task.
+
+        Args:
+            parent_task: Currently selected task (sibling reference)
+
+        Returns:
+            Parent ID for new task, or None for top-level task
+        """
+        if parent_task is None or parent_task.parent_id is None:
+            # No task selected OR selected task is top-level
+            # Either way, create a top-level task
+            return None
+
+        # Selected task has a parent - create sibling under same parent
+        return parent_task.parent_id
+
+    async def _handle_edit_task(self, task_id: UUID, title: str, notes: Optional[str]) -> None:
+        """Update an existing task in the database.
+
+        Args:
+            task_id: UUID of the task to update
+            title: New title for the task
+            notes: New notes for the task (can be None)
+        """
+        if not self._has_db_manager():
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                await task_service.update_task(task_id, title=title, notes=notes)
+
+            # Notify user of successful edit
+            self._notify_task_success("updated", title)
+
+            # Refresh UI to show the updated task
+            await self._refresh_ui_after_task_change()
+        except Exception as e:
+            logger.error("Error updating task", exc_info=True)
+            self._notify_task_error("update task")
+
+    async def _handle_create_sibling_task(
+        self,
+        title: str,
+        notes: Optional[str],
+        parent_task: Optional[Task],
+        column: NestingColumn
+    ) -> None:
+        """Create a new sibling task at the same level as the selected task.
+
+        Args:
+            title: New task title
+            notes: Optional task notes
+            parent_task: The currently selected task (sibling reference)
+            column: Column context for nesting rules
+        """
+        if not self._can_perform_task_operation():
+            return
+
+        try:
+            parent_id = self._get_parent_id_for_sibling(parent_task)
+
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+
+                if parent_id is None:
+                    # Create top-level task
+                    await task_service.create_task(
+                        title=title,
+                        list_id=self._current_list_id,
+                        notes=notes
+                    )
+                else:
+                    # Create child under parent
+                    await task_service.create_child_task(
+                        parent_id=parent_id,
+                        title=title,
+                        column=column,
+                        notes=notes
+                    )
+
+            # Notify user of successful creation
+            self._notify_task_success("created", title)
+
+        except Exception as e:
+            logger.error("Error creating sibling task", exc_info=True)
+            self._notify_task_error("create task")
+
+    async def _handle_create_child_task(
+        self,
+        title: str,
+        notes: Optional[str],
+        parent_task: Optional[Task],
+        column: NestingColumn
+    ) -> None:
+        """Create a new child task under the selected task.
+
+        Args:
+            title: New task title
+            notes: Optional task notes
+            parent_task: The parent task (must not be None)
+            column: Column context for nesting rules
+        """
+        if not self._db_manager or not parent_task:
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                # Create a child task under the selected parent
+                await task_service.create_child_task(
+                    parent_id=parent_task.id,
+                    title=title,
+                    column=column,
+                    notes=notes
+                )
+
+            # Notify user of successful creation
+            self._notify_task_success("created", title)
+
+        except Exception as e:
+            logger.error("Error creating child task", exc_info=True)
+            self._notify_task_error("create subtask")
+
+    # ==============================================================================
+    # PRIVATE HELPERS - DATA FETCHING
+    # ==============================================================================
+
+    async def _ensure_default_list(self) -> None:
+        """Ensure default lists (Work, Home, Personal) exist in the database.
+
+        Creates default lists if they don't exist.
+        """
+        if not self._has_db_manager():
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                list_service = ListService(session)
+
+                # Ensure default lists exist (creates them if needed)
+                self._lists = await list_service.ensure_default_lists()
+
+                # Set the current list to the first one
+                if self._lists:
+                    self._current_list_id = self._lists[0].id
+
+                    # Update the list bar with the loaded lists
+                    list_bar = self.query_one(ListBar)
+                    list_bar.update_lists(self._lists)
+                    list_bar.set_active_list(self._current_list_id)
+
+        except Exception as e:
+            # Log error but don't crash the app
+            logger.error("Error ensuring default lists", exc_info=True)
+            # Create a fallback UUID for graceful degradation
+            from uuid import uuid4
+            self._current_list_id = uuid4()
+
+    async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID, include_archived: bool = False) -> List[Task]:
+        """Get top-level tasks and their children for a list (2 levels).
+
+        Note: Fetches from database.
+
+        Args:
+            task_service: TaskService instance
+            list_id: UUID of the task list
+            include_archived: Whether to include archived tasks
+
+        Returns:
+            Flat list of tasks with parents followed by their children
+        """
+        top_level_tasks = await task_service.get_tasks_for_list(list_id, include_archived)
+
+        # Build flat list with children
+        tasks_with_children = []
+        for parent in top_level_tasks:
+            tasks_with_children.append(parent)
+            children = await task_service.get_children(parent.id, include_archived)
+            tasks_with_children.extend(children)
+
+        return tasks_with_children
 
     async def _get_task_hierarchy(self, task_id: UUID) -> List[Task]:
         """Get the complete hierarchy path from root to the specified task.
+
+        Note: Fetches from database.
 
         Args:
             task_id: UUID of the task
@@ -1114,6 +1009,8 @@ class TaskUI(App):
     async def _get_task_children(self, parent_id: UUID) -> List[Task]:
         """Get all descendants of a task in hierarchical order.
 
+        Note: Fetches from database.
+
         Args:
             parent_id: UUID of the parent task
 
@@ -1138,6 +1035,150 @@ class TaskUI(App):
         except Exception as e:
             logger.error("Error loading children", exc_info=True)
             return []
+
+    # ==============================================================================
+    # PRIVATE HELPERS - UI UPDATES
+    # ==============================================================================
+
+    async def _refresh_ui_after_task_change(
+        self,
+        clear_detail_panel: bool = False
+    ) -> None:
+        """Refresh all UI components after task modifications.
+
+        Refreshes Column 1, Column 2 (if parent selected), detail panel,
+        and list bar. Uses set_tasks() optimization to prevent unnecessary
+        re-renders.
+
+        Args:
+            clear_detail_panel: Clear Column 3 after archiving/deleting
+        """
+        logger.debug(
+            f"UI refresh: Refreshing all visible columns "
+            f"(clear_detail_panel={clear_detail_panel})"
+        )
+
+        # Refresh Column 1 (top-level tasks)
+        column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+        await self._refresh_column_tasks(column1)
+        logger.debug("UI refresh: Column 1 refreshed")
+
+        # Refresh Column 2 if a parent is selected (children view)
+        selected_task = column1.get_selected_task()
+        if selected_task:
+            logger.debug(
+                f"UI refresh: Refreshing Column 2 for parent task {selected_task.id}"
+            )
+            column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
+            await self._refresh_column_tasks(column2)
+        else:
+            logger.debug("UI refresh: Skipping Column 2 (no parent selected)")
+
+        # Clear detail panel if requested (e.g., after archiving)
+        if clear_detail_panel:
+            logger.debug("UI refresh: Clearing detail panel")
+            detail_panel = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
+            detail_panel.clear()
+
+        # Refresh list bar (completion percentages)
+        if self._current_list_id:
+            logger.debug(
+                f"UI refresh: Refreshing list bar for list {self._current_list_id}"
+            )
+            await self._refresh_list_bar_for_list(self._current_list_id)
+
+        logger.debug("UI refresh: Complete")
+
+    async def _refresh_column_tasks(self, column: TaskColumn) -> None:
+        """Refresh tasks in a column from the database.
+
+        Args:
+            column: TaskColumn widget to refresh
+        """
+        # For Column 1, reload top-level tasks with their children (2 levels)
+        if column.column_id == COLUMN_1_ID and self._current_list_id:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                tasks = await self._get_tasks_with_children(
+                    task_service,
+                    self._current_list_id,
+                    include_archived=False
+                )
+                column.set_tasks(tasks)
+        # For Column 2, we need to reload children of the selected Column 1 task
+        elif column.column_id == COLUMN_2_ID:
+            column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+            selected_task = column1.get_selected_task()
+            if selected_task:
+                await self._update_column2_for_selection(selected_task)
+
+    async def _refresh_list_bar_for_list(self, list_id: UUID) -> None:
+        """Refresh the specific list in the list bar.
+
+        Reloads the affected list with current task counts and completion percentage.
+
+        Args:
+            list_id: UUID of the list to refresh
+        """
+        if not self._has_db_manager():
+            return
+
+        try:
+            async with self._db_manager.get_session() as session:
+                list_service = ListService(session)
+                # Reload only the affected list (3 queries: 1 list + 1 task count + 1 completed count)
+                updated_list = await list_service.get_list_by_id(list_id)
+
+            if not updated_list:
+                return
+
+            # Find and update just that list in self._lists
+            for index, cached_list in enumerate(self._lists):
+                if cached_list.id == list_id:
+                    self._lists[index] = updated_list
+                    break
+
+            # Update the list bar with the modified list
+            list_bar = self.query_one(ListBar)
+            list_bar.update_lists(self._lists)
+
+        except Exception as e:
+            logger.error(f"Error refreshing list bar for list {list_id}", exc_info=True)
+
+    async def _update_column2_for_selection(self, selected_task: Task) -> None:
+        """Update Column 2 to show children of the selected task.
+
+        Args:
+            selected_task: The task selected in Column 1
+        """
+        column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
+
+        # Get children of the selected task
+        children = await self._get_task_children(selected_task.id)
+
+        # Adjust levels to be context-relative (children start at level 0)
+        adjusted_children = self._make_levels_context_relative(children, selected_task.level)
+
+        # Update Column 2 header
+        header_title = f"{selected_task.title} Subtasks"
+        column2.update_header(header_title)
+
+        # Update Column 2 with children
+        column2.set_tasks(adjusted_children)
+
+    async def _update_column3_for_selection(self, selected_task: Task) -> None:
+        """Update Column 3 to show details of the selected task.
+
+        Args:
+            selected_task: The task selected in Column 1 or Column 2
+        """
+        column3 = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
+
+        # Get the hierarchy path (from root to selected task)
+        hierarchy = await self._get_task_hierarchy(selected_task.id)
+
+        # Update Column 3 with task details
+        column3.set_task(selected_task, hierarchy)
 
     def _make_levels_context_relative(self, tasks: List[Task], parent_level: int) -> List[Task]:
         """Adjust task levels to be context-relative for Column 2 display.
@@ -1165,36 +1206,11 @@ class TaskUI(App):
 
         return adjusted_tasks
 
-    async def on_list_bar_list_selected(self, message: ListBar.ListSelected) -> None:
-        """Handle list selection from the list bar.
-
-        Updates Column 1 with list tasks, clears Column 2.
+    def _switch_to_list(self, list_number: int) -> None:
+        """Switch to specified list number.
 
         Args:
-            message: ListSelected message containing the selected list info
+            list_number: List number to switch to (1-3)
         """
-        self._current_list_id = message.list_id
-
-        column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-        column2 = self.query_one(f"#{COLUMN_2_ID}", TaskColumn)
-
-        # Clear Column 2 (no task selected yet)
-        column2.set_tasks([])
-        column2.update_header("Subtasks")
-
-        # Load tasks for the selected list into Column 1 (with 2 levels of hierarchy)
-        if self._db_manager and self._current_list_id:
-            try:
-                async with self._db_manager.get_session() as session:
-                    task_service = TaskService(session)
-                    tasks = await self._get_tasks_with_children(
-                        task_service,
-                        self._current_list_id,
-                        include_archived=False
-                    )
-                    column1.set_tasks(tasks)
-                    # Note: set_tasks() now handles triggering selection automatically
-                    # when the column is focused, so no manual trigger needed
-
-            except Exception as e:
-                logger.error("Error loading tasks for list", exc_info=True)
+        list_bar = self.query_one(ListBar)
+        list_bar.select_list_by_number(list_number)
