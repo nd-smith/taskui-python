@@ -502,6 +502,55 @@ class TaskService:
             tasks.append(task)
         return tasks
 
+    def _query_active_tasks(self, list_id: UUID):
+        """
+        Build query for active (non-archived) tasks in a list.
+
+        Args:
+            list_id: List to query
+
+        Returns:
+            SQLAlchemy select statement
+        """
+        return (
+            select(TaskORM)
+            .where(TaskORM.list_id == str(list_id))
+            .where(TaskORM.is_archived == False)
+            .order_by(TaskORM.position)
+        )
+
+    def _query_top_level_tasks(self, list_id: UUID):
+        """
+        Build query for top-level tasks in a list.
+
+        Args:
+            list_id: List to query
+
+        Returns:
+            SQLAlchemy select statement
+        """
+        return (
+            self._query_active_tasks(list_id)
+            .where(TaskORM.parent_id.is_(None))
+        )
+
+    def _query_child_tasks(self, parent_id: UUID):
+        """
+        Build query for children of a parent task.
+
+        Args:
+            parent_id: Parent task ID
+
+        Returns:
+            SQLAlchemy select statement
+        """
+        return (
+            select(TaskORM)
+            .where(TaskORM.parent_id == str(parent_id))
+            .where(TaskORM.is_archived == False)
+            .order_by(TaskORM.position)
+        )
+
     async def get_task_by_id(self, task_id: UUID) -> Optional[Task]:
         """
         Get a task by its ID.
