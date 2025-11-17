@@ -122,12 +122,32 @@ class TaskItem(Widget):
     def render(self) -> Text:
         """Render the task item as Rich Text with tree visualization.
 
-        Returns:
-            Rich Text object with formatted task display
-        """
-        # Calculate indentation (2 spaces per level)
-        indent_spaces = "  " * self._task_model.level
+        This method builds a Rich Text object that displays the task with proper formatting,
+        including tree lines for hierarchy, completion status, archive status, and
+        level-specific styling. The rendering process consists of:
 
+        1. Calculate indentation based on nesting level (2 spaces per level)
+        2. Determine base color using color selection logic (white for selected, level color otherwise)
+        3. Add tree lines (└─ for last child, ├─ for others) with proper spacing for nested items
+        4. Add completion checkbox ([✓] for completed, [ ] for pending)
+        5. Add archive icon (📦) for archived tasks
+        6. Add task title with appropriate styling:
+           - Strikethrough + complete color for completed tasks
+           - Dimmed archive color for archived tasks
+           - Level-specific color for normal tasks
+        7. Add child progress indicator (e.g., "2/3") if task has children
+        8. Apply selection background to entire text if selected
+
+        Color Selection Logic:
+        - When selected: Always use FOREGROUND color (white) for maximum contrast
+        - When not selected: Use level-specific colors from theme (LEVEL_0, LEVEL_1, LEVEL_2)
+        - Completion status: COMPLETE_COLOR for completed tasks (green)
+        - Archive status: ARCHIVE_COLOR for archived tasks (reduced opacity)
+        - Progress indicator: Always dimmed foreground color for subtle appearance
+
+        Returns:
+            Rich Text object with formatted task display, including colors and styling
+        """
         # Determine base color (use white for selected items for better contrast)
         base_color = FOREGROUND if self.selected else get_level_color(self._task_model.level)
 
@@ -136,15 +156,11 @@ class TaskItem(Widget):
 
         # Add tree line for nested items
         if self._task_model.level > 0:
-            # Use └─ for last child, ├─ for others
-            tree_char = "└─" if self._is_last_child else "├─"
-            tree_line = f"{indent_spaces}{tree_char} "
-
-            # Use level-specific color for tree line (or white if selected)
-            tree_color = FOREGROUND if self.selected else get_level_color(self._task_model.level)
+            tree_line, tree_color = self._get_tree_line()
             text.append(tree_line, style=tree_color)
         else:
-            # Top level tasks just get indentation
+            # Top level tasks just get indentation (2 spaces per level)
+            indent_spaces = "  " * self._task_model.level
             text.append(indent_spaces)
 
         # Add completion checkbox
@@ -191,6 +207,32 @@ class TaskItem(Widget):
         """Handle click event on the task item."""
         self.selected = True
         self.post_message(self.Selected(self.task_id))
+
+    def _get_tree_line(self) -> tuple[str, str]:
+        """Generate tree line characters and styling for nested items.
+
+        Tree Line Rendering:
+        The tree line uses Unicode box-drawing characters to visualize the task hierarchy:
+        - └─ (box drawings light up and right): Used for the last child in a sibling group
+        - ├─ (box drawings light vertical and right): Used for non-last children
+
+        This creates a visual hierarchy where:
+        - The └─ character indicates "this is the last item"
+        - The ├─ character indicates "there are more items below"
+
+        The tree line is only rendered for nested items (level > 0). Top-level tasks
+        receive only indentation without tree characters.
+
+        Returns:
+            Tuple of (tree_line_string, tree_color) where:
+            - tree_line_string: The indentation + tree character + space (e.g., "  └─ ")
+            - tree_color: The color for the tree line (white if selected, level color otherwise)
+        """
+        tree_char = "└─" if self._is_last_child else "├─"
+        indent_spaces = "  " * self._task_model.level
+        tree_line = f"{indent_spaces}{tree_char} "
+        tree_color = FOREGROUND if self.selected else get_level_color(self._task_model.level)
+        return tree_line, tree_color
 
     def watch_selected(self, selected: bool) -> None:
         """React to selection state changes.
