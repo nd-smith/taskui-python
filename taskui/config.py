@@ -49,15 +49,19 @@ class Config:
         Get printer configuration with environment overrides.
 
         Environment variables take precedence over config file:
+        - TASKUI_PRINTER_CONNECTION_TYPE
         - TASKUI_PRINTER_HOST
         - TASKUI_PRINTER_PORT
         - TASKUI_PRINTER_TIMEOUT
         - TASKUI_PRINTER_DETAIL_LEVEL
+        - TASKUI_PRINTER_DEVICE_PATH
 
         Returns:
             Dictionary with printer configuration
         """
         config = {
+            'connection_type': os.getenv('TASKUI_PRINTER_CONNECTION_TYPE') or
+                              self._config.get('printer', 'connection_type', fallback='network'),
             'host': os.getenv('TASKUI_PRINTER_HOST') or
                    self._config.get('printer', 'host', fallback='192.168.50.99'),
             'port': int(os.getenv('TASKUI_PRINTER_PORT') or
@@ -66,9 +70,13 @@ class Config:
                           self._config.get('printer', 'timeout', fallback='60')),
             'detail_level': os.getenv('TASKUI_PRINTER_DETAIL_LEVEL') or
                            self._config.get('printer', 'detail_level', fallback='minimal'),
+            'device_path': os.getenv('TASKUI_PRINTER_DEVICE_PATH') or
+                          self._config.get('printer', 'device_path', fallback='/dev/usb/lp0'),
         }
 
-        logger.debug(f"Printer config: host={config['host']}, port={config['port']}, "
+        logger.debug(f"Printer config: connection_type={config['connection_type']}, "
+                    f"host={config['host']}, port={config['port']}, "
+                    f"device_path={config['device_path']}, "
                     f"detail_level={config['detail_level']}")
 
         return config

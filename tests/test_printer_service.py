@@ -33,10 +33,22 @@ def mock_network_printer():
 
 @pytest.fixture
 def printer_config():
-    """Create a test printer config."""
+    """Create a test network printer config."""
     return PrinterConfig(
+        connection_type="network",
         host="192.168.1.100",
         port=9100,
+        timeout=30,
+        detail_level=DetailLevel.MINIMAL
+    )
+
+
+@pytest.fixture
+def usb_printer_config():
+    """Create a test USB printer config."""
+    return PrinterConfig(
+        connection_type="usb",
+        device_path="/dev/usb/lp0",
         timeout=30,
         detail_level=DetailLevel.MINIMAL
     )
@@ -97,30 +109,54 @@ class TestPrinterConfig:
     def test_default_config(self):
         """Test default printer configuration."""
         config = PrinterConfig()
+        assert config.connection_type == "network"
         assert config.host == "192.168.50.99"
         assert config.port == 9100
         assert config.timeout == 60
         assert config.detail_level == DetailLevel.MINIMAL
+        assert config.device_path == "/dev/usb/lp0"
 
-    def test_custom_config(self):
-        """Test custom printer configuration."""
+    def test_network_config(self):
+        """Test network printer configuration."""
         config = PrinterConfig(
+            connection_type="network",
             host="10.0.0.1",
             port=8080,
             timeout=45,
             detail_level=DetailLevel.MINIMAL
         )
+        assert config.connection_type == "network"
         assert config.host == "10.0.0.1"
         assert config.port == 8080
         assert config.timeout == 45
         assert config.detail_level == DetailLevel.MINIMAL
 
+    def test_usb_config(self):
+        """Test USB printer configuration."""
+        config = PrinterConfig(
+            connection_type="usb",
+            device_path="/dev/usb/lp1",
+            timeout=45,
+            detail_level=DetailLevel.MINIMAL
+        )
+        assert config.connection_type == "usb"
+        assert config.device_path == "/dev/usb/lp1"
+        assert config.timeout == 45
+        assert config.detail_level == DetailLevel.MINIMAL
+
+    def test_invalid_connection_type(self):
+        """Test invalid connection type raises error."""
+        with pytest.raises(ValueError, match="Invalid connection_type"):
+            PrinterConfig(connection_type="invalid")
+
     def test_from_config_file_defaults(self):
         """Test loading from non-existent config file uses defaults."""
         config = PrinterConfig.from_config_file(Path("/tmp/nonexistent.ini"))
+        assert config.connection_type == "network"
         assert config.host == "192.168.50.99"
         assert config.port == 9100
         assert config.detail_level == DetailLevel.MINIMAL
+        assert config.device_path == "/dev/usb/lp0"
 
 
 class TestPrinterService:
@@ -155,7 +191,7 @@ class TestPrinterService:
         mock_network_class.side_effect = Exception("Connection failed")
         service = PrinterService(printer_config)
 
-        with pytest.raises(ConnectionError, match="Cannot connect to printer"):
+        with pytest.raises(ConnectionError, match="Cannot connect to network printer"):
             service.connect()
 
         assert not service.is_connected()
@@ -288,6 +324,52 @@ class TestPrinterService:
         result = service.test_connection()
 
         assert result is False
+
+    @patch('taskui.services.printer_service.File')
+    def test_usb_connect_success(self, mock_file_class, usb_printer_config, mock_network_printer):
+        """Test successful USB printer connection."""
+        mock_file_class.return_value = mock_network_printer
+        service = PrinterService(usb_printer_config)
+
+        result = service.connect()
+
+        assert result is True
+        assert service.is_connected()
+        mock_file_class.assert_called_once_with(usb_printer_config.device_path)
+
+    @patch('taskui.services.printer_service.File')
+    def test_usb_connect_failure(self, mock_file_class, usb_printer_config):
+        """Test failed USB printer connection."""
+        mock_file_class.side_effect = Exception("USB connection failed")
+        service = PrinterService(usb_printer_config)
+
+        with pytest.raises(ConnectionError, match="Cannot connect to USB printer"):
+            service.connect()
+
+        assert not service.is_connected()
+
+    @patch('taskui.services.printer_service.File')
+    def test_usb_print_task_card(
+        self,
+        mock_file_class,
+        usb_printer_config,
+        mock_network_printer,
+        sample_task,
+        sample_children
+    ):
+        """Test printing task card with USB printer."""
+        mock_file_class.return_value = mock_network_printer
+        service = PrinterService(usb_printer_config)
+        service.connect()
+
+        result = service.print_task_card(sample_task, sample_children)
+
+        assert result is True
+        # Verify printer methods were called
+        assert mock_network_printer.set.called
+        assert mock_network_printer.text.called
+        assert mock_network_printer.cut.called
+        assert mock_network_printer.close.called
 
 
 class TestMockPrinter:
