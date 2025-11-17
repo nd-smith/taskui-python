@@ -34,7 +34,7 @@ class ListService:
         {"name": "Personal", "id": "00000000-0000-0000-0000-000000000003"},
     ]
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         """
         Initialize the list service.
 
