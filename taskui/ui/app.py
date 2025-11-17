@@ -238,15 +238,29 @@ class TaskUI(App):
         Args:
             message: TaskSelected message containing the selected task
         """
-        column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-        column3 = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
+        # Fetch the fresh task from the database to ensure we have the latest data
+        # (the task object in the message might be stale if tasks were recently created/updated)
+        if not self._has_db_manager():
+            return
 
-        # Update Column 3 with task details (for any selected task from any column)
-        await self._update_column3_for_selection(message.task)
+        try:
+            async with self._db_manager.get_session() as session:
+                task_service = TaskService(session)
+                fresh_task = await task_service.get_task_by_id(message.task.id)
 
-        # Update Column 2 only for selections from Column 1
-        if message.column_id == COLUMN_1_ID:
-            await self._update_column2_for_selection(message.task)
+            if not fresh_task:
+                logger.warning(f"Task {message.task.id} not found in database")
+                return
+
+            # Update Column 3 with task details (for any selected task from any column)
+            await self._update_column3_for_selection(fresh_task)
+
+            # Update Column 2 only for selections from Column 1
+            if message.column_id == COLUMN_1_ID:
+                await self._update_column2_for_selection(fresh_task)
+
+        except Exception as e:
+            logger.error("Error handling task selection", exc_info=True)
 
     async def on_task_creation_modal_task_created(self, message: TaskCreationModal.TaskCreated) -> None:
         """Handle TaskCreated message from the task creation modal.
@@ -1080,6 +1094,10 @@ class TaskUI(App):
             logger.debug("UI refresh: Clearing detail panel")
             detail_panel = self.query_one(f"#{COLUMN_3_ID}", DetailPanel)
             detail_panel.clear()
+        # Update detail panel with refreshed task data (e.g., after editing)
+        elif selected_task:
+            logger.debug("UI refresh: Updating detail panel with refreshed task")
+            await self._update_column3_for_selection(selected_task)
 
         # Refresh list bar (completion percentages)
         if self._current_list_id:

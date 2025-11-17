@@ -354,8 +354,10 @@ class ListBar(Horizontal):
         self.tabs.clear()
         self.tabs = self._create_all_tabs()
 
-        for tab in self.tabs:
-            self.mount(tab)
+        # Only mount tabs if this widget is already mounted
+        if self.is_mounted:
+            for tab in self.tabs:
+                self.mount(tab)
 
         logger.debug(f"ListBar: Tabs refreshed, tab_count={len(self.tabs)}")
 
