@@ -183,6 +183,103 @@ class TaskService:
         return max(task.position for task in siblings) + 1
 
     # ==============================================================================
+    # QUERY HELPERS
+    # ==============================================================================
+
+    def _query_active_tasks(self, list_id: UUID):
+        """
+        Build query for active (non-archived) tasks in a list.
+
+        Args:
+            list_id: List to query
+
+        Returns:
+            SQLAlchemy select statement
+        """
+        return (
+            select(TaskORM)
+            .where(TaskORM.list_id == str(list_id))
+            .where(TaskORM.is_archived == False)
+            .order_by(TaskORM.position)
+        )
+
+    def _query_top_level_tasks(self, list_id: UUID):
+        """
+        Build query for top-level tasks in a list.
+
+        Args:
+            list_id: List to query
+
+        Returns:
+            SQLAlchemy select statement
+        """
+        return (
+            self._query_active_tasks(list_id)
+            .where(TaskORM.parent_id.is_(None))
+        )
+
+    def _query_child_tasks(self, parent_id: UUID):
+        """
+        Build query for children of a parent task.
+
+        Args:
+            parent_id: Parent task ID
+
+        Returns:
+            SQLAlchemy select statement
+        """
+        return (
+            select(TaskORM)
+            .where(TaskORM.parent_id == str(parent_id))
+            .where(TaskORM.is_archived == False)
+            .order_by(TaskORM.position)
+        )
+
+    # ==============================================================================
+    # FETCH HELPERS
+    # ==============================================================================
+
+    async def _fetch_task_with_counts(
+        self,
+        task_orm: TaskORM
+    ) -> Task:
+        """
+        Convert ORM task to Pydantic with child counts populated.
+
+        Args:
+            task_orm: SQLAlchemy task instance
+
+        Returns:
+            Pydantic Task with child counts
+        """
+        task = self._orm_to_pydantic(task_orm)
+
+        # Get child counts
+        child_count, completed_child_count = await self._get_child_counts(task.id)
+        task.update_child_counts(child_count, completed_child_count)
+
+        return task
+
+    async def _fetch_tasks_with_counts(
+        self,
+        task_orms: List[TaskORM]
+    ) -> List[Task]:
+        """
+        Convert list of ORM tasks to Pydantic with child counts.
+
+        Args:
+            task_orms: List of SQLAlchemy task instances
+
+        Returns:
+            List of Pydantic Tasks with child counts
+        """
+        tasks = []
+        for task_orm in task_orms:
+            task = await self._fetch_task_with_counts(task_orm)
+            tasks.append(task)
+        return tasks
+
+    # ==============================================================================
     # CREATE OPERATIONS
     # ==============================================================================
 
@@ -428,139 +525,6 @@ class TaskService:
 
         return descendants
 
-    # ==============================================================================
-    # COUNTING HELPERS
-    # ==============================================================================
-
-    async def _get_child_counts(self, parent_id: UUID) -> tuple[int, int]:
-        """
-        Get the total and completed child counts for a task.
-
-        Args:
-            parent_id: UUID of the parent task
-
-        Returns:
-            Tuple of (total_children, completed_children)
-        """
-        try:
-            # Get all direct children (not archived)
-            query = select(TaskORM).where(
-                TaskORM.parent_id == str(parent_id),
-                TaskORM.is_archived == False,
-            )
-
-            result = await self.session.execute(query)
-            children = result.scalars().all()
-
-            total_count = len(children)
-            completed_count = sum(1 for child in children if child.is_completed)
-
-            logger.debug(
-                f"Progress calculation updated: task_id={parent_id}, "
-                f"completed_count={completed_count}, total_count={total_count}"
-            )
-
-            return total_count, completed_count
-        except Exception as e:
-            logger.error(
-                f"Progress calculation error for task_id={parent_id}",
-                exc_info=True
-            )
-            raise
-
-    async def _fetch_task_with_counts(
-        self,
-        task_orm: TaskORM
-    ) -> Task:
-        """
-        Convert ORM task to Pydantic with child counts populated.
-
-        Args:
-            task_orm: SQLAlchemy task instance
-
-        Returns:
-            Pydantic Task with child counts
-        """
-        task = self._orm_to_pydantic(task_orm)
-
-        # Get child counts
-        child_count, completed_child_count = await self._get_child_counts(task.id)
-        task.update_child_counts(child_count, completed_child_count)
-
-        return task
-
-    async def _fetch_tasks_with_counts(
-        self,
-        task_orms: List[TaskORM]
-    ) -> List[Task]:
-        """
-        Convert list of ORM tasks to Pydantic with child counts.
-
-        Args:
-            task_orms: List of SQLAlchemy task instances
-
-        Returns:
-            List of Pydantic Tasks with child counts
-        """
-        tasks = []
-        for task_orm in task_orms:
-            task = await self._fetch_task_with_counts(task_orm)
-            tasks.append(task)
-        return tasks
-
-    # ==============================================================================
-    # QUERY HELPERS
-    # ==============================================================================
-
-    def _query_active_tasks(self, list_id: UUID):
-        """
-        Build query for active (non-archived) tasks in a list.
-
-        Args:
-            list_id: List to query
-
-        Returns:
-            SQLAlchemy select statement
-        """
-        return (
-            select(TaskORM)
-            .where(TaskORM.list_id == str(list_id))
-            .where(TaskORM.is_archived == False)
-            .order_by(TaskORM.position)
-        )
-
-    def _query_top_level_tasks(self, list_id: UUID):
-        """
-        Build query for top-level tasks in a list.
-
-        Args:
-            list_id: List to query
-
-        Returns:
-            SQLAlchemy select statement
-        """
-        return (
-            self._query_active_tasks(list_id)
-            .where(TaskORM.parent_id.is_(None))
-        )
-
-    def _query_child_tasks(self, parent_id: UUID):
-        """
-        Build query for children of a parent task.
-
-        Args:
-            parent_id: Parent task ID
-
-        Returns:
-            SQLAlchemy select statement
-        """
-        return (
-            select(TaskORM)
-            .where(TaskORM.parent_id == str(parent_id))
-            .where(TaskORM.is_archived == False)
-            .order_by(TaskORM.position)
-        )
-
     async def get_task_by_id(self, task_id: UUID) -> Optional[Task]:
         """
         Get a task by its ID.
@@ -637,6 +601,58 @@ class TaskService:
             logger.error(f"Failed to update task {task_id}: {e}", exc_info=True)
             raise
 
+    async def toggle_completion(self, task_id: UUID) -> Task:
+        """
+        Toggle the completion status of a task.
+
+        If the task is currently completed, it will be marked as incomplete.
+        If the task is currently incomplete, it will be marked as completed.
+
+        Args:
+            task_id: UUID of the task to toggle
+
+        Returns:
+            Updated Task instance
+
+        Raises:
+            TaskNotFoundError: If task does not exist
+        """
+        # Get the task
+        task_orm = await self._get_task_or_raise(task_id)
+
+        # Toggle completion status
+        if task_orm.is_completed:
+            # Mark as incomplete
+            task_orm.is_completed = False
+            task_orm.completed_at = None
+            new_state = False
+            logger.info(
+                f"Task completion toggled: task_id={task_id}, "
+                f"new_state=incomplete, timestamp={datetime.utcnow().isoformat()}"
+            )
+        else:
+            # Mark as completed
+            task_orm.is_completed = True
+            task_orm.completed_at = datetime.utcnow()
+            new_state = True
+            logger.info(
+                f"Task completion toggled: task_id={task_id}, "
+                f"new_state=completed, timestamp={task_orm.completed_at.isoformat()}"
+            )
+
+        # Flush changes to database
+        try:
+            await self.session.flush()
+        except Exception as e:
+            logger.error(
+                f"Database update failed for task completion toggle: task_id={task_id}",
+                exc_info=True
+            )
+            raise
+
+        # Convert back to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
+
     # ==============================================================================
     # DELETE/ARCHIVE OPERATIONS
     # ==============================================================================
@@ -684,6 +700,144 @@ class TaskService:
         except Exception as e:
             logger.error(f"Failed to delete task {task_id}: {e}", exc_info=True)
             raise
+
+    async def archive_task(self, task_id: UUID) -> Task:
+        """
+        Archive a completed task.
+
+        Args:
+            task_id: UUID of the task to archive
+
+        Returns:
+            Updated Task instance
+
+        Raises:
+            TaskNotFoundError: If task does not exist
+            ValueError: If task is not completed
+        """
+        # Get the task
+        task_orm = await self._get_task_or_raise(task_id)
+
+        # Check if task is completed
+        if not task_orm.is_completed:
+            logger.warning(
+                f"Attempted to archive incomplete task: task_id={task_id}"
+            )
+            raise ValueError("Only completed tasks can be archived")
+
+        # Archive the task
+        task_orm.is_archived = True
+        task_orm.archived_at = datetime.utcnow()
+
+        logger.info(
+            f"Task archived: task_id={task_id}, "
+            f"archive_timestamp={task_orm.archived_at.isoformat()}"
+        )
+
+        # Flush changes to database
+        try:
+            await self.session.flush()
+        except Exception as e:
+            logger.error(
+                f"Archive operation failed for task_id={task_id}",
+                exc_info=True
+            )
+            raise
+
+        # Convert back to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
+
+    async def unarchive_task(self, task_id: UUID) -> Task:
+        """
+        Unarchive (restore) an archived task.
+
+        Args:
+            task_id: UUID of the task to unarchive
+
+        Returns:
+            Updated Task instance
+
+        Raises:
+            TaskNotFoundError: If task does not exist
+        """
+        # Get the task
+        task_orm = await self._get_task_or_raise(task_id)
+
+        # Unarchive the task
+        task_orm.is_archived = False
+        task_orm.archived_at = None
+
+        logger.info(
+            f"Task unarchived (restored): task_id={task_id}"
+        )
+
+        # Flush changes to database
+        try:
+            await self.session.flush()
+        except Exception as e:
+            logger.error(
+                f"Unarchive operation failed for task_id={task_id}",
+                exc_info=True
+            )
+            raise
+
+        # Convert back to Pydantic with counts using helper
+        return await self._fetch_task_with_counts(task_orm)
+
+    async def get_archived_tasks(
+        self,
+        list_id: UUID,
+        search_query: Optional[str] = None
+    ) -> List[Task]:
+        """
+        Get all archived tasks for a list, optionally filtered by search query.
+
+        Args:
+            list_id: UUID of the task list
+            search_query: Optional search string to filter by title or notes
+
+        Returns:
+            List of archived Task instances ordered by archived date (newest first)
+
+        Raises:
+            TaskListNotFoundError: If list does not exist
+        """
+        # Verify list exists
+        await self._verify_list_exists(list_id)
+
+        # Build query for archived tasks only
+        query = select(TaskORM).where(
+            TaskORM.list_id == str(list_id),
+            TaskORM.is_archived == True,
+        )
+
+        # Apply search filter if provided
+        if search_query:
+            search_pattern = f"%{search_query}%"
+            from sqlalchemy import or_
+            query = query.where(
+                or_(
+                    TaskORM.title.ilike(search_pattern),
+                    TaskORM.notes.ilike(search_pattern)
+                )
+            )
+
+        # Order by archived date, newest first
+        query = query.order_by(TaskORM.archived_at.desc())
+
+        # Execute query
+        result = await self.session.execute(query)
+        task_orms = result.scalars().all()
+
+        # Convert to Pydantic with counts using helper
+        tasks = await self._fetch_tasks_with_counts(task_orms)
+
+        logger.debug(
+            f"Retrieved {len(tasks)} archived tasks for list_id={list_id}"
+            + (f" with search query '{search_query}'" if search_query else "")
+        )
+
+        return tasks
 
     # ==============================================================================
     # HIERARCHY OPERATIONS
@@ -848,192 +1002,42 @@ class TaskService:
             # Recursively update grandchildren
             await self._update_descendant_levels(child.id, new_child_level)
 
-    async def toggle_completion(self, task_id: UUID) -> Task:
-        """
-        Toggle the completion status of a task.
+    # ==============================================================================
+    # COUNTING HELPERS
+    # ==============================================================================
 
-        If the task is currently completed, it will be marked as incomplete.
-        If the task is currently incomplete, it will be marked as completed.
+    async def _get_child_counts(self, parent_id: UUID) -> tuple[int, int]:
+        """
+        Get the total and completed child counts for a task.
 
         Args:
-            task_id: UUID of the task to toggle
+            parent_id: UUID of the parent task
 
         Returns:
-            Updated Task instance
-
-        Raises:
-            TaskNotFoundError: If task does not exist
+            Tuple of (total_children, completed_children)
         """
-        # Get the task
-        task_orm = await self._get_task_or_raise(task_id)
-
-        # Toggle completion status
-        if task_orm.is_completed:
-            # Mark as incomplete
-            task_orm.is_completed = False
-            task_orm.completed_at = None
-            new_state = False
-            logger.info(
-                f"Task completion toggled: task_id={task_id}, "
-                f"new_state=incomplete, timestamp={datetime.utcnow().isoformat()}"
-            )
-        else:
-            # Mark as completed
-            task_orm.is_completed = True
-            task_orm.completed_at = datetime.utcnow()
-            new_state = True
-            logger.info(
-                f"Task completion toggled: task_id={task_id}, "
-                f"new_state=completed, timestamp={task_orm.completed_at.isoformat()}"
-            )
-
-        # Flush changes to database
         try:
-            await self.session.flush()
+            # Get all direct children (not archived)
+            query = select(TaskORM).where(
+                TaskORM.parent_id == str(parent_id),
+                TaskORM.is_archived == False,
+            )
+
+            result = await self.session.execute(query)
+            children = result.scalars().all()
+
+            total_count = len(children)
+            completed_count = sum(1 for child in children if child.is_completed)
+
+            logger.debug(
+                f"Progress calculation updated: task_id={parent_id}, "
+                f"completed_count={completed_count}, total_count={total_count}"
+            )
+
+            return total_count, completed_count
         except Exception as e:
             logger.error(
-                f"Database update failed for task completion toggle: task_id={task_id}",
+                f"Progress calculation error for task_id={parent_id}",
                 exc_info=True
             )
             raise
-
-        # Convert back to Pydantic with counts using helper
-        return await self._fetch_task_with_counts(task_orm)
-
-    async def archive_task(self, task_id: UUID) -> Task:
-        """
-        Archive a completed task.
-
-        Args:
-            task_id: UUID of the task to archive
-
-        Returns:
-            Updated Task instance
-
-        Raises:
-            TaskNotFoundError: If task does not exist
-            ValueError: If task is not completed
-        """
-        # Get the task
-        task_orm = await self._get_task_or_raise(task_id)
-
-        # Check if task is completed
-        if not task_orm.is_completed:
-            logger.warning(
-                f"Attempted to archive incomplete task: task_id={task_id}"
-            )
-            raise ValueError("Only completed tasks can be archived")
-
-        # Archive the task
-        task_orm.is_archived = True
-        task_orm.archived_at = datetime.utcnow()
-
-        logger.info(
-            f"Task archived: task_id={task_id}, "
-            f"archive_timestamp={task_orm.archived_at.isoformat()}"
-        )
-
-        # Flush changes to database
-        try:
-            await self.session.flush()
-        except Exception as e:
-            logger.error(
-                f"Archive operation failed for task_id={task_id}",
-                exc_info=True
-            )
-            raise
-
-        # Convert back to Pydantic with counts using helper
-        return await self._fetch_task_with_counts(task_orm)
-
-    async def unarchive_task(self, task_id: UUID) -> Task:
-        """
-        Unarchive (restore) an archived task.
-
-        Args:
-            task_id: UUID of the task to unarchive
-
-        Returns:
-            Updated Task instance
-
-        Raises:
-            TaskNotFoundError: If task does not exist
-        """
-        # Get the task
-        task_orm = await self._get_task_or_raise(task_id)
-
-        # Unarchive the task
-        task_orm.is_archived = False
-        task_orm.archived_at = None
-
-        logger.info(
-            f"Task unarchived (restored): task_id={task_id}"
-        )
-
-        # Flush changes to database
-        try:
-            await self.session.flush()
-        except Exception as e:
-            logger.error(
-                f"Unarchive operation failed for task_id={task_id}",
-                exc_info=True
-            )
-            raise
-
-        # Convert back to Pydantic with counts using helper
-        return await self._fetch_task_with_counts(task_orm)
-
-    async def get_archived_tasks(
-        self,
-        list_id: UUID,
-        search_query: Optional[str] = None
-    ) -> List[Task]:
-        """
-        Get all archived tasks for a list, optionally filtered by search query.
-
-        Args:
-            list_id: UUID of the task list
-            search_query: Optional search string to filter by title or notes
-
-        Returns:
-            List of archived Task instances ordered by archived date (newest first)
-
-        Raises:
-            TaskListNotFoundError: If list does not exist
-        """
-        # Verify list exists
-        await self._verify_list_exists(list_id)
-
-        # Build query for archived tasks only
-        query = select(TaskORM).where(
-            TaskORM.list_id == str(list_id),
-            TaskORM.is_archived == True,
-        )
-
-        # Apply search filter if provided
-        if search_query:
-            search_pattern = f"%{search_query}%"
-            from sqlalchemy import or_
-            query = query.where(
-                or_(
-                    TaskORM.title.ilike(search_pattern),
-                    TaskORM.notes.ilike(search_pattern)
-                )
-            )
-
-        # Order by archived date, newest first
-        query = query.order_by(TaskORM.archived_at.desc())
-
-        # Execute query
-        result = await self.session.execute(query)
-        task_orms = result.scalars().all()
-
-        # Convert to Pydantic with counts using helper
-        tasks = await self._fetch_tasks_with_counts(task_orms)
-
-        logger.debug(
-            f"Retrieved {len(tasks)} archived tasks for list_id={list_id}"
-            + (f" with search query '{search_query}'" if search_query else "")
-        )
-
-        return tasks
