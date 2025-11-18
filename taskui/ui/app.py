@@ -21,6 +21,7 @@ from taskui.services.nesting_rules import Column as NestingColumn
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
 from taskui.services.printer_service import PrinterService, PrinterConfig
+from taskui.services.cloud_print_queue import CloudPrintQueue, CloudPrintConfig
 from taskui.ui.components.task_modal import TaskCreationModal
 from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.ui.components.detail_panel import DetailPanel
@@ -129,7 +130,7 @@ class TaskUI(App):
         self._db_manager: Optional[DatabaseManager] = None
         self._current_list_id: Optional[UUID] = None  # Will be set after database initialization
         self._lists: List[TaskList] = []  # Store available lists
-        self._printer_service: Optional[PrinterService] = None  # Thermal printer service
+        self._printer_service: Optional[CloudPrintQueue] = None  # Cloud print queue service
 
     def compose(self) -> ComposeResult:
         """Compose the application layout.
@@ -191,14 +192,14 @@ class TaskUI(App):
         # on_list_bar_list_selected event, which loads tasks and sets focus
         await self._ensure_default_list()
 
-        # Initialize printer service (don't fail if printer unavailable)
+        # Initialize cloud print queue service (don't fail if unavailable)
         try:
-            printer_config = PrinterConfig.from_config_file()
-            self._printer_service = PrinterService(printer_config)
+            cloud_config = CloudPrintConfig.from_config_file()
+            self._printer_service = CloudPrintQueue(cloud_config)
             self._printer_service.connect()
-            logger.info("Printer service initialized and connected")
+            logger.info("Cloud print queue initialized and connected")
         except Exception as e:
-            logger.warning(f"Printer not available at startup: {e}")
+            logger.warning(f"Cloud print queue not available at startup: {e}")
             # Continue without printer - user can still use the app
 
         logger.info("TaskUI application ready")
@@ -831,12 +832,12 @@ class TaskUI(App):
                 task_service = TaskService(session)
                 children = await task_service.get_children(selected_task.id, include_archived=False)
 
-            # Print the card
-            self._printer_service.print_task_card(selected_task, children)
+            # Send print job to cloud queue
+            self._printer_service.send_print_job(selected_task, children)
 
             # Show success message
-            self.notify("✓ Task card printed!", severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-            logger.info(f"Successfully printed task card for: {selected_task.title}")
+            self.notify("✓ Print job queued!", severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            logger.info(f"Print job queued for: {selected_task.title}")
 
         except Exception as e:
             # Show error message
