@@ -69,50 +69,54 @@ COLUMN_1_ID = "column-1"
 COLUMN_2_ID = "column-2"
 COLUMN_3_ID = "column-3"
 
-# Column navigation order
-COLUMN_ORDER = [COLUMN_1_ID, COLUMN_2_ID, COLUMN_3_ID]
+# Focusable columns for navigation (Column 3 is display-only)
+FOCUSABLE_COLUMNS = [COLUMN_1_ID, COLUMN_2_ID]
 
 
 def get_next_column(current_column_id: str) -> Optional[str]:
     """Get the next column in the navigation order.
 
+    Only cycles between Column 1 and Column 2 (Column 3 is non-focusable).
+    Tab key toggles: Column 1 ↔ Column 2
+
     Args:
         current_column_id: ID of the current column
 
     Returns:
-        ID of the next column, or None if at the end
+        ID of the next column (toggles between Column 1 and Column 2)
     """
-    try:
-        current_index = COLUMN_ORDER.index(current_column_id)
-        next_index = (current_index + 1) % len(COLUMN_ORDER)
-        next_column = COLUMN_ORDER[next_index]
-        logger.debug(f"Keybindings: Navigate next column - from {current_column_id} to {next_column}")
-        return next_column
-    except ValueError:
-        # If current column not found, return first column
-        logger.warning(f"Keybindings: Unknown column {current_column_id}, defaulting to first column")
-        return COLUMN_ORDER[0]
+    # Simple toggle between Column 1 and Column 2
+    if current_column_id == COLUMN_1_ID:
+        next_column = COLUMN_2_ID
+    else:
+        # From Column 2 (or any unknown column), go to Column 1
+        next_column = COLUMN_1_ID
+
+    logger.debug(f"Keybindings: Navigate next column - from {current_column_id} to {next_column}")
+    return next_column
 
 
 def get_prev_column(current_column_id: str) -> Optional[str]:
     """Get the previous column in the navigation order.
 
+    Only cycles between Column 1 and Column 2 (Column 3 is non-focusable).
+    Shift+Tab key toggles: Column 1 ↔ Column 2
+
     Args:
         current_column_id: ID of the current column
 
     Returns:
-        ID of the previous column, or None if at the beginning
+        ID of the previous column (toggles between Column 1 and Column 2)
     """
-    try:
-        current_index = COLUMN_ORDER.index(current_column_id)
-        prev_index = (current_index - 1) % len(COLUMN_ORDER)
-        prev_column = COLUMN_ORDER[prev_index]
-        logger.debug(f"Keybindings: Navigate previous column - from {current_column_id} to {prev_column}")
-        return prev_column
-    except ValueError:
-        # If current column not found, return last column
-        logger.warning(f"Keybindings: Unknown column {current_column_id}, defaulting to last column")
-        return COLUMN_ORDER[-1]
+    # Simple toggle between Column 1 and Column 2 (same as next)
+    if current_column_id == COLUMN_1_ID:
+        prev_column = COLUMN_2_ID
+    else:
+        # From Column 2 (or any unknown column), go to Column 1
+        prev_column = COLUMN_1_ID
+
+    logger.debug(f"Keybindings: Navigate previous column - from {current_column_id} to {prev_column}")
+    return prev_column
 
 
 def get_all_bindings() -> list[Binding]:

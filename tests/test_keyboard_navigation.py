@@ -18,7 +18,7 @@ from taskui.ui.keybindings import (
     COLUMN_1_ID,
     COLUMN_2_ID,
     COLUMN_3_ID,
-    COLUMN_ORDER,
+    FOCUSABLE_COLUMNS,
 )
 from taskui.ui.components.column import TaskColumn
 from taskui.models import Task
@@ -44,9 +44,9 @@ class TestKeybindings:
         assert "tab" in binding_keys
         assert "shift+tab" in binding_keys
 
-    def test_column_order_correct(self):
-        """Test that column order is correct."""
-        assert COLUMN_ORDER == [COLUMN_1_ID, COLUMN_2_ID, COLUMN_3_ID]
+    def test_focusable_columns_correct(self):
+        """Test that focusable columns list is correct (Column 3 is non-focusable)."""
+        assert FOCUSABLE_COLUMNS == [COLUMN_1_ID, COLUMN_2_ID]
 
     def test_letter_keybindings_case_insensitive(self):
         """Test that letter keybindings work with both uppercase and lowercase (Issue #26)."""
@@ -77,27 +77,25 @@ class TestKeybindings:
         assert "q,Q" in binding_dict
         assert binding_dict["q,Q"] == "quit"
 
-    def test_get_next_column_cycles(self):
-        """Test that get_next_column cycles through columns."""
+    def test_get_next_column_toggles(self):
+        """Test that get_next_column toggles between Column 1 and Column 2."""
         assert get_next_column(COLUMN_1_ID) == COLUMN_2_ID
-        assert get_next_column(COLUMN_2_ID) == COLUMN_3_ID
-        assert get_next_column(COLUMN_3_ID) == COLUMN_1_ID  # Wraps around
+        assert get_next_column(COLUMN_2_ID) == COLUMN_1_ID  # Toggles back
 
     def test_get_next_column_handles_invalid(self):
         """Test that get_next_column handles invalid input."""
         result = get_next_column("invalid-column")
         assert result == COLUMN_1_ID  # Returns first column as fallback
 
-    def test_get_prev_column_cycles(self):
-        """Test that get_prev_column cycles through columns."""
-        assert get_prev_column(COLUMN_1_ID) == COLUMN_3_ID  # Wraps around
-        assert get_prev_column(COLUMN_2_ID) == COLUMN_1_ID
-        assert get_prev_column(COLUMN_3_ID) == COLUMN_2_ID
+    def test_get_prev_column_toggles(self):
+        """Test that get_prev_column toggles between Column 1 and Column 2."""
+        assert get_prev_column(COLUMN_1_ID) == COLUMN_2_ID  # Toggles
+        assert get_prev_column(COLUMN_2_ID) == COLUMN_1_ID  # Toggles back
 
     def test_get_prev_column_handles_invalid(self):
         """Test that get_prev_column handles invalid input."""
         result = get_prev_column("invalid-column")
-        assert result == COLUMN_3_ID  # Returns last column as fallback
+        assert result == COLUMN_1_ID  # Returns Column 1 (toggles from unknown)
 
 
 class TestTaskUIKeyboardNavigation:
@@ -115,8 +113,8 @@ class TestTaskUIKeyboardNavigation:
         taskui = app.app
         assert taskui._focused_column_id == COLUMN_1_ID
 
-    async def test_columns_are_focusable(self, app):
-        """Test that all columns can be focused."""
+    async def test_columns_focusability(self, app):
+        """Test that Column 1 and 2 are focusable, Column 3 is not."""
         taskui = app.app
         from taskui.ui.components.detail_panel import DetailPanel
 
@@ -127,51 +125,51 @@ class TestTaskUIKeyboardNavigation:
 
         assert column1.can_focus
         assert column2.can_focus
-        assert column3.can_focus
+        assert not column3.can_focus  # Column 3 is display-only
 
-    async def test_tab_navigates_to_next_column(self, app):
-        """Test that Tab action navigates to next column."""
+    async def test_tab_toggles_between_columns(self, app):
+        """Test that Tab action toggles between Column 1 and Column 2."""
         taskui = app.app
 
         # Start at Column 1
         assert taskui._focused_column_id == COLUMN_1_ID
 
-        # Call navigate_next_column action
+        # Call navigate_next_column action (Column 1 → Column 2)
         taskui.action_navigate_next_column()
         await app.pause()
         assert taskui._focused_column_id == COLUMN_2_ID
 
-        # Call action again
-        taskui.action_navigate_next_column()
-        await app.pause()
-        assert taskui._focused_column_id == COLUMN_3_ID
-
-        # Call action again (should wrap to Column 1)
+        # Call action again (Column 2 → Column 1)
         taskui.action_navigate_next_column()
         await app.pause()
         assert taskui._focused_column_id == COLUMN_1_ID
 
-    async def test_shift_tab_navigates_to_prev_column(self, app):
-        """Test that Shift+Tab action navigates to previous column."""
+        # Call action again (Column 1 → Column 2)
+        taskui.action_navigate_next_column()
+        await app.pause()
+        assert taskui._focused_column_id == COLUMN_2_ID
+
+    async def test_shift_tab_toggles_between_columns(self, app):
+        """Test that Shift+Tab action toggles between Column 1 and Column 2."""
         taskui = app.app
 
         # Start at Column 1
         assert taskui._focused_column_id == COLUMN_1_ID
 
-        # Call navigate_prev_column action (should wrap to Column 3)
-        taskui.action_navigate_prev_column()
-        await app.pause()
-        assert taskui._focused_column_id == COLUMN_3_ID
-
-        # Call action again
+        # Call navigate_prev_column action (Column 1 → Column 2)
         taskui.action_navigate_prev_column()
         await app.pause()
         assert taskui._focused_column_id == COLUMN_2_ID
 
-        # Call action again
+        # Call action again (Column 2 → Column 1)
         taskui.action_navigate_prev_column()
         await app.pause()
         assert taskui._focused_column_id == COLUMN_1_ID
+
+        # Call action again (Column 1 → Column 2)
+        taskui.action_navigate_prev_column()
+        await app.pause()
+        assert taskui._focused_column_id == COLUMN_2_ID
 
     async def test_up_down_navigation_with_no_tasks(self, app):
         """Test that Up/Down navigation works gracefully with no tasks."""
