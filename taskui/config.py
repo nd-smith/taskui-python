@@ -73,6 +73,37 @@ class Config:
 
         return config
 
+    def get_cloud_print_config(self) -> Dict[str, Any]:
+        """
+        Get cloud print queue configuration with environment overrides.
+
+        Environment variables take precedence over config file:
+        - TASKUI_CLOUD_QUEUE_URL
+        - TASKUI_CLOUD_REGION
+        - TASKUI_CLOUD_MODE (direct/cloud/auto)
+        - AWS_ACCESS_KEY_ID (standard AWS env var)
+        - AWS_SECRET_ACCESS_KEY (standard AWS env var)
+
+        Returns:
+            Dictionary with cloud print configuration
+        """
+        config = {
+            'queue_url': os.getenv('TASKUI_CLOUD_QUEUE_URL') or
+                        self._config.get('cloud_print', 'queue_url', fallback=''),
+            'region': os.getenv('TASKUI_CLOUD_REGION') or
+                     self._config.get('cloud_print', 'region', fallback='us-east-1'),
+            'mode': os.getenv('TASKUI_CLOUD_MODE') or
+                   self._config.get('cloud_print', 'mode', fallback='auto'),
+            'aws_access_key_id': os.getenv('AWS_ACCESS_KEY_ID') or
+                                self._config.get('cloud_print', 'aws_access_key_id', fallback=None),
+            'aws_secret_access_key': os.getenv('AWS_SECRET_ACCESS_KEY') or
+                                    self._config.get('cloud_print', 'aws_secret_access_key', fallback=None),
+        }
+
+        logger.debug(f"Cloud print config: region={config['region']}, mode={config['mode']}")
+
+        return config
+
     def get(self, section: str, key: str, fallback: Any = None) -> Any:
         """
         Get configuration value with fallback.

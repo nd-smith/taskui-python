@@ -1,0 +1,27 @@
+# TaskUI Configuration File
+# Copy this to ~/.taskui/config.ini and customize
+
+[printer]
+# Direct network printer connection (for local network)
+host = 192.168.50.99
+port = 9100
+timeout = 60
+detail_level = minimal
+
+[cloud_print]
+# Cloud print relay for VPN/restricted environments
+# Get queue URL from AWS SQS Console
+queue_url = https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue
+region = us-east-1
+
+# Mode: direct, cloud, or auto
+# - direct: Only try direct printer connection
+# - cloud: Only use cloud queue
+# - auto: Try direct first, fallback to cloud (recommended)
+mode = auto
+
+# AWS Credentials (optional - can use ~/.aws/credentials instead)
+# SECURITY WARNING: Do not commit credentials to git!
+# Prefer using 'aws configure' or environment variables
+# aws_access_key_id = your-access-key-here
+# aws_secret_access_key = your-secret-key-here

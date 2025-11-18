@@ -1,0 +1,20 @@
+[Unit]
+Description=TaskUI Cloud Print Worker
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/usr/bin/python3 /home/pi/taskui/pi_print_worker.py \
+    --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
+    --printer-host 192.168.50.99 \
+    --printer-port 9100 \
+    --region us-east-1
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
