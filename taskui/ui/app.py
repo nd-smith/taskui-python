@@ -561,17 +561,36 @@ class TaskUI(App):
 
         Opens the task creation modal to create a child task under the currently
         selected task. Respects nesting limits based on column context.
+
+        Hierarchical creation:
+        - Column 1 focused: Creates child of Column 1 selection
+        - Column 2 focused: Creates child of Column 1 selection (appears in Column 2)
+
+        Note: Column 3 is not focusable (display-only), so no handling needed.
         """
-        column = self._get_focused_column()
-        if not column:
+        # Determine which column to get the parent task from
+        # When Column 2 is focused, use Column 1's selection as the parent
+        if self._focused_column_id == COLUMN_2_ID:
+            # Column 2 is filtered by Column 1's selection - use that as parent
+            try:
+                parent_column = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+            except Exception as e:
+                logger.error(f"Could not get Column 1: {e}")
+                return
+        else:
+            # Column 1 focused - use its own selection
+            parent_column = self._get_focused_column()
+
+        if not parent_column:
             return
 
-        selected_task = column.get_selected_task()
+        selected_task = parent_column.get_selected_task()
         if not selected_task:
             # Can't create a child without a parent selected
             return
 
         # Determine the column context for nesting rules
+        # Use the focused column ID to determine where the task will be created
         nesting_column = self._get_nesting_column_from_id(self._focused_column_id)
 
         modal = TaskCreationModal(

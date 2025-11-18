@@ -54,8 +54,8 @@ class DetailPanel(Widget):
     - Nesting warnings when at maximum depth
     """
 
-    # Enable keyboard focus
-    can_focus = True
+    # Disable keyboard focus - Column 3 is display-only
+    can_focus = False
 
     DEFAULT_CSS = f"""
     DetailPanel {{
