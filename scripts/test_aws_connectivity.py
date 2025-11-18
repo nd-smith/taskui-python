@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 """
-Test script to verify AWS SQS connectivity from corporate VPN
-Run this on your work machine to verify cloud relay will work
+Test script to verify AWS SQS connectivity and queue access.
+Run this on your work machine to verify cloud relay will work.
 """
 
 import sys
-import json
-from datetime import datetime
+import os
 
-def test_aws_connectivity():
-    """Test if we can reach AWS SQS"""
-    print("Testing AWS SQS connectivity...")
-    print("=" * 50)
+def test_queue_connectivity():
+    """Test connectivity to specific TaskUI print queue"""
+
+    # Get queue URL from environment or use default
+    queue_url = os.getenv(
+        'TASKUI_CLOUD_QUEUE_URL',
+        'https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue'
+    )
+
+    print("=" * 60)
+    print("AWS SQS Queue Connectivity Test")
+    print("=" * 60)
+    print(f"\nQueue URL: {queue_url}")
+    print()
 
     try:
         import boto3
@@ -22,140 +31,84 @@ def test_aws_connectivity():
         print("   Install with: pip install boto3")
         return False
 
-    # Test basic AWS connectivity (doesn't require credentials)
+    # Test AWS credentials
+    print("\nTesting AWS credentials...")
     try:
-        import urllib.request
-        import ssl
-
-        # Test HTTPS access to AWS
-        context = ssl.create_default_context()
-        url = "https://sqs.us-east-1.amazonaws.com"
-
-        print(f"\nTesting HTTPS access to {url}...")
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-
-        try:
-            response = urllib.request.urlopen(req, timeout=10, context=context)
-            print(f"✅ Can reach AWS SQS endpoint (Status: {response.status})")
-            connectivity_ok = True
-        except urllib.error.HTTPError as e:
-            # HTTP errors (401, 403, etc.) actually mean we CAN reach the service
-            # We're just not authenticated yet, which is expected
-            if e.code in [400, 403]:
-                print(f"✅ Can reach AWS SQS endpoint (Got expected auth error: {e.code})")
-                connectivity_ok = True
-            else:
-                print(f"⚠️  Unexpected HTTP error: {e.code}")
-                connectivity_ok = False
-        except urllib.error.URLError as e:
-            print(f"❌ Cannot reach AWS SQS: {e.reason}")
-            print("   Your VPN may be blocking AWS services")
-            connectivity_ok = False
-        except Exception as e:
-            print(f"❌ Connection error: {e}")
-            connectivity_ok = False
-
-    except Exception as e:
-        print(f"❌ Network test failed: {e}")
-        return False
-
-    if not connectivity_ok:
-        print("\n" + "=" * 50)
-        print("❌ CONNECTIVITY TEST FAILED")
-        print("AWS SQS is not reachable from your network")
-        print("\nAlternatives to try:")
-        print("  1. Test Azure Queue Storage (Office365 is accessible)")
-        print("  2. Use GitHub API as message queue")
-        print("  3. Host simple queue on accessible cloud service")
-        return False
-
-    print("\n" + "=" * 50)
-    print("✅ CONNECTIVITY TEST PASSED")
-    print("AWS SQS is reachable from your network")
-    print("\nNext steps:")
-    print("  1. Set up AWS account (free tier)")
-    print("  2. Create SQS queue")
-    print("  3. Configure AWS credentials")
-    print("  4. Run the full implementation")
-
-    # Instructions for AWS setup
-    print("\n" + "=" * 50)
-    print("AWS Setup Instructions:")
-    print("  1. Go to https://aws.amazon.com/free/")
-    print("  2. Create account (free tier includes 1M SQS requests/month)")
-    print("  3. Go to SQS console: https://console.aws.amazon.com/sqs/")
-    print("  4. Create new queue named 'taskui-print-queue'")
-    print("  5. Create IAM user with SQS permissions")
-    print("  6. Save credentials to ~/.aws/credentials")
-
-    return True
-
-
-def test_aws_with_credentials():
-    """Test AWS SQS with actual credentials if configured"""
-    print("\n" + "=" * 50)
-    print("Testing with AWS credentials...")
-
-    try:
-        import boto3
-        from botocore.exceptions import NoCredentialsError, ClientError
-
-        # Try to create SQS client
         sqs = boto3.client('sqs', region_name='us-east-1')
 
-        # Try to list queues (doesn't create anything)
+        # Test basic auth by listing queues
         response = sqs.list_queues()
-
-        print("✅ Successfully authenticated with AWS")
+        print("✅ AWS credentials configured and working")
 
         if 'QueueUrls' in response and response['QueueUrls']:
-            print(f"✅ Found {len(response['QueueUrls'])} existing queue(s):")
-            for queue_url in response['QueueUrls']:
-                queue_name = queue_url.split('/')[-1]
-                print(f"   - {queue_name}")
-        else:
-            print("ℹ️  No existing queues found")
-            print("   You'll need to create 'taskui-print-queue'")
+            print(f"✅ Found {len(response['QueueUrls'])} queue(s) in your account")
+
+    except NoCredentialsError:
+        print("❌ AWS credentials not configured")
+        print("\n   Fix by running:")
+        print("   aws configure")
+        print("   OR")
+        print("   Create ~/.aws/credentials with your access key")
+        return False
+    except Exception as e:
+        print(f"❌ Error connecting to AWS: {e}")
+        return False
+
+    # Test specific queue
+    print(f"\nTesting specific queue access...")
+    try:
+        response = sqs.get_queue_attributes(
+            QueueUrl=queue_url,
+            AttributeNames=['ApproximateNumberOfMessages', 'QueueArn']
+        )
+
+        print("✅ Successfully connected to your queue!")
+        print(f"✅ Messages in queue: {response['Attributes']['ApproximateNumberOfMessages']}")
+        print(f"✅ Queue ARN: {response['Attributes']['QueueArn']}")
+
+        print("\n" + "=" * 60)
+        print("✅ ALL TESTS PASSED")
+        print("=" * 60)
+        print("\nYour work machine can successfully:")
+        print("  - Reach AWS SQS")
+        print("  - Authenticate with your credentials")
+        print("  - Access your print queue")
+        print("\nYou're ready to send print jobs through the cloud!")
 
         return True
 
-    except NoCredentialsError:
-        print("ℹ️  No AWS credentials configured yet")
-        print("   This is expected if you haven't set up AWS")
-        return None
     except ClientError as e:
-        print(f"⚠️  AWS API error: {e}")
+        error_code = e.response['Error']['Code']
+        error_msg = e.response['Error']['Message']
+
+        print(f"❌ Error: {error_code}")
+        print(f"   {error_msg}")
+
+        if error_code == 'AWS.SimpleQueueService.NonExistentQueue':
+            print("\n⚠️  Queue does not exist or URL is wrong")
+            print("\n   To find your queue URL:")
+            print("   1. Go to: https://console.aws.amazon.com/sqs/")
+            print("   2. Click on 'taskui-print-queue'")
+            print("   3. Copy the URL shown")
+            print("\n   Or run: aws sqs list-queues --region us-east-1")
+
+        elif error_code == 'AccessDenied':
+            print("\n⚠️  Access denied - check your credentials")
+            print("   Your credentials may be wrong or lack permissions")
+            print("\n   Fix by running: aws configure")
+
+        elif error_code == 'InvalidAddress':
+            print("\n⚠️  Invalid queue URL format")
+            print("   Make sure you're using the full queue URL")
+            print("   Format: https://sqs.REGION.amazonaws.com/ACCOUNT_ID/QUEUE_NAME")
+
         return False
+
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
         return False
 
 
 if __name__ == "__main__":
-    print(f"AWS Connectivity Test - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-
-    # Test basic connectivity
-    basic_ok = test_aws_connectivity()
-
-    if basic_ok:
-        # Test with credentials if available
-        creds_ok = test_aws_with_credentials()
-
-        if creds_ok is None:
-            print("\n" + "=" * 50)
-            print("READY FOR SETUP")
-            print("Connectivity is good, now set up AWS credentials")
-        elif creds_ok:
-            print("\n" + "=" * 50)
-            print("✅ FULLY CONFIGURED")
-            print("Ready to implement cloud print relay!")
-        else:
-            print("\n" + "=" * 50)
-            print("⚠️  CREDENTIALS ISSUE")
-            print("Check your AWS credentials configuration")
-    else:
-        print("\n" + "=" * 50)
-        print("❌ CONNECTIVITY BLOCKED")
-        print("Need to try alternative cloud service")
-
-    sys.exit(0 if basic_ok else 1)
+    success = test_queue_connectivity()
+    sys.exit(0 if success else 1)
