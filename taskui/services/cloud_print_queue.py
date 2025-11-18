@@ -115,25 +115,23 @@ class CloudPrintQueue:
         try:
             import boto3
             from botocore.exceptions import NoCredentialsError
-            import os
+
+            # Disable SSL warnings for corporate proxies
+            try:
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            except:
+                pass
 
             # Build client kwargs
-            client_kwargs = {'region_name': self.config.region}
+            client_kwargs = {
+                'region_name': self.config.region,
+                'verify': False  # Disable SSL verification for corporate proxies
+            }
 
             if self.config.aws_access_key_id and self.config.aws_secret_access_key:
                 client_kwargs['aws_access_key_id'] = self.config.aws_access_key_id
                 client_kwargs['aws_secret_access_key'] = self.config.aws_secret_access_key
-
-            # Check if SSL verification should be disabled (corporate environments)
-            verify_ssl = os.getenv('AWS_VERIFY_SSL', 'true').lower() != 'false'
-            if not verify_ssl:
-                logger.warning("SSL verification disabled for AWS SQS (corporate proxy)")
-                client_kwargs['verify'] = False
-                try:
-                    import urllib3
-                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                except:
-                    pass
 
             # Create SQS client
             self.sqs_client = boto3.client('sqs', **client_kwargs)

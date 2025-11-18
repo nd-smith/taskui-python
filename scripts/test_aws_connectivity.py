@@ -34,18 +34,15 @@ def test_queue_connectivity():
     # Test AWS credentials
     print("\nTesting AWS credentials...")
 
-    # Check if SSL verification should be disabled (corporate environments)
-    verify_ssl = os.getenv('AWS_VERIFY_SSL', 'true').lower() != 'false'
-    if not verify_ssl:
-        print("⚠️  SSL verification disabled (corporate proxy detected)")
-        try:
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        except:
-            pass
+    # Disable SSL warnings for corporate proxies
+    try:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    except:
+        pass
 
     try:
-        sqs = boto3.client('sqs', region_name='us-east-1', verify=verify_ssl)
+        sqs = boto3.client('sqs', region_name='us-east-1', verify=False)
 
         # Test basic auth by listing queues
         response = sqs.list_queues()
