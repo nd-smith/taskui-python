@@ -11,6 +11,7 @@ Pillow>=10.0.0
 
 # Cloud printing (optional - for VPN/restricted environments)
 # boto3>=1.28.0
+# cryptography>=41.0.0  # For end-to-end encryption of cloud print messages
 
 # Development dependencies (optional)
 pytest>=7.4.0

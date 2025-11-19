@@ -231,6 +231,171 @@ From your work machine (on VPN):
 # The system will automatically route through cloud queue if direct fails
 ```
 
+## Step 6: Enable End-to-End Encryption (HIGHLY RECOMMENDED)
+
+End-to-end encryption protects your print job data before it leaves your machine and ensures only your Raspberry Pi can decrypt it. This is **critical** if:
+- SSL verification is disabled (corporate proxies)
+- You don't trust AWS to see your task data
+- Your tasks contain sensitive information
+
+### 6.1 Why Encryption is Important
+
+Without encryption:
+- AWS can read your print job messages (task titles, notes, children)
+- Man-in-the-middle attacks are possible if SSL is disabled
+- Messages are stored in plaintext in SQS
+
+With encryption:
+- Only your machine and Raspberry Pi can read messages
+- AWS sees only encrypted data
+- Protection against network attacks
+
+### 6.2 Generate Encryption Key
+
+On your **work machine**, generate a new encryption key:
+
+```bash
+python scripts/generate_encryption_key.py
+```
+
+This will output a base64-encoded encryption key like:
+```
+MjU2LWJpdCBBRVMta2V5IGhlcmU...
+```
+
+**IMPORTANT:**
+- Keep this key secret (like a password)
+- Never commit it to git
+- Store a backup in a secure password manager
+- You'll need to enter it on both machines
+
+### 6.3 Configure Work Machine Encryption
+
+Edit `~/.taskui/config.ini` and add the encryption key:
+
+```ini
+[cloud_print]
+queue_url = https://sqs.us-east-1.amazonaws.com/123456789012/taskui-print-queue
+region = us-east-1
+mode = auto
+encryption_key = YOUR_GENERATED_KEY_HERE
+```
+
+Or use an environment variable (more secure):
+```bash
+export TASKUI_ENCRYPTION_KEY="YOUR_GENERATED_KEY_HERE"
+```
+
+### 6.4 Configure Raspberry Pi Encryption
+
+**The Pi must use the SAME encryption key.**
+
+**Option A: Environment variable** (recommended)
+
+Edit the systemd service file:
+```bash
+sudo nano /etc/systemd/system/taskui-printer.service
+```
+
+Add the environment variable in the `[Service]` section:
+```ini
+[Service]
+Type=simple
+User=pi
+Environment="TASKUI_ENCRYPTION_KEY=YOUR_GENERATED_KEY_HERE"
+ExecStart=/usr/bin/python3 /home/pi/pi_print_worker.py \
+    --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
+    --printer-host 192.168.50.99 \
+    --printer-port 9100
+Restart=always
+RestartSec=10
+```
+
+Reload the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart taskui-printer
+```
+
+**Option B: Command line argument**
+
+Update the `ExecStart` line in your systemd service:
+```ini
+ExecStart=/usr/bin/python3 /home/pi/pi_print_worker.py \
+    --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
+    --printer-host 192.168.50.99 \
+    --encryption-key YOUR_GENERATED_KEY_HERE
+```
+
+### 6.5 Install Encryption Dependencies
+
+On **both machines** (work machine and Raspberry Pi):
+
+```bash
+pip install cryptography
+```
+
+### 6.6 Verify Encryption is Working
+
+**On work machine:** Send a test print job. Check the logs for:
+```
+INFO - End-to-end encryption enabled for cloud print messages
+INFO - Print job queued (encrypted): Your Task Title
+```
+
+**On Raspberry Pi:** Check the worker logs:
+```bash
+sudo journalctl -u taskui-printer -f
+```
+
+Look for:
+```
+INFO - End-to-end encryption enabled for received messages
+INFO - Processing job ...: Your Task Title
+```
+
+**If encryption is NOT working**, you'll see warnings:
+```
+WARNING - End-to-end encryption NOT enabled - messages will be sent in plaintext
+```
+
+### 6.7 Troubleshooting Encryption
+
+**Key mismatch error:**
+```
+ERROR - Decryption failed: ...
+```
+- Ensure the SAME key is on both machines
+- Check for extra spaces or newlines in the key
+- Regenerate key and update both sides
+
+**Missing cryptography package:**
+```
+ModuleNotFoundError: No module named 'cryptography'
+```
+```bash
+pip install cryptography
+```
+
+**Encrypted vs plaintext mismatch:**
+- If work machine has encryption enabled but Pi doesn't: Messages will be lost
+- If Pi has encryption enabled but work machine doesn't: Messages will be lost
+- **Solution:** Both sides must have matching configuration
+
+### 6.8 Key Rotation (Advanced)
+
+For maximum security, rotate your encryption key periodically:
+
+1. Generate a new key: `python scripts/generate_encryption_key.py`
+2. Update both machines with the new key
+3. Restart the Raspberry Pi worker: `sudo systemctl restart taskui-printer`
+4. Delete the old key from all locations
+
+**Note:** Messages encrypted with the old key cannot be decrypted with the new key. Purge the queue when rotating keys:
+```bash
+aws sqs purge-queue --queue-url "YOUR_QUEUE_URL"
+```
+
 ## Troubleshooting
 
 ### Work Machine Issues
@@ -305,12 +470,14 @@ aws sqs purge-queue \
 
 ## Security Best Practices
 
-1. **Use IAM user** with minimal permissions (SQS only)
-2. **Never commit credentials** to git repositories
-3. **Use AWS credentials file** or IAM roles instead of config file
-4. **Rotate credentials** periodically
-5. **Enable CloudTrail** to audit queue access (optional)
-6. **Set queue retention** to minimum needed (4 days default)
+1. **Enable end-to-end encryption** (Step 6) - CRITICAL for protecting your data
+2. **Use IAM user** with minimal permissions (SQS only)
+3. **Never commit credentials or encryption keys** to git repositories
+4. **Use AWS credentials file** or IAM roles instead of config file
+5. **Rotate credentials and encryption keys** periodically
+6. **Enable CloudTrail** to audit queue access (optional)
+7. **Set queue retention** to minimum needed (4 days default)
+8. **Store encryption key** in a password manager for backup
 
 ## Alternative Cloud Services
 

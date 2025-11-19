@@ -15,6 +15,7 @@ import logging
 
 from taskui.models import Task
 from taskui.logging_config import get_logger
+from taskui.services.encryption import MessageEncryption
 
 logger = get_logger(__name__)
 
@@ -35,7 +36,8 @@ class CloudPrintConfig:
         region: str = "us-east-1",
         mode: CloudPrintMode = CloudPrintMode.AUTO,
         aws_access_key_id: Optional[str] = None,
-        aws_secret_access_key: Optional[str] = None
+        aws_secret_access_key: Optional[str] = None,
+        encryption_key: Optional[str] = None
     ):
         """
         Initialize cloud print configuration.
@@ -46,12 +48,14 @@ class CloudPrintConfig:
             mode: Print delivery mode (direct/cloud/auto)
             aws_access_key_id: AWS access key (or use env/credentials file)
             aws_secret_access_key: AWS secret key (or use env/credentials file)
+            encryption_key: Base64-encoded encryption key for end-to-end encryption
         """
         self.queue_url = queue_url
         self.region = region
         self.mode = mode
         self.aws_access_key_id = aws_access_key_id
         self.aws_secret_access_key = aws_secret_access_key
+        self.encryption_key = encryption_key
 
     @classmethod
     def from_config_file(cls, config_path=None) -> "CloudPrintConfig":
@@ -81,7 +85,8 @@ class CloudPrintConfig:
             region=cloud_config.get('region', 'us-east-1'),
             mode=mode,
             aws_access_key_id=cloud_config.get('aws_access_key_id'),
-            aws_secret_access_key=cloud_config.get('aws_secret_access_key')
+            aws_secret_access_key=cloud_config.get('aws_secret_access_key'),
+            encryption_key=cloud_config.get('encryption_key')
         )
 
 
@@ -102,6 +107,13 @@ class CloudPrintQueue:
         self.config = config
         self.sqs_client = None
         self._connected = False
+
+        # Initialize encryption
+        self.encryption = MessageEncryption(config.encryption_key)
+        if self.encryption.enabled:
+            logger.info("End-to-end encryption enabled for cloud print messages")
+        else:
+            logger.warning("End-to-end encryption NOT enabled - messages will be sent in plaintext")
 
         logger.info(f"CloudPrintQueue initialized, mode={config.mode.value}")
 
@@ -175,10 +187,13 @@ class CloudPrintQueue:
             # Serialize task data
             job_data = self._serialize_print_job(task, children)
 
+            # Encrypt the message (if encryption is enabled)
+            encrypted_message = self.encryption.encrypt_message(job_data)
+
             # Send to SQS
             response = self.sqs_client.send_message(
                 QueueUrl=self.config.queue_url,
-                MessageBody=json.dumps(job_data),
+                MessageBody=encrypted_message,
                 MessageAttributes={
                     'TaskId': {
                         'StringValue': str(task.id),
@@ -191,7 +206,8 @@ class CloudPrintQueue:
                 }
             )
 
-            logger.info(f"Print job queued: {task.title} (MessageId: {response['MessageId']})")
+            encryption_status = "encrypted" if self.encryption.enabled else "plaintext"
+            logger.info(f"Print job queued ({encryption_status}): {task.title} (MessageId: {response['MessageId']})")
             return True
 
         except Exception as e:
