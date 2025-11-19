@@ -6,9 +6,15 @@ including per-column settings and TOML file loading support.
 
 from pathlib import Path
 from typing import List
-import tomllib
+import sys
 import logging
 import re
+
+# Use tomllib from stdlib in Python 3.11+, fallback to tomli for earlier versions
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from pydantic import BaseModel, Field, field_validator
 

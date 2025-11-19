@@ -1212,26 +1212,44 @@ class TaskService:
 
     async def _get_child_counts(self, parent_id: UUID) -> tuple[int, int]:
         """
-        Get the total and completed child counts for a task.
+        Get the total and completed child counts for a task, including all descendants.
+
+        This method recursively counts all children, grandchildren, and deeper descendants
+        to provide an accurate count of the entire task subtree.
 
         Args:
             parent_id: UUID of the parent task
 
         Returns:
-            Tuple of (total_children, completed_children)
+            Tuple of (total_descendants, completed_descendants)
         """
         try:
-            # Get all direct children (not archived)
-            query = select(TaskORM).where(
-                TaskORM.parent_id == str(parent_id),
-                TaskORM.is_archived == False,
-            )
+            total_count = 0
+            completed_count = 0
 
-            result = await self.session.execute(query)
-            children = result.scalars().all()
+            # Recursive helper to count descendants at all levels
+            async def count_descendants(current_parent_id: UUID) -> None:
+                nonlocal total_count, completed_count
 
-            total_count = len(children)
-            completed_count = sum(1 for child in children if child.is_completed)
+                # Get all direct children (not archived)
+                query = select(TaskORM).where(
+                    TaskORM.parent_id == str(current_parent_id),
+                    TaskORM.is_archived == False,
+                )
+
+                result = await self.session.execute(query)
+                children = result.scalars().all()
+
+                # Count these children
+                for child in children:
+                    total_count += 1
+                    if child.is_completed:
+                        completed_count += 1
+
+                    # Recursively count this child's descendants
+                    await count_descendants(UUID(child.id))
+
+            await count_descendants(parent_id)
 
             logger.debug(
                 f"Progress calculation updated: task_id={parent_id}, "
