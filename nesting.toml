@@ -1,0 +1,101 @@
+# TaskUI Nesting Configuration
+# Copy this to ~/.taskui/nesting.toml and customize
+#
+# This file configures the hierarchical nesting behavior for TaskUI's two-column layout.
+# TOML format is preferred for configuration due to better type safety and validation.
+
+[nesting]
+# Enable/disable nesting features globally
+# When disabled, TaskUI reverts to flat list behavior
+enabled = true
+
+# Number of columns (currently fixed at 2, reserved for future use)
+# Column 1 = Tasks (left), Column 2 = Subtasks (right)
+num_columns = 2
+
+[nesting.column1]
+# Maximum nesting depth for Column 1 (Tasks)
+# Level 0 = top-level, so max_depth=1 allows levels 0-1 (2 levels total)
+# Default: 1 (matches current behavior)
+#
+# Examples:
+#   max_depth = 0: Only top-level tasks (flat list)
+#   max_depth = 1: Tasks can have child tasks (2 levels)
+#   max_depth = 2: Tasks -> Child Tasks -> Grandchild Tasks (3 levels)
+max_depth = 1
+
+# Display name for this column
+# Used in UI headers and error messages
+display_name = "Tasks"
+
+# Level-specific colors (hex format)
+# Number of colors should be >= max_depth + 1
+# These colors are used to visually distinguish hierarchy levels
+level_colors = [
+    "#66D9EF",  # Level 0 - Cyan (top-level tasks)
+    "#A6E22E",  # Level 1 - Green (child tasks)
+]
+
+[nesting.column2]
+# Maximum nesting depth for Column 2 (Subtasks)
+# Default: 2 (matches current behavior, allows 3 levels)
+#
+# Column 2 typically shows children of the selected task from Column 1,
+# so effective depth is relative to the selected task
+max_depth = 10
+
+# Display name for this column
+display_name = "Subtasks"
+
+# Level-specific colors (hex format)
+# Three colors for three possible levels in Column 2
+level_colors = [
+    "#66D9EF",  # Level 0 - Cyan (immediate children)
+    "#A6E22E",  # Level 1 - Green (grandchildren)
+    "#F92672",  # Level 2 - Pink (great-grandchildren)
+]
+
+# Context-relative display: show children of selected task at level 0
+# When true, Column 2 resets numbering relative to the selected task
+# Example: If you select a Level 1 task, its children display as Level 0 in Column 2
+# Default: true (matches current behavior)
+context_relative = true
+
+[nesting.validation]
+# Strict validation: prevent creating tasks that exceed max depth
+# When true, TaskUI will reject attempts to create tasks beyond max_depth
+# When false, tasks beyond max_depth are allowed but may not display correctly
+# Default: true (prevents data that violates configured limits)
+strict_validation = true
+
+# Show warnings when approaching max depth
+# When true, TaskUI displays a warning when creating tasks at max_depth
+# Helps users understand they've reached the nesting limit
+# Default: true
+warn_at_max_depth = true
+
+[nesting.ui]
+# Show level indicators in task items
+# When true, displays visual indicators (colors, indentation) for hierarchy
+# When false, uses minimal visual distinction
+# Default: true
+show_level_indicators = true
+
+# Indentation spaces per level
+# Number of spaces to indent each nesting level in the UI
+# Higher values make hierarchy more obvious but reduce available space
+# Default: 2 (balance between clarity and space)
+indent_per_level = 2
+
+# Tree line characters for hierarchy
+# Enable tree-style lines connecting parent and child tasks
+# Default: true
+tree_line_enabled = true
+
+# Character sequence for the last child in a group
+# Default: "└─" (Unicode box drawing)
+tree_line_last_child = "└─"
+
+# Character sequence for middle children in a group
+# Default: "├─" (Unicode box drawing)
+tree_line_middle_child = "├─"

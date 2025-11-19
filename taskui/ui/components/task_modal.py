@@ -177,6 +177,7 @@ class TaskCreationModal(ModalScreen):
         parent_task: Optional[Task] = None,
         column: Column = Column.COLUMN1,
         edit_task: Optional[Task] = None,
+        nesting_rules: Optional['NestingRules'] = None,
         **kwargs
     ) -> None:
         """Initialize the task creation modal.
@@ -193,16 +194,17 @@ class TaskCreationModal(ModalScreen):
             This prevents users from attempting an operation that would violate nesting rules.
 
         Nesting Limit Checks:
-            - Uses NestingRules.can_create_child() to check if a child can be created
-            - Calls NestingRules.get_max_depth() to retrieve the column-specific max depth
+            - Uses NestingRules instance methods to check if a child can be created
+            - Retrieves the column-specific max depth from config
             - Stores error message if constraints are violated (e.g., "Cannot create child:
-              Parent at level 2 has reached max nesting depth (3) for COLUMN1")
+              Parent at level 2 has reached max nesting depth (10) for COLUMN2")
 
         Args:
             mode: Creation mode - "create_sibling", "create_child", or "edit"
             parent_task: Parent task for child creation or sibling reference
             column: Column context (COLUMN1 or COLUMN2) used for nesting limit validation
             edit_task: Task to edit (for edit mode)
+            nesting_rules: NestingRules instance for validation (uses config if provided)
             **kwargs: Additional keyword arguments for ModalScreen
 
         Attributes:
@@ -214,12 +216,20 @@ class TaskCreationModal(ModalScreen):
         self.parent_task = parent_task
         self.column = column
         self.edit_task = edit_task
+        self._nesting_rules = nesting_rules
         self.validation_error: Optional[str] = None
 
         # Validate nesting constraints for child creation
         if mode == "create_child" and parent_task is not None:
-            if not NestingRules.can_create_child(parent_task, column):
+            # Use instance methods if available, otherwise fall back to deprecated class methods
+            if self._nesting_rules:
+                can_create = self._nesting_rules.can_create_child_instance(parent_task, column)
+                max_depth = self._nesting_rules.get_max_depth_instance(column)
+            else:
+                can_create = NestingRules.can_create_child(parent_task, column)
                 max_depth = NestingRules.get_max_depth(column)
+
+            if not can_create:
                 self.validation_error = (
                     f"Cannot create child: Parent at level {parent_task.level} "
                     f"has reached max nesting depth ({max_depth}) for {column.value}"

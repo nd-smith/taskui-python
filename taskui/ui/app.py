@@ -566,7 +566,8 @@ class TaskUI(App):
         modal = TaskCreationModal(
             mode="create_sibling",
             parent_task=selected_task,
-            column=nesting_column
+            column=nesting_column,
+            nesting_rules=self._nesting_rules
         )
         self.push_screen(modal)
 
@@ -578,27 +579,27 @@ class TaskUI(App):
 
         Hierarchical creation:
         - Column 1 focused: Creates child of Column 1 selection
-        - Column 2 focused: Creates child of Column 1 selection (appears in Column 2)
+        - Column 2 focused: Creates child of Column 2 selection (or Column 1 if Column 2 is empty)
 
         Note: Column 3 is not focusable (display-only), so no handling needed.
         """
-        # Determine which column to get the parent task from
-        # When Column 2 is focused, use Column 1's selection as the parent
-        if self._focused_column_id == COLUMN_2_ID:
-            # Column 2 is filtered by Column 1's selection - use that as parent
-            try:
-                parent_column = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            except Exception as e:
-                logger.error(f"Could not get Column 1: {e}")
-                return
-        else:
-            # Column 1 focused - use its own selection
-            parent_column = self._get_focused_column()
+        # Use the currently focused column's selected task as the parent
+        parent_column = self._get_focused_column()
 
         if not parent_column:
             return
 
         selected_task = parent_column.get_selected_task()
+
+        # Fallback: If Column 2 is focused but empty, use Column 1's selection
+        if not selected_task and self._focused_column_id == COLUMN_2_ID:
+            try:
+                column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+                selected_task = column1.get_selected_task()
+            except Exception as e:
+                logger.error(f"Could not get Column 1 selection: {e}")
+                return
+
         if not selected_task:
             # Can't create a child without a parent selected
             return
@@ -610,7 +611,8 @@ class TaskUI(App):
         modal = TaskCreationModal(
             mode="create_child",
             parent_task=selected_task,
-            column=nesting_column
+            column=nesting_column,
+            nesting_rules=self._nesting_rules
         )
         self.push_screen(modal)
 
@@ -638,7 +640,8 @@ class TaskUI(App):
             mode="edit",
             parent_task=None,  # Not needed for edit mode
             column=nesting_column,
-            edit_task=selected_task
+            edit_task=selected_task,
+            nesting_rules=self._nesting_rules
         )
         self.push_screen(modal)
 
@@ -1492,8 +1495,11 @@ class TaskUI(App):
         # Get children of the selected task
         children = await self._get_task_children(selected_task.id)
 
-        # Adjust levels to be context-relative (children start at level 0)
-        adjusted_children = self._make_levels_context_relative(children, selected_task.level)
+        # Adjust levels to be context-relative if configured (children start at level 0)
+        if self._nesting_rules._config.column2.context_relative:
+            adjusted_children = self._make_levels_context_relative(children, selected_task.level)
+        else:
+            adjusted_children = children
 
         # Update Column 2 header
         header_title = f"{selected_task.title} Subtasks"

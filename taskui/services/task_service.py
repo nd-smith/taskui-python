@@ -69,10 +69,11 @@ class TaskService:
     # CONVERSION HELPERS
     # ==============================================================================
 
-    @staticmethod
-    def _orm_to_pydantic(task_orm: TaskORM) -> Task:
+    def _orm_to_pydantic(self, task_orm: TaskORM) -> Task:
         """
         Convert TaskORM to Pydantic Task model.
+
+        Uses dynamic max_level from nesting rules config for validation.
 
         Args:
             task_orm: SQLAlchemy ORM task instance
@@ -80,19 +81,33 @@ class TaskService:
         Returns:
             Pydantic Task instance
         """
-        return Task(
-            id=UUID(task_orm.id),
-            title=task_orm.title,
-            notes=task_orm.notes,
-            is_completed=task_orm.is_completed,
-            is_archived=task_orm.is_archived,
-            parent_id=UUID(task_orm.parent_id) if task_orm.parent_id else None,
-            level=task_orm.level,
-            position=task_orm.position,
-            list_id=UUID(task_orm.list_id),
-            created_at=task_orm.created_at,
-            completed_at=task_orm.completed_at,
-            archived_at=task_orm.archived_at,
+        # Get max level from config for validation context
+        # Use the maximum of column1 and column2 to allow loading any task
+        if self._nesting_rules:
+            max_level = max(
+                self._nesting_rules.get_max_depth_instance(Column.COLUMN1),
+                self._nesting_rules.get_max_depth_instance(Column.COLUMN2)
+            )
+        else:
+            max_level = 2  # Backward compatibility default
+
+        # Use model_validate with context to pass max_level to validator
+        return Task.model_validate(
+            {
+                "id": UUID(task_orm.id),
+                "title": task_orm.title,
+                "notes": task_orm.notes,
+                "is_completed": task_orm.is_completed,
+                "is_archived": task_orm.is_archived,
+                "parent_id": UUID(task_orm.parent_id) if task_orm.parent_id else None,
+                "level": task_orm.level,
+                "position": task_orm.position,
+                "list_id": UUID(task_orm.list_id),
+                "created_at": task_orm.created_at,
+                "completed_at": task_orm.completed_at,
+                "archived_at": task_orm.archived_at,
+            },
+            context={"max_level": max_level}
         )
 
     @staticmethod
