@@ -1,6 +1,6 @@
 # Printer Troubleshooting Guide
 
-**Hardware:** Epson TM-T20III @ 192.168.50.99
+**Hardware:** Epson TM-T20III @ 192.168.1.100
 **Last Updated:** 2025-11-16
 
 ---
@@ -9,7 +9,7 @@
 
 **Symptom:**
 ```
-✗ Print failed: Device not found (Could not open socket for 192.168.50.99:
+✗ Print failed: Device not found (Could not open socket for 192.168.1.100:
 [Errno 111] Connection refused)
 ```
 
@@ -35,7 +35,7 @@ The printer is accessible via CUPS (Internet Printing Protocol) on port 631, but
 - Simpler architecture
 
 **Steps:**
-1. SSH into Raspberry Pi: `ssh pi@192.168.50.99`
+1. SSH into Raspberry Pi: `ssh pi@192.168.1.100`
 2. Install `cups-backend-bjnp` or configure raw printing
 3. Set up port 9100 forwarding to printer
 4. Restart CUPS: `sudo systemctl restart cups`
@@ -65,14 +65,14 @@ socat TCP-LISTEN:9100,fork,reuseaddr TCP:localhost:631
 from escpos.printer import CupsPrinter
 
 # Instead of:
-# printer = Network("192.168.50.99", port=9100)
+# printer = Network("192.168.1.100", port=9100)
 
 # Use:
 printer = CupsPrinter("TM-T20III")  # or actual CUPS printer name
 ```
 
 **Steps to find printer name:**
-1. Access CUPS web interface: http://192.168.50.99:631
+1. Access CUPS web interface: http://192.168.1.100:631
 2. Go to Printers tab
 3. Note the printer name (e.g., "TM-T20III", "EPSON_TM_T20III", etc.)
 4. Use that name in CupsPrinter()
@@ -84,7 +84,7 @@ printer = CupsPrinter("TM-T20III")  # or actual CUPS printer name
 from escpos.printer import File
 
 # Print via IPP URL
-printer_url = "ipp://192.168.50.99:631/printers/TM-T20III"
+printer_url = "ipp://192.168.1.100:631/printers/TM-T20III"
 # Configure python-escpos to use IPP
 ```
 
@@ -100,10 +100,10 @@ Access CUPS web interface to discover printer name:
 
 ```bash
 # Option 1: Web browser
-open http://192.168.50.99:631
+open http://192.168.1.100:631
 
 # Option 2: Command line (if you have SSH access)
-ssh pi@192.168.50.99 'lpstat -p'
+ssh pi@192.168.1.100 'lpstat -p'
 ```
 
 ---
@@ -119,18 +119,18 @@ ssh pi@192.168.50.99 'lpstat -p'
 
 1. **Check network connectivity:**
 ```bash
-ping 192.168.50.99
+ping 192.168.1.100
 ```
 
 2. **Check port availability:**
 ```bash
-nc -zv 192.168.50.99 631
-nc -zv 192.168.50.99 9100
+nc -zv 192.168.1.100 631
+nc -zv 192.168.1.100 9100
 ```
 
 3. **Check from Raspberry Pi side (SSH in):**
 ```bash
-ssh pi@192.168.50.99
+ssh pi@192.168.1.100
 sudo systemctl status cups
 lpstat -p
 ```
@@ -162,8 +162,8 @@ Use this checklist when troubleshooting printer issues:
 
 - [ ] Raspberry Pi is powered on and accessible
 - [ ] Printer is powered on
-- [ ] Network connectivity verified (`ping 192.168.50.99`)
-- [ ] Port 631 (CUPS) is accessible (`nc -zv 192.168.50.99 631`)
+- [ ] Network connectivity verified (`ping 192.168.1.100`)
+- [ ] Port 631 (CUPS) is accessible (`nc -zv 192.168.1.100 631`)
 - [ ] python-escpos is installed
 - [ ] CUPS printer name is known
 - [ ] Thermal paper is loaded
@@ -176,7 +176,7 @@ Use this checklist when troubleshooting printer issues:
 **Current Status:** Port 9100 raw printing is not available.
 
 **Recommendation:** Proceed with Option B (CUPS printing) for now:
-1. Access http://192.168.50.99:631 to find printer name
+1. Access http://192.168.1.100:631 to find printer name
 2. Update test script to use `CupsPrinter` instead of `Network`
 3. Test printing via CUPS
 4. Consider enabling port 9100 in future if direct ESC/POS needed
@@ -191,15 +191,15 @@ Use this checklist when troubleshooting printer issues:
 
 ```bash
 # Network diagnostics
-ping 192.168.50.99
-nc -zv 192.168.50.99 631
-nc -zv 192.168.50.99 9100
+ping 192.168.1.100
+nc -zv 192.168.1.100 631
+nc -zv 192.168.1.100 9100
 
 # CUPS web interface
-open http://192.168.50.99:631
+open http://192.168.1.100:631
 
 # SSH to Raspberry Pi
-ssh pi@192.168.50.99
+ssh pi@192.168.1.100
 
 # Check CUPS status
 systemctl status cups
@@ -267,7 +267,7 @@ TaskUI → TCP Socket (port 9100) → Raspberry Pi → socat → /dev/usb/lp0 �
 **Python Implementation:**
 ```python
 from escpos.printer import Network
-printer = Network("192.168.50.99", port=9100, timeout=60)
+printer = Network("192.168.1.100", port=9100, timeout=60)
 printer.text("Hello World\n")
 printer.cut()
 ```
@@ -282,7 +282,7 @@ printer.cut()
 
 **Working Configuration:**
 - **Library:** python-escpos (Network class)
-- **Connection:** Direct TCP socket to 192.168.50.99:9100
+- **Connection:** Direct TCP socket to 192.168.1.100:9100
 - **Transport:** socat forwarding (GOPEN:/dev/usb/lp0,noctty)
 - **Cut behavior:** Partial cut (perforated edge, intentional for kanban cards)
 
@@ -367,7 +367,7 @@ taskui 2>&1 | grep -i printer
 
 **Check service status:**
 ```bash
-ssh pi@192.168.50.99
+ssh pi@192.168.1.100
 sudo systemctl status printer-raw.service
 ```
 

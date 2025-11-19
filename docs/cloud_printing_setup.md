@@ -145,7 +145,7 @@ aws configure
 ```bash
 python3 /home/pi/pi_print_worker.py \
   --queue-url "https://sqs.us-east-1.amazonaws.com/123456789012/taskui-print-queue" \
-  --printer-host 192.168.50.99 \
+  --printer-host 192.168.1.100 \
   --printer-port 9100
 ```
 
@@ -153,7 +153,7 @@ You should see:
 ```
 INFO - Print worker initialized for queue: ...
 INFO - Connected to SQS queue: ...
-INFO - Connected to printer: 192.168.50.99:9100
+INFO - Connected to printer: 192.168.1.100:9100
 INFO - Starting print worker polling loop
 ```
 
@@ -170,7 +170,7 @@ Update the `ExecStart` line with your actual queue URL:
 ```ini
 ExecStart=/usr/bin/python3 /home/pi/pi_print_worker.py \
     --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
-    --printer-host 192.168.50.99 \
+    --printer-host 192.168.1.100 \
     --printer-port 9100 \
     --region us-east-1
 ```
@@ -207,7 +207,7 @@ export TASKUI_CLOUD_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/123456789012/
 Edit `~/.taskui/config.ini`:
 ```ini
 [printer]
-host = 192.168.50.99
+host = 192.168.1.100
 port = 9100
 timeout = 60
 detail_level = minimal
@@ -305,7 +305,7 @@ User=pi
 Environment="TASKUI_ENCRYPTION_KEY=YOUR_GENERATED_KEY_HERE"
 ExecStart=/usr/bin/python3 /home/pi/pi_print_worker.py \
     --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
-    --printer-host 192.168.50.99 \
+    --printer-host 192.168.1.100 \
     --printer-port 9100
 Restart=always
 RestartSec=10
@@ -323,7 +323,7 @@ Update the `ExecStart` line in your systemd service:
 ```ini
 ExecStart=/usr/bin/python3 /home/pi/pi_print_worker.py \
     --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
-    --printer-host 192.168.50.99 \
+    --printer-host 192.168.1.100 \
     --encryption-key YOUR_GENERATED_KEY_HERE
 ```
 
@@ -419,7 +419,7 @@ pip install boto3
 **Printer not found:**
 ```bash
 # Test printer connection manually
-python3 -c "from escpos.printer import Network; p = Network('192.168.50.99', 9100); p.text('Test\n'); p.cut()"
+python3 -c "from escpos.printer import Network; p = Network('192.168.1.100', 9100); p.text('Test\n'); p.cut()"
 ```
 
 **Worker crashes:**

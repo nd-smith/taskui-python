@@ -59,7 +59,7 @@ class Config:
         """
         config = {
             'host': os.getenv('TASKUI_PRINTER_HOST') or
-                   self._config.get('printer', 'host', fallback='192.168.50.99'),
+                   self._config.get('printer', 'host', fallback='192.168.1.100'),
             'port': int(os.getenv('TASKUI_PRINTER_PORT') or
                        self._config.get('printer', 'port', fallback='9100')),
             'timeout': int(os.getenv('TASKUI_PRINTER_TIMEOUT') or

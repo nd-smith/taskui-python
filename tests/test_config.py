@@ -34,7 +34,7 @@ class TestConfig:
         config = Config(Path("/tmp/nonexistent_config.ini"))
         printer_config = config.get_printer_config()
 
-        assert printer_config['host'] == '192.168.50.99'
+        assert printer_config['host'] == '192.168.1.100'
         assert printer_config['port'] == 9100
         assert printer_config['timeout'] == 60
         assert printer_config['detail_level'] == 'minimal'
@@ -162,7 +162,7 @@ bool_key = true
             printer_config = config.get_printer_config()
 
             # Should get defaults
-            assert printer_config['host'] == '192.168.50.99'
+            assert printer_config['host'] == '192.168.1.100'
             assert printer_config['port'] == 9100
         finally:
             config_path.unlink()
@@ -178,7 +178,7 @@ class TestPrinterConfigIntegration:
         # Use non-existent path to trigger defaults
         config = PrinterConfig.from_config_file(Path("/tmp/nonexistent.ini"))
 
-        assert config.host == '192.168.50.99'
+        assert config.host == '192.168.1.100'
         assert config.port == 9100
         assert config.timeout == 60
         assert config.detail_level == DetailLevel.MINIMAL

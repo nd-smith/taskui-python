@@ -50,7 +50,7 @@ def validate_connection() -> PrinterService:
         print(f"✗ Connection failed: {e}")
         print("\nTroubleshooting:")
         print("  1. Check printer is powered on")
-        print("  2. Verify network connection (ping 192.168.50.99)")
+        print("  2. Verify network connection (ping 192.168.1.100)")
         print("  3. Ensure port 9100 is accessible")
         print("  4. Check ~/.taskui/config.ini settings")
         sys.exit(1)

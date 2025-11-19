@@ -14,7 +14,7 @@ import sys
 def test_connection():
     """Test basic connection to printer."""
     try:
-        printer = Network("192.168.50.99", port=9100, timeout=10)
+        printer = Network("192.168.1.100", port=9100, timeout=10)
         print("✓ Connected to printer")
         return True
     except Exception as e:
@@ -25,7 +25,7 @@ def test_connection():
 def test_print_hello():
     """Print simple hello world test."""
     try:
-        printer = Network("192.168.50.99", port=9100, timeout=10)
+        printer = Network("192.168.1.100", port=9100, timeout=10)
 
         # Test text printing
         printer.text("Hello World from TaskUI\n")
@@ -48,7 +48,7 @@ def test_print_hello():
 def test_formatted_text():
     """Test text formatting capabilities."""
     try:
-        printer = Network("192.168.50.99", port=9100, timeout=10)
+        printer = Network("192.168.1.100", port=9100, timeout=10)
 
         # Test formatting
         printer.set(align='center', bold=True, double_height=True)

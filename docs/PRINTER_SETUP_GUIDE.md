@@ -45,7 +45,7 @@ pip install -r requirements.txt
 Test that you can reach the printer:
 
 ```bash
-ping 192.168.50.99  # Replace with your printer's IP
+ping 192.168.1.100  # Replace with your printer's IP
 ```
 
 If the printer is connected via USB and you need to forward it to a network port (e.g., on a Raspberry Pi):
@@ -75,7 +75,7 @@ Edit `~/.taskui/config.ini`:
 ```ini
 [printer]
 # Your printer's IP address
-host = 192.168.50.99
+host = 192.168.1.100
 
 # Port (usually 9100 for raw printing)
 port = 9100

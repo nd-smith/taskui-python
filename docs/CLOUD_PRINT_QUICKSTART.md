@@ -38,7 +38,7 @@ export TASKUI_CLOUD_MODE="cloud"
 ### 5. Configure Raspberry Pi
 ```bash
 # Copy script to Pi
-scp scripts/pi_print_worker.py nick@192.168.50.99:/home/pi/
+scp scripts/pi_print_worker.py nick@192.168.1.100:/home/pi/
 
 # SSH to Pi
 ssh pi@your-pi-ip
@@ -53,7 +53,7 @@ aws configure
 # Test worker
 python3 /home/pi/pi_print_worker.py \
   --queue-url "your-queue-url" \
-  --printer-host 192.168.50.99
+  --printer-host 192.168.1.100
 ```
 
 ### 6. Set Up Auto-Start (Pi)
@@ -109,8 +109,8 @@ python scripts/test_aws_connectivity.py
 
 ```bash
 # Copy the worker script to your Pi (replace YOUR-PI-IP with actual IP)
-scp scripts/pi_print_worker.py nick@192.168.50.99/home/nick
-scp scripts/taskui-printer.service nick@192.168.50.99
+scp scripts/pi_print_worker.py nick@192.168.1.100/home/nick
+scp scripts/taskui-printer.service nick@192.168.1.100
 
 # SSH to your Pi
 ssh pi@YOUR-PI-IP
@@ -131,12 +131,12 @@ aws configure
 # Test the worker manually first
 python3 /home/pi/pi_print_worker.py \
   --queue-url "https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue" \
-  --printer-host 192.168.50.99 \
+  --printer-host 192.168.1.100 \
   --printer-port 9100
 
 # You should see:
 # INFO - Connected to SQS queue: ...
-# INFO - Connected to printer: 192.168.50.99:9100
+# INFO - Connected to printer: 192.168.1.100:9100
 # INFO - Starting print worker polling loop
 ```
 
@@ -148,7 +148,7 @@ nano /home/pi/taskui-printer.service
 # Update the ExecStart line to:
 # ExecStart=/usr/bin/python3 /home/pi/pi_print_worker.py \
 #     --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
-#     --printer-host 192.168.50.99 \
+#     --printer-host 192.168.1.100 \
 #     --printer-port 9100 \
 #     --region us-east-1
 

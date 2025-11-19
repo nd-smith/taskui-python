@@ -32,7 +32,7 @@ class PrinterConfig:
 
     def __init__(
         self,
-        host: str = "192.168.50.99",
+        host: str = "192.168.1.100",
         port: int = 9100,
         timeout: int = 60,
         detail_level: DetailLevel = DetailLevel.MINIMAL
@@ -288,7 +288,7 @@ if __name__ == "__main__":
 
     # Example configuration
     config = PrinterConfig(
-        host="192.168.50.99",
+        host="192.168.1.100",
         port=9100,
         detail_level=DetailLevel.MINIMAL
     )

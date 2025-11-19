@@ -64,7 +64,7 @@ class PrintWorkerConfig:
     def __init__(
         self,
         queue_url: str,
-        printer_host: str = "192.168.50.99",
+        printer_host: str = "192.168.1.100",
         printer_port: int = 9100,
         region: str = "us-east-1",
         poll_interval: int = 5,
@@ -353,8 +353,8 @@ def main():
     )
     parser.add_argument(
         '--printer-host',
-        default='192.168.50.99',
-        help='Thermal printer IP address (default: 192.168.50.99)'
+        default='192.168.1.100',
+        help='Thermal printer IP address (default: 192.168.1.100)'
     )
     parser.add_argument(
         '--printer-port',

@@ -97,7 +97,7 @@ class TestPrinterConfig:
     def test_default_config(self):
         """Test default printer configuration."""
         config = PrinterConfig()
-        assert config.host == "192.168.50.99"
+        assert config.host == "192.168.1.100"
         assert config.port == 9100
         assert config.timeout == 60
         assert config.detail_level == DetailLevel.MINIMAL
@@ -118,7 +118,7 @@ class TestPrinterConfig:
     def test_from_config_file_defaults(self):
         """Test loading from non-existent config file uses defaults."""
         config = PrinterConfig.from_config_file(Path("/tmp/nonexistent.ini"))
-        assert config.host == "192.168.50.99"
+        assert config.host == "192.168.1.100"
         assert config.port == 9100
         assert config.detail_level == DetailLevel.MINIMAL
 

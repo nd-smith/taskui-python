@@ -5,7 +5,7 @@ Task card with notes (no subtasks).
 
 from escpos.printer import Network
 
-PRINTER_IP = "192.168.50.99"
+PRINTER_IP = "192.168.1.100"
 PRINTER_PORT = 9100
 
 
