@@ -1214,8 +1214,9 @@ class TaskService:
         """
         Get the total and completed child counts for a task, including all descendants.
 
-        This method recursively counts all children, grandchildren, and deeper descendants
-        to provide an accurate count of the entire task subtree.
+        This method recursively counts all non-archived descendants, even if their
+        immediate parent is archived. This handles orphaned tasks that remain visible
+        when their parent is archived without cascading the archive operation.
 
         Args:
             parent_id: UUID of the parent task
@@ -1231,22 +1232,24 @@ class TaskService:
             async def count_descendants(current_parent_id: UUID) -> None:
                 nonlocal total_count, completed_count
 
-                # Get all direct children (not archived)
+                # Get ALL direct children (including archived ones for traversal)
                 query = select(TaskORM).where(
                     TaskORM.parent_id == str(current_parent_id),
-                    TaskORM.is_archived == False,
                 )
 
                 result = await self.session.execute(query)
                 children = result.scalars().all()
 
-                # Count these children
+                # Process each child
                 for child in children:
-                    total_count += 1
-                    if child.is_completed:
-                        completed_count += 1
+                    # Only count non-archived children
+                    if not child.is_archived:
+                        total_count += 1
+                        if child.is_completed:
+                            completed_count += 1
 
-                    # Recursively count this child's descendants
+                    # Always recurse to find non-archived descendants,
+                    # even if this child is archived (to handle orphaned tasks)
                     await count_descendants(UUID(child.id))
 
             await count_descendants(parent_id)
