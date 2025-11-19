@@ -751,7 +751,11 @@ class TaskService:
 
     async def archive_task(self, task_id: UUID) -> Task:
         """
-        Archive a completed task.
+        Archive a completed task and all its descendants.
+
+        This operation cascades to all descendants to prevent orphaned tasks.
+        Note: This only archives the parent if it's completed, but will archive
+        all descendants regardless of their completion status.
 
         Args:
             task_id: UUID of the task to archive
@@ -773,13 +777,26 @@ class TaskService:
             )
             raise ValueError("Only completed tasks can be archived")
 
-        # Archive the task
+        archive_time = datetime.utcnow()
+
+        # Get all descendants for cascade archiving
+        descendants = await self.get_all_descendants(task_id, include_archived=False)
+        descendant_count = len(descendants)
+
+        # Archive all descendants (deepest first to maintain integrity)
+        for descendant in reversed(descendants):
+            descendant_orm = await self._get_task_or_raise(descendant.id)
+            descendant_orm.is_archived = True
+            descendant_orm.archived_at = archive_time
+
+        # Archive the task itself
         task_orm.is_archived = True
-        task_orm.archived_at = datetime.utcnow()
+        task_orm.archived_at = archive_time
 
         logger.info(
             f"Task archived: task_id={task_id}, "
-            f"archive_timestamp={task_orm.archived_at.isoformat()}"
+            f"archive_timestamp={task_orm.archived_at.isoformat()}, "
+            f"descendants_archived={descendant_count}"
         )
 
         # Flush changes to database
@@ -797,10 +814,11 @@ class TaskService:
 
     async def soft_delete_task(self, task_id: UUID) -> Task:
         """
-        Soft delete a task by archiving it (works on any task, completed or not).
+        Soft delete a task by archiving it and all its descendants.
 
         This provides a "delete" operation that is recoverable via the archive/restore
         functionality. Unlike archive_task(), this does not require the task to be completed.
+        This operation cascades to all descendants to prevent orphaned tasks.
 
         Args:
             task_id: UUID of the task to soft delete
@@ -813,15 +831,27 @@ class TaskService:
         """
         # Get the task
         task_orm = await self._get_task_or_raise(task_id)
+        archive_time = datetime.utcnow()
 
-        # Archive the task (soft delete - no completion check)
+        # Get all descendants for cascade archiving
+        descendants = await self.get_all_descendants(task_id, include_archived=False)
+        descendant_count = len(descendants)
+
+        # Archive all descendants (deepest first to maintain integrity)
+        for descendant in reversed(descendants):
+            descendant_orm = await self._get_task_or_raise(descendant.id)
+            descendant_orm.is_archived = True
+            descendant_orm.archived_at = archive_time
+
+        # Archive the task itself (soft delete - no completion check)
         task_orm.is_archived = True
-        task_orm.archived_at = datetime.utcnow()
+        task_orm.archived_at = archive_time
 
         logger.info(
             f"Task soft-deleted (archived): task_id={task_id}, "
             f"archive_timestamp={task_orm.archived_at.isoformat()}, "
-            f"was_completed={task_orm.is_completed}"
+            f"was_completed={task_orm.is_completed}, "
+            f"descendants_archived={descendant_count}"
         )
 
         # Flush changes to database
