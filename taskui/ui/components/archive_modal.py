@@ -206,7 +206,7 @@ class ArchiveModal(ModalScreen):
         """
         with Container():
             # Header
-            yield Static("📦 Archived Tasks", classes="modal-header")
+            yield Static("Archived Tasks", classes="modal-header")
 
             # Search field
             with Vertical(classes="search-container"):
