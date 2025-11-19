@@ -42,11 +42,16 @@ except ImportError as e:
 
 
 # Configure logging
+# Use user's home directory for logs (create logs directory if needed)
+log_dir = Path.home() / 'taskui-print-worker' / 'logs'
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / 'taskui-printer.log'
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/var/log/taskui-printer.log'),
+        logging.FileHandler(log_file),
         logging.StreamHandler()
     ]
 )

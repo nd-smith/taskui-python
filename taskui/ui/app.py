@@ -194,11 +194,8 @@ class TaskUI(App):
 
         # Initialize cloud print queue service (don't fail if unavailable)
         try:
-            # Hardcoded cloud print configuration
-            cloud_config = CloudPrintConfig(
-                queue_url='https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue',
-                region='us-east-1'
-            )
+            # Load cloud print configuration from config file (includes encryption key)
+            cloud_config = CloudPrintConfig.from_config_file()
             self._printer_service = CloudPrintQueue(cloud_config)
             self._printer_service.connect()
             logger.info("Cloud print queue initialized and connected")

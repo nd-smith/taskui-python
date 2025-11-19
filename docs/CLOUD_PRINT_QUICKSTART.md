@@ -31,7 +31,7 @@ aws configure
 
 Set queue URL:
 ```bash
-export TASKUI_CLOUD_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue"
+export TASKUI_CLOUD_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue"
 export TASKUI_CLOUD_MODE="cloud"
 ```
 
@@ -89,11 +89,11 @@ aws configure
 # Default output format: json
 
 # Set environment variables for this session
-export TASKUI_CLOUD_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue"
+export TASKUI_CLOUD_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue"
 export TASKUI_CLOUD_MODE="cloud"
 
 # Or add to your shell profile for persistence (~/.bashrc or ~/.zshrc):
-echo 'export TASKUI_CLOUD_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue"' >> ~/.bashrc
+echo 'export TASKUI_CLOUD_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue"' >> ~/.bashrc
 echo 'export TASKUI_CLOUD_MODE="cloud"' >> ~/.bashrc
 ```
 
@@ -109,8 +109,8 @@ python scripts/test_aws_connectivity.py
 
 ```bash
 # Copy the worker script to your Pi (replace YOUR-PI-IP with actual IP)
-scp scripts/pi_print_worker.py pi@YOUR-PI-IP:/home/pi/
-scp scripts/taskui-printer.service pi@YOUR-PI-IP:/home/pi/
+scp scripts/pi_print_worker.py nick@192.168.50.99/home/nick
+scp scripts/taskui-printer.service nick@192.168.50.99
 
 # SSH to your Pi
 ssh pi@YOUR-PI-IP
@@ -130,7 +130,7 @@ aws configure
 
 # Test the worker manually first
 python3 /home/pi/pi_print_worker.py \
-  --queue-url "https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue" \
+  --queue-url "https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue" \
   --printer-host 192.168.50.99 \
   --printer-port 9100
 
@@ -147,7 +147,7 @@ nano /home/pi/taskui-printer.service
 
 # Update the ExecStart line to:
 # ExecStart=/usr/bin/python3 /home/pi/pi_print_worker.py \
-#     --queue-url https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue \
+#     --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue \
 #     --printer-host 192.168.50.99 \
 #     --printer-port 9100 \
 #     --region us-east-1
@@ -188,7 +188,7 @@ sudo journalctl -u taskui-printer -f
 ```bash
 # Check how many messages are in the queue
 aws sqs get-queue-attributes \
-  --queue-url "https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue" \
+  --queue-url "https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue" \
   --attribute-names ApproximateNumberOfMessages
 ```
 

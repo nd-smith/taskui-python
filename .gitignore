@@ -143,6 +143,10 @@ taskui.db
 backup/
 *.backup
 
+# Sensitive configuration files
+config.ini
+.taskui/config.ini
+
 # Debug logs
 debug/
 taskui/debug/

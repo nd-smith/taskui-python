@@ -81,6 +81,7 @@ class Config:
         - TASKUI_CLOUD_QUEUE_URL
         - TASKUI_CLOUD_REGION
         - TASKUI_CLOUD_MODE (direct/cloud/auto)
+        - TASKUI_ENCRYPTION_KEY (base64-encoded encryption key)
         - AWS_ACCESS_KEY_ID (standard AWS env var)
         - AWS_SECRET_ACCESS_KEY (standard AWS env var)
 
@@ -98,9 +99,12 @@ class Config:
                                 self._config.get('cloud_print', 'aws_access_key_id', fallback=None),
             'aws_secret_access_key': os.getenv('AWS_SECRET_ACCESS_KEY') or
                                     self._config.get('cloud_print', 'aws_secret_access_key', fallback=None),
+            'encryption_key': os.getenv('TASKUI_ENCRYPTION_KEY') or
+                            self._config.get('cloud_print', 'encryption_key', fallback=None),
         }
 
-        logger.debug(f"Cloud print config: region={config['region']}, mode={config['mode']}")
+        encryption_status = "enabled" if config.get('encryption_key') else "disabled"
+        logger.debug(f"Cloud print config: region={config['region']}, mode={config['mode']}, encryption={encryption_status}")
 
         return config
 

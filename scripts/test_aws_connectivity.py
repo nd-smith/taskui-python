@@ -13,7 +13,7 @@ def test_queue_connectivity():
     # Get queue URL from environment or use default
     queue_url = os.getenv(
         'TASKUI_CLOUD_QUEUE_URL',
-        'https://sqs.us-east-1.amazonaws.com/856992658652/taskui-print-queue'
+        'https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-print-queue'
     )
 
     print("=" * 60)
