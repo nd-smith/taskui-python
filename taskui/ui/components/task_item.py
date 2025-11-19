@@ -24,9 +24,6 @@ from taskui.ui.theme import (
     COMPLETE_COLOR,
     ARCHIVE_COLOR,
     SELECTION,
-    LEVEL_0_COLOR,
-    LEVEL_1_COLOR,
-    LEVEL_2_COLOR,
     HOVER_OPACITY,
     with_alpha,
 )
@@ -62,18 +59,6 @@ class TaskItem(Widget):
     TaskItem.selected {{
         background: {SELECTION};
     }}
-
-    TaskItem.level-0 {{
-        border-left: thick {LEVEL_0_COLOR};
-    }}
-
-    TaskItem.level-1 {{
-        border-left: thick {LEVEL_1_COLOR};
-    }}
-
-    TaskItem.level-2 {{
-        border-left: thick {LEVEL_2_COLOR};
-    }}
     """
 
     # Reactive properties
@@ -98,16 +83,23 @@ class TaskItem(Widget):
         self._is_last_child = is_last_child
         self.task_id = task.id
 
-        # Set level-specific CSS class
-        self.add_class(f"level-{task.level}")
-
         logger.debug(
             f"TaskItem: Created for task '{task.title[:30]}' (id={task.id}, level={task.level}, "
             f"completed={task.is_completed}, archived={task.is_archived})"
         )
 
     def on_mount(self) -> None:
-        """Fade in the task item when mounted."""
+        """Set up programmatic styling and fade in the task item when mounted.
+
+        This method applies level-specific border colors programmatically using the theme's
+        get_level_color() function, which supports unlimited nesting levels. The border color
+        is determined by the task's level and set directly on the widget's styles.
+        """
+        # Set border color programmatically based on task level
+        level_color = get_level_color(self._task_model.level)
+        self.styles.border_left = ("thick", level_color)
+
+        # Fade in animation
         self.styles.animate("opacity", value=1.0, duration=0.3, easing="out_cubic")
 
     @property

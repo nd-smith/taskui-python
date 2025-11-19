@@ -32,3 +32,25 @@ mode = auto
 # SECURITY WARNING: Do not commit encryption key to git!
 # The same key must be configured on both the app and Raspberry Pi
 # encryption_key = your-base64-encoded-key-here
+
+[nesting]
+# TOML configuration is preferred for nesting features
+# For full configuration options, see nesting.toml.example
+# Simple INI-style fallback options below:
+
+# Enable/disable nesting features globally
+enabled = true
+
+# Maximum nesting depth for Column 1 (Tasks)
+# Default: 1 (allows 2 levels: parent and child)
+column1_max_depth = 1
+
+# Maximum nesting depth for Column 2 (Subtasks)
+# Default: 2 (allows 3 levels relative to selected task)
+column2_max_depth = 2
+
+# Strict validation: prevent creating tasks that exceed max depth
+strict_validation = true
+
+# Show warnings when approaching max depth
+warn_at_max_depth = true

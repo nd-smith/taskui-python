@@ -2,17 +2,23 @@
 Comprehensive tests for the nesting rules engine.
 
 Tests all aspects of task nesting logic including:
-- can_create_child() method validation
+- can_create_child() method validation (both class and instance methods)
 - Context-relative level calculation
 - Maximum depth enforcement
 - Edge cases and boundary conditions
+- Configuration-based behavior
+- Backward compatibility with deprecated class methods
 """
 
 import pytest
+import warnings
+from pathlib import Path
+import tempfile
 from uuid import uuid4
 
 from taskui.models import Task
 from taskui.services.nesting_rules import NestingRules, Column
+from taskui.config.nesting_config import NestingConfig, ColumnNestingConfig
 
 
 class TestNestingRulesColumn1:
@@ -404,3 +410,311 @@ class TestMaximumDepthEnforcement:
         # Column 2: Level 2 task cannot have children (would be level 3, exceeds max)
         task_l2 = Task(title="L2", level=2, parent_id=uuid4(), list_id=list_id)
         assert NestingRules.get_allowed_child_level(task_l2, Column.COLUMN2) is None
+
+
+class TestNestingRulesInstanceMethods:
+    """Tests for new instance-based NestingRules API with configuration."""
+
+    def test_instance_creation_with_default_config(self):
+        """Test creating NestingRules instance with default config."""
+        rules = NestingRules()
+
+        # Should use default values matching legacy constants
+        assert rules.get_max_depth_instance(Column.COLUMN1) == 1
+        assert rules.get_max_depth_instance(Column.COLUMN2) == 2
+
+    def test_instance_creation_with_custom_config(self):
+        """Test creating NestingRules instance with custom config."""
+        config = NestingConfig(
+            column1={'max_depth': 3},
+            column2={'max_depth': 5}
+        )
+        rules = NestingRules(config)
+
+        assert rules.get_max_depth_instance(Column.COLUMN1) == 3
+        assert rules.get_max_depth_instance(Column.COLUMN2) == 5
+
+    def test_can_create_child_instance_with_custom_depth(self):
+        """Test can_create_child_instance with custom max_depth."""
+        config = NestingConfig(
+            column1={'max_depth': 1},  # Default
+            column2={'max_depth': 2}   # Allow up to level 2
+        )
+        rules = NestingRules(config)
+        list_id = uuid4()
+
+        # Level 1 can have children in Column 2 (max_depth=2)
+        task_l1 = Task(title="L1", level=1, parent_id=uuid4(), list_id=list_id)
+        assert rules.can_create_child_instance(task_l1, Column.COLUMN2) is True
+
+        # Level 2 cannot have children in Column 2 (at max_depth)
+        task_l2 = Task(title="L2", level=2, parent_id=uuid4(), list_id=list_id)
+        assert rules.can_create_child_instance(task_l2, Column.COLUMN2) is False
+
+    def test_validate_nesting_depth_instance_with_custom_config(self):
+        """Test validate_nesting_depth_instance with custom config."""
+        config = NestingConfig(
+            column1={'max_depth': 0},  # Only level 0
+            column2={'max_depth': 2}   # Up to level 2
+        )
+        rules = NestingRules(config)
+        list_id = uuid4()
+
+        # Level 0 is valid in both columns
+        task_l0 = Task(title="L0", level=0, list_id=list_id)
+        assert rules.validate_nesting_depth_instance(task_l0, Column.COLUMN1) is True
+        assert rules.validate_nesting_depth_instance(task_l0, Column.COLUMN2) is True
+
+        # Level 1 exceeds Column 1 max_depth but is valid for Column 2
+        task_l1 = Task(title="L1", level=1, parent_id=uuid4(), list_id=list_id)
+        assert rules.validate_nesting_depth_instance(task_l1, Column.COLUMN1) is False
+        assert rules.validate_nesting_depth_instance(task_l1, Column.COLUMN2) is True
+
+        # Level 2 is valid for Column 2
+        task_l2 = Task(title="L2", level=2, parent_id=uuid4(), list_id=list_id)
+        assert rules.validate_nesting_depth_instance(task_l2, Column.COLUMN2) is True
+
+    def test_get_allowed_child_level_instance_with_custom_config(self):
+        """Test get_allowed_child_level_instance with custom config."""
+        config = NestingConfig(
+            column1={'max_depth': 1},  # Default
+            column2={'max_depth': 2}   # Allow up to level 2
+        )
+        rules = NestingRules(config)
+        list_id = uuid4()
+
+        # Level 1 task can have level 2 child in Column 2
+        task_l1 = Task(title="L1", level=1, parent_id=uuid4(), list_id=list_id)
+        assert rules.get_allowed_child_level_instance(task_l1, Column.COLUMN2) == 2
+
+        # Level 2 task cannot have children in Column 2 (at max_depth)
+        task_l2 = Task(title="L2", level=2, parent_id=uuid4(), list_id=list_id)
+        assert rules.get_allowed_child_level_instance(task_l2, Column.COLUMN2) is None
+
+    def test_calculate_context_relative_level_instance(self):
+        """Test calculate_context_relative_level_instance method."""
+        rules = NestingRules()
+        list_id = uuid4()
+        parent_id = uuid4()
+
+        # Direct child should be level 0 relative to parent
+        task = Task(title="Child", level=1, parent_id=parent_id, list_id=list_id)
+        assert rules.calculate_context_relative_level_instance(task, parent_id) == 0
+
+        # Without context, should return absolute level
+        assert rules.calculate_context_relative_level_instance(task) == 1
+
+
+class TestNestingRulesFromConfig:
+    """Tests for NestingRules.from_config() class method."""
+
+    def test_from_config_with_nonexistent_file(self):
+        """Test from_config with non-existent file returns defaults."""
+        rules = NestingRules.from_config("/tmp/nonexistent_nesting_config.toml")
+
+        # Should use defaults (both columns default to max_depth=1)
+        assert rules.get_max_depth_instance(Column.COLUMN1) == 1
+        assert rules.get_max_depth_instance(Column.COLUMN2) == 1
+
+    def test_from_config_with_valid_file(self):
+        """Test from_config with valid TOML file."""
+        # Create temporary TOML config
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.toml') as f:
+            f.write("""
+[nesting]
+enabled = true
+num_columns = 2
+
+[nesting.column1]
+max_depth = 1
+display_name = "Tasks"
+
+[nesting.column2]
+max_depth = 2
+display_name = "Subtasks"
+""")
+            config_path = f.name
+
+        try:
+            rules = NestingRules.from_config(config_path)
+
+            assert rules.get_max_depth_instance(Column.COLUMN1) == 1
+            assert rules.get_max_depth_instance(Column.COLUMN2) == 2
+        finally:
+            Path(config_path).unlink()
+
+    def test_from_config_without_path_uses_default_location(self):
+        """Test from_config without path uses default location."""
+        # Should not raise even if default location doesn't exist
+        rules = NestingRules.from_config()
+
+        # Should get default values (both columns default to max_depth=1)
+        assert rules.get_max_depth_instance(Column.COLUMN1) == 1
+        assert rules.get_max_depth_instance(Column.COLUMN2) == 1
+
+
+class TestNestingRulesBackwardCompatibility:
+    """Tests for backward compatibility with deprecated class methods."""
+
+    def test_class_methods_emit_deprecation_warning(self):
+        """Test that class methods emit DeprecationWarning."""
+        list_id = uuid4()
+        task = Task(title="Test", level=0, list_id=list_id)
+
+        # can_create_child should emit warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            NestingRules.can_create_child(task, Column.COLUMN1)
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "deprecated" in str(w[0].message).lower()
+
+        # get_max_depth should emit warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            NestingRules.get_max_depth(Column.COLUMN1)
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+
+        # validate_nesting_depth should emit warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            NestingRules.validate_nesting_depth(task, Column.COLUMN1)
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+
+        # get_allowed_child_level should emit warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            NestingRules.get_allowed_child_level(task, Column.COLUMN1)
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+
+        # calculate_context_relative_level should emit warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            NestingRules.calculate_context_relative_level(task)
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+
+    def test_class_methods_return_same_results_as_instance_methods(self):
+        """Test that deprecated class methods return same results as instance methods."""
+        list_id = uuid4()
+
+        # Create tasks at different levels
+        task_l0 = Task(title="L0", level=0, list_id=list_id)
+        task_l1 = Task(title="L1", level=1, parent_id=uuid4(), list_id=list_id)
+        task_l2 = Task(title="L2", level=2, parent_id=uuid4(), list_id=list_id)
+
+        # Create instance with default config
+        rules = NestingRules()
+
+        # Suppress warnings for this test
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+
+            # can_create_child
+            assert (NestingRules.can_create_child(task_l0, Column.COLUMN1) ==
+                    rules.can_create_child_instance(task_l0, Column.COLUMN1))
+            assert (NestingRules.can_create_child(task_l1, Column.COLUMN1) ==
+                    rules.can_create_child_instance(task_l1, Column.COLUMN1))
+            assert (NestingRules.can_create_child(task_l1, Column.COLUMN2) ==
+                    rules.can_create_child_instance(task_l1, Column.COLUMN2))
+
+            # get_max_depth
+            assert (NestingRules.get_max_depth(Column.COLUMN1) ==
+                    rules.get_max_depth_instance(Column.COLUMN1))
+            assert (NestingRules.get_max_depth(Column.COLUMN2) ==
+                    rules.get_max_depth_instance(Column.COLUMN2))
+
+            # validate_nesting_depth
+            assert (NestingRules.validate_nesting_depth(task_l2, Column.COLUMN1) ==
+                    rules.validate_nesting_depth_instance(task_l2, Column.COLUMN1))
+            assert (NestingRules.validate_nesting_depth(task_l2, Column.COLUMN2) ==
+                    rules.validate_nesting_depth_instance(task_l2, Column.COLUMN2))
+
+            # get_allowed_child_level
+            assert (NestingRules.get_allowed_child_level(task_l0, Column.COLUMN1) ==
+                    rules.get_allowed_child_level_instance(task_l0, Column.COLUMN1))
+            assert (NestingRules.get_allowed_child_level(task_l1, Column.COLUMN1) ==
+                    rules.get_allowed_child_level_instance(task_l1, Column.COLUMN1))
+
+
+class TestNestingRulesParameterized:
+    """Parameterized tests for different configuration values."""
+
+    @pytest.mark.parametrize("column1_depth,column2_depth", [
+        (1, 2),  # Typical values
+        (0, 0),  # No nesting allowed
+        (1, 1),  # Same depth for both
+        (0, 2),  # Different depths
+    ])
+    def test_various_depth_configurations(self, column1_depth, column2_depth):
+        """Test NestingRules with various depth configurations."""
+        config = NestingConfig(
+            column1={'max_depth': column1_depth},
+            column2={'max_depth': column2_depth}
+        )
+        rules = NestingRules(config)
+
+        assert rules.get_max_depth_instance(Column.COLUMN1) == column1_depth
+        assert rules.get_max_depth_instance(Column.COLUMN2) == column2_depth
+
+    @pytest.mark.parametrize("task_level,column,max_depth,expected", [
+        (0, Column.COLUMN1, 1, True),   # Level 0 can have children
+        (1, Column.COLUMN1, 1, False),  # Level 1 at max depth
+        (0, Column.COLUMN2, 2, True),   # Level 0 can have children
+        (1, Column.COLUMN2, 2, True),   # Level 1 can have children
+        (2, Column.COLUMN2, 2, False),  # Level 2 at max depth
+        (0, Column.COLUMN1, 0, False),  # Level 0 at max depth (no children)
+        (1, Column.COLUMN2, 1, False),  # Level 1 at max depth
+    ])
+    def test_can_create_child_parameterized(self, task_level, column, max_depth, expected):
+        """Test can_create_child_instance with various parameters."""
+        list_id = uuid4()
+        parent_id = uuid4() if task_level > 0 else None
+
+        # Create config with specified max_depth
+        config = NestingConfig(
+            column1={'max_depth': max_depth},
+            column2={'max_depth': max_depth}
+        )
+        rules = NestingRules(config)
+
+        task = Task(
+            title=f"Level {task_level}",
+            level=task_level,
+            parent_id=parent_id,
+            list_id=list_id
+        )
+
+        assert rules.can_create_child_instance(task, column) == expected
+
+    @pytest.mark.parametrize("task_level,max_depth,expected", [
+        (0, 1, True),   # Level 0 within max
+        (1, 1, True),   # Level 1 at max
+        (2, 1, False),  # Level 2 exceeds max
+        (0, 0, True),   # Level 0 at max
+        (1, 0, False),  # Level 1 exceeds max of 0
+        (2, 2, True),   # Level 2 at max
+    ])
+    def test_validate_nesting_depth_parameterized(self, task_level, max_depth, expected):
+        """Test validate_nesting_depth_instance with various parameters."""
+        list_id = uuid4()
+        parent_id = uuid4() if task_level > 0 else None
+
+        config = NestingConfig(
+            column1={'max_depth': max_depth},
+            column2={'max_depth': max_depth}
+        )
+        rules = NestingRules(config)
+
+        task = Task(
+            title=f"Level {task_level}",
+            level=task_level,
+            parent_id=parent_id,
+            list_id=list_id
+        )
+
+        result = rules.validate_nesting_depth_instance(task, Column.COLUMN1)
+        assert result == expected

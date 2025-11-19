@@ -13,7 +13,8 @@ from taskui.services.task_service import (
     TaskNotFoundError,
     TaskListNotFoundError,
 )
-from taskui.services.nesting_rules import Column
+from taskui.services.nesting_rules import Column, NestingRules
+from taskui.config.nesting_config import NestingConfig
 from taskui.database import TaskORM
 
 
@@ -1386,3 +1387,144 @@ class TestTaskServiceSoftDelete:
         # Try to soft delete non-existent task
         with pytest.raises(TaskNotFoundError):
             await service.soft_delete_task(uuid4())
+
+
+class TestTaskServiceWithCustomNestingRules:
+    """Tests for TaskService with custom NestingRules instances."""
+
+    @pytest.mark.asyncio
+    async def test_task_service_with_default_nesting_rules(self, db_session, sample_task_list, sample_list_id):
+        """Test TaskService works with default behavior when no nesting_rules provided."""
+        # No nesting_rules parameter - should use deprecated class methods
+        service = TaskService(db_session)
+
+        # Should work with default Column 1 limits (max 2 levels)
+        parent = await service.create_task("Parent", sample_list_id)
+        child = await service.create_child_task(parent.id, "Child", Column.COLUMN1)
+
+        assert child.level == 1
+        assert child.parent_id == parent.id
+
+        # Should fail at level 2 for Column 1
+        with pytest.raises(NestingLimitError):
+            await service.create_child_task(child.id, "Grandchild", Column.COLUMN1)
+
+    @pytest.mark.asyncio
+    async def test_task_service_with_custom_nesting_rules(self, db_session, sample_task_list, sample_list_id):
+        """Test TaskService with custom NestingRules instance."""
+        # Create custom config allowing Column2 up to level 2
+        config = NestingConfig(
+            column1={'max_depth': 1},  # Default
+            column2={'max_depth': 2}   # Allow up to level 2
+        )
+        nesting_rules = NestingRules(config)
+        service = TaskService(db_session, nesting_rules=nesting_rules)
+
+        # Should allow level 2 in Column 2 now
+        level0 = await service.create_task("Level 0", sample_list_id)
+        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
+        level2 = await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
+
+        assert level2.level == 2
+        assert level2.parent_id == level1.id
+
+        # Level 2 cannot have children (at max_depth)
+        with pytest.raises(NestingLimitError):
+            await service.create_child_task(level2.id, "Level 3", Column.COLUMN2)
+
+    @pytest.mark.asyncio
+    async def test_task_service_respects_column2_custom_depth(self, db_session, sample_task_list, sample_list_id):
+        """Test TaskService respects custom max_depth for Column 2."""
+        # Create config with shallow Column 2 depth (only level 1)
+        config = NestingConfig(
+            column1={'max_depth': 1},
+            column2={'max_depth': 1}  # Allow up to level 1 only
+        )
+        nesting_rules = NestingRules(config)
+        service = TaskService(db_session, nesting_rules=nesting_rules)
+
+        # Create hierarchy in Column 2
+        level0 = await service.create_task("Level 0", sample_list_id)
+        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
+
+        assert level1.level == 1
+
+        # Should fail at level 2 (exceeds max_depth of 1)
+        with pytest.raises(NestingLimitError):
+            await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
+
+    @pytest.mark.asyncio
+    async def test_task_service_with_zero_nesting_depth(self, db_session, sample_task_list, sample_list_id):
+        """Test TaskService with zero nesting depth (no children allowed)."""
+        # Create config with no nesting allowed
+        config = NestingConfig(
+            column1={'max_depth': 0},  # Only level 0 tasks allowed
+            column2={'max_depth': 0}
+        )
+        nesting_rules = NestingRules(config)
+        service = TaskService(db_session, nesting_rules=nesting_rules)
+
+        # Should allow creating level 0 tasks
+        task = await service.create_task("Level 0 Task", sample_list_id)
+        assert task.level == 0
+
+        # Should not allow creating children in either column
+        with pytest.raises(NestingLimitError):
+            await service.create_child_task(task.id, "Child", Column.COLUMN1)
+
+        with pytest.raises(NestingLimitError):
+            await service.create_child_task(task.id, "Child", Column.COLUMN2)
+
+    @pytest.mark.asyncio
+    async def test_task_service_move_respects_custom_nesting_rules(self, db_session, sample_task_list, sample_list_id):
+        """Test that move operations respect custom nesting rules."""
+        # Create config with standard depth
+        config = NestingConfig(
+            column1={'max_depth': 1},
+            column2={'max_depth': 2}  # Allow up to level 2
+        )
+        nesting_rules = NestingRules(config)
+        service = TaskService(db_session, nesting_rules=nesting_rules)
+
+        # Create a hierarchy
+        level0 = await service.create_task("Level 0", sample_list_id)
+        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
+        level2 = await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
+
+        # Try to move level1 (which has a child at level 2) under another level 1 task
+        another_level0 = await service.create_task("Another Level 0", sample_list_id)
+        another_level1 = await service.create_child_task(another_level0.id, "Another Level 1", Column.COLUMN2)
+
+        # This would make level1 -> level 2, level2 -> level 3 (exceeds max_depth of 2)
+        # This should fail
+        with pytest.raises(NestingLimitError):
+            await service.move_task(level1.id, new_parent_id=another_level1.id)
+
+    @pytest.mark.asyncio
+    async def test_multiple_services_with_different_rules(self, db_session, sample_task_list, sample_list_id):
+        """Test that multiple TaskService instances can have different nesting rules."""
+        # Create two services with different rules
+        config_shallow = NestingConfig(
+            column1={'max_depth': 0},  # No nesting
+            column2={'max_depth': 1}   # Only 1 level
+        )
+        config_normal = NestingConfig(
+            column1={'max_depth': 1},  # 1 level
+            column2={'max_depth': 2}   # 2 levels
+        )
+
+        service_shallow = TaskService(db_session, nesting_rules=NestingRules(config_shallow))
+        service_normal = TaskService(db_session, nesting_rules=NestingRules(config_normal))
+
+        # Shallow service should enforce shallow limits
+        parent = await service_shallow.create_task("Parent", sample_list_id)
+
+        with pytest.raises(NestingLimitError):
+            await service_shallow.create_child_task(parent.id, "Child", Column.COLUMN1)
+
+        # Normal service should allow standard nesting
+        parent2 = await service_normal.create_task("Parent2", sample_list_id)
+        child2 = await service_normal.create_child_task(parent2.id, "Child2", Column.COLUMN2)
+        grandchild2 = await service_normal.create_child_task(child2.id, "Grandchild2", Column.COLUMN2)
+
+        assert grandchild2.level == 2  # Should succeed with normal config

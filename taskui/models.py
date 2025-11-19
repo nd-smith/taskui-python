@@ -6,10 +6,10 @@ computed properties, and proper typing.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Dict, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator, computed_field
+from pydantic import BaseModel, Field, PrivateAttr, ValidationInfo, field_validator, model_validator, computed_field
 
 
 class TaskList(BaseModel):
@@ -92,7 +92,7 @@ class Task(BaseModel):
 
     # Hierarchy
     parent_id: Optional[UUID] = Field(default=None, description="Parent task ID for nesting")
-    level: int = Field(default=0, ge=0, le=2, description="Nesting level (0-2)")
+    level: int = Field(default=0, ge=0, description="Nesting level")
     position: int = Field(default=0, ge=0, description="Order within siblings")
 
     # Relationships
@@ -106,6 +106,7 @@ class Task(BaseModel):
     # Private attributes for computed properties
     _child_count: int = PrivateAttr(default=0)
     _completed_child_count: int = PrivateAttr(default=0)
+    _max_levels_per_column: Dict[int, int] = PrivateAttr(default_factory=lambda: {1: 1, 2: 2})
 
     class Config:
         """Pydantic configuration."""
@@ -126,21 +127,31 @@ class Task(BaseModel):
 
     @field_validator("level")
     @classmethod
-    def validate_level(cls, v: int) -> int:
+    def validate_level(cls, v: int, info: ValidationInfo) -> int:
         """
         Validate that the nesting level is within acceptable range.
 
+        Supports dynamic max_level via validation context for configuration-based limits.
+        Falls back to default max_level of 2 for backward compatibility.
+
         Args:
             v: The level value to validate
+            info: Validation info containing optional context with max_level
 
         Returns:
             The validated level value
 
         Raises:
-            ValueError: If level is not between 0 and 2
+            ValueError: If level exceeds the configured max_level
         """
-        if v < 0 or v > 2:
-            raise ValueError("Task level must be between 0 and 2")
+        # Get max_level from context, default to 2 for backward compatibility
+        context = info.context or {}
+        max_level = context.get('max_level', 2)
+
+        if v > max_level:
+            raise ValueError(
+                f"Task level must be between 0 and {max_level}. Got {v}."
+            )
         return v
 
     @model_validator(mode='after')
@@ -207,12 +218,14 @@ class Task(BaseModel):
         """
         Check if this task can have children in Column 1 context.
 
-        Column 1 allows maximum 2 levels (0-1), so only level 0 tasks can have children.
+        Uses dynamic max_depth from nesting configuration. Defaults to max_depth of 1
+        (allowing levels 0-1, where only level 0 can have children) for backward compatibility.
 
         Returns:
             True if task can have children in Column 1, False otherwise
         """
-        return self.level == 0
+        max_depth = self._max_levels_per_column.get(1, 1)
+        return self.level < max_depth
 
     @computed_field
     @property
@@ -220,12 +233,14 @@ class Task(BaseModel):
         """
         Check if this task can have children in Column 2 context.
 
-        Column 2 allows maximum 3 levels (0-2), so level 0 and 1 tasks can have children.
+        Uses dynamic max_depth from nesting configuration. Defaults to max_depth of 2
+        (allowing levels 0-2, where levels 0 and 1 can have children) for backward compatibility.
 
         Returns:
             True if task can have children in Column 2, False otherwise
         """
-        return self.level <= 1
+        max_depth = self._max_levels_per_column.get(2, 2)
+        return self.level < max_depth
 
     def update_child_counts(self, child_count: int, completed_child_count: int) -> None:
         """
@@ -237,6 +252,19 @@ class Task(BaseModel):
         """
         self._child_count = child_count
         self._completed_child_count = completed_child_count
+
+    def set_nesting_config(self, max_levels: Dict[int, int]) -> None:
+        """
+        Set the nesting configuration for computed fields.
+
+        This method allows dynamic configuration of max nesting levels per column,
+        affecting the behavior of can_have_children_in_column1 and can_have_children_in_column2.
+
+        Args:
+            max_levels: Dictionary mapping column number (1 or 2) to max depth.
+                       Example: {1: 1, 2: 2} means column 1 allows depth 1, column 2 allows depth 2.
+        """
+        self._max_levels_per_column = max_levels
 
     def mark_completed(self) -> None:
         """Mark the task as completed with timestamp."""

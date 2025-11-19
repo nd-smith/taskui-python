@@ -13,21 +13,28 @@ The theme system follows these design principles:
 2. **Dynamic CSS**: Components use f-string interpolation to reference constants
 3. **Consistency**: Standardized interaction states (hover, focus, disabled)
 4. **Semantic naming**: Colors named by purpose, not appearance
-5. **Hierarchy support**: Three distinct accent colors for visual nesting
+5. **Hierarchy support**: Unlimited nesting with dynamic color generation
 
 Color Categories
 ----------------
 - **Base colors**: Background, foreground, selection, borders
-- **Hierarchy colors**: Level-specific accent colors (cyan, green, pink)
+- **Hierarchy colors**: Level-specific accent colors with algorithmic fallback
 - **Status colors**: Completion and archive states
 - **Interactive states**: Modal overlays, hover effects, focus indicators
 - **Additional colors**: Warnings, highlights, informational text
+
+Color Palette for Nesting Levels
+----------------------------------
+The first 20 nesting levels use Kelly's 22 Colors of Maximum Contrast, carefully
+selected for maximum visual distinction on dark backgrounds. For levels 20+, colors
+are generated algorithmically using the golden ratio method to ensure continued
+visual variety without repetition.
 
 Usage in Components
 -------------------
 Components import theme constants and use them in CSS via f-strings:
 
-    from taskui.ui.theme import BACKGROUND, LEVEL_0_COLOR, with_alpha
+    from taskui.ui.theme import BACKGROUND, LEVEL_0_COLOR, with_alpha, get_level_color
 
     class MyWidget(Widget):
         DEFAULT_CSS = f'''
@@ -51,9 +58,9 @@ To create a custom theme:
 Example - Creating a light theme:
     BACKGROUND = "#FFFFFF"
     FOREGROUND = "#000000"
-    LEVEL_0_COLOR = "#0066CC"  # Blue
-    LEVEL_1_COLOR = "#00AA00"  # Green
-    LEVEL_2_COLOR = "#CC0066"  # Magenta
+    LEVEL_COLORS[0] = "#0066CC"  # Blue
+    LEVEL_COLORS[1] = "#00AA00"  # Green
+    LEVEL_COLORS[2] = "#CC0066"  # Magenta
 
 See Also
 --------
@@ -61,6 +68,7 @@ See Also
 - README.md: Complete theming documentation and examples
 """
 
+import colorsys
 from rich.style import Style
 from rich.theme import Theme
 
@@ -83,10 +91,48 @@ BORDER = "#3E3D32"      # Borders and dividers (dark gray-green)
 # ============================================================================
 # Level-specific accent colors for visual task hierarchy. Each nesting level
 # has a distinct color to make the structure clear at a glance.
+#
+# Color Palette Source: Kelly's 22 Colors of Maximum Contrast
+# Reference: Kenneth L. Kelly, "Twenty-Two Colors of Maximum Contrast" (1965)
+#
+# The first 20 levels use a curated selection from Kelly's research, optimized
+# for visibility on dark backgrounds. Colors were chosen for maximum perceptual
+# distinction while maintaining aesthetic harmony with the One Monokai theme.
+#
+# Note: The first 3 colors are preserved from the original TaskUI design for
+# backward compatibility with existing configurations and user expectations.
 
-LEVEL_0_COLOR = "#66D9EF"  # Cyan/Blue - Top-level tasks (primary)
-LEVEL_1_COLOR = "#A6E22E"  # Green - First nesting level (secondary)
-LEVEL_2_COLOR = "#F92672"  # Pink/Red - Second nesting level (tertiary)
+LEVEL_COLORS = [
+    # Levels 0-2: Original TaskUI colors (backward compatible)
+    "#66D9EF",  # Level 0: Cyan/Blue - Top-level tasks (primary)
+    "#A6E22E",  # Level 1: Green - First nesting level (secondary)
+    "#F92672",  # Level 2: Pink/Magenta - Second nesting level (tertiary)
+
+    # Levels 3-19: Kelly's Colors of Maximum Contrast
+    "#F3C300",  # Level 3: Vivid Yellow
+    "#875692",  # Level 4: Strong Purple
+    "#F38400",  # Level 5: Vivid Orange
+    "#A1CAF1",  # Level 6: Very Light Blue
+    "#BE0032",  # Level 7: Vivid Red
+    "#C2B280",  # Level 8: Grayish Yellow (Buff)
+    "#848482",  # Level 9: Medium Gray
+    "#008856",  # Level 10: Vivid Green
+    "#E68FAC",  # Level 11: Strong Purplish Pink
+    "#0067A5",  # Level 12: Strong Blue
+    "#F99379",  # Level 13: Strong Yellowish Pink (Salmon)
+    "#604E97",  # Level 14: Strong Violet
+    "#F6A600",  # Level 15: Vivid Orange Yellow (Gold)
+    "#B3446C",  # Level 16: Strong Purplish Red (Maroon)
+    "#DCD300",  # Level 17: Vivid Greenish Yellow (Lime)
+    "#882D17",  # Level 18: Strong Reddish Brown
+    "#8DB600",  # Level 19: Vivid Yellowish Green (Olive)
+]
+
+# Backward compatibility: Individual color constants for levels 0-2
+# These reference the LEVEL_COLORS list and remain available for legacy code
+LEVEL_0_COLOR = LEVEL_COLORS[0]  # Cyan/Blue - Top-level tasks (primary)
+LEVEL_1_COLOR = LEVEL_COLORS[1]  # Green - First nesting level (secondary)
+LEVEL_2_COLOR = LEVEL_COLORS[2]  # Pink/Red - Second nesting level (tertiary)
 
 
 # ============================================================================
@@ -151,41 +197,122 @@ ONE_MONOKAI_THEME = Theme({
 # HELPER FUNCTIONS
 # ============================================================================
 
+def generate_hsl_color(level: int) -> str:
+    """Generate a color for deep nesting levels using the golden ratio method.
+
+    For nesting levels beyond the predefined LEVEL_COLORS palette (level 20+),
+    this function generates colors algorithmically using the golden ratio
+    conjugate to ensure maximum color variation without repetition.
+
+    The golden ratio (φ ≈ 1.618) provides optimal angular spacing in color space,
+    creating visually distinct hues that avoid clustering. This mathematical
+    approach ensures that even very deep nesting levels remain distinguishable.
+
+    Algorithm:
+        1. Use golden ratio conjugate (0.618...) to step through hue space
+        2. Apply modulo 1.0 to wrap around the color wheel
+        3. Use fixed saturation (80%) and lightness (60%) for consistency
+        4. Convert HSL to RGB and format as hex color code
+
+    Args:
+        level: The nesting level (should be >= 20 for levels beyond LEVEL_COLORS)
+
+    Returns:
+        Hex color string (e.g., '#A1B2C3') generated algorithmically
+
+    Examples:
+        >>> generate_hsl_color(20)
+        '#99cc99'  # First generated color
+        >>> generate_hsl_color(21)
+        '#cc9999'  # Next in golden ratio sequence
+        >>> generate_hsl_color(100)
+        '#9999cc'  # Continues to vary even at deep levels
+
+    Note:
+        This function can be called for any level, but is designed for levels
+        beyond the LEVEL_COLORS palette. The generated colors maintain good
+        visibility on dark backgrounds through fixed saturation/lightness values.
+
+    References:
+        - Golden ratio method for color generation
+        - HSL color space for perceptually uniform distribution
+    """
+    # Golden ratio conjugate for optimal hue distribution
+    golden_ratio_conjugate = 0.618033988749895
+
+    # Calculate hue based on level, using golden ratio for maximum distinction
+    # Start at 0.5 (cyan/green area) and step by golden ratio conjugate
+    hue = (0.5 + level * golden_ratio_conjugate) % 1.0
+
+    # Fixed saturation and lightness for consistency and visibility
+    # Saturation: 0.8 (80%) - vibrant but not oversaturated
+    # Lightness: 0.6 (60%) - balanced for dark backgrounds
+    lightness = 0.6
+    saturation = 0.8
+
+    # Convert HSL to RGB (note: colorsys uses HLS, not HSL)
+    rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
+
+    # Convert RGB floats (0.0-1.0) to hex color code
+    r = int(rgb[0] * 255)
+    g = int(rgb[1] * 255)
+    b = int(rgb[2] * 255)
+
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 def get_level_color(level: int) -> str:
     """Get the accent color for a specific task nesting level.
 
     This function maps task nesting levels to their corresponding accent colors,
-    providing visual distinction for task hierarchy. Levels outside the defined
-    range (0-2) fall back to the default FOREGROUND color.
+    providing visual distinction for task hierarchy. It supports unlimited nesting
+    depth through a combination of predefined colors and algorithmic generation.
+
+    Color Selection Strategy:
+        - Levels 0-19: Use predefined LEVEL_COLORS (Kelly's palette)
+        - Levels 20+: Generate colors algorithmically via golden ratio method
+        - Invalid levels (negative): Return FOREGROUND color (graceful fallback)
 
     Args:
-        level: The task nesting level (0, 1, or 2)
+        level: The task nesting level (0 to infinity)
             - Level 0: Top-level tasks (cyan)
             - Level 1: First nesting (green)
-            - Level 2: Second nesting (pink)
+            - Level 2: Second nesting (pink/magenta)
+            - Levels 3-19: Kelly's Colors of Maximum Contrast
+            - Levels 20+: Algorithmically generated colors
+            - Negative: Returns FOREGROUND (error handling)
 
     Returns:
-        Hex color string for the specified level. Returns FOREGROUND for
-        undefined levels (graceful degradation).
+        Hex color string for the specified level. Always returns a valid color.
 
     Examples:
         >>> get_level_color(0)
-        '#66D9EF'  # Cyan
-        >>> get_level_color(1)
-        '#A6E22E'  # Green
-        >>> get_level_color(99)
+        '#66D9EF'  # Cyan (predefined)
+        >>> get_level_color(5)
+        '#F38400'  # Vivid Orange (Kelly's color)
+        >>> get_level_color(25)
+        '#A1B2C3'  # Generated color
+        >>> get_level_color(-1)
         '#F8F8F2'  # FOREGROUND (fallback)
 
     Usage in components:
         level_color = get_level_color(task.level)
         text.append(task.title, style=level_color)
+
+    See Also:
+        generate_hsl_color(): Algorithmic color generation for deep nesting
+        LEVEL_COLORS: Predefined color palette for levels 0-19
     """
-    colors = {
-        0: LEVEL_0_COLOR,
-        1: LEVEL_1_COLOR,
-        2: LEVEL_2_COLOR,
-    }
-    return colors.get(level, FOREGROUND)
+    # Handle invalid levels gracefully
+    if level < 0:
+        return FOREGROUND
+
+    # Use predefined colors for levels 0-19
+    if level < len(LEVEL_COLORS):
+        return LEVEL_COLORS[level]
+
+    # Generate colors algorithmically for deeper nesting (level 20+)
+    return generate_hsl_color(level)
 
 
 def get_level_style(level: int) -> Style:

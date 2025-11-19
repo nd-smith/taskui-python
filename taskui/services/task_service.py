@@ -49,14 +49,21 @@ class TaskService:
     nesting validation, and hierarchy management.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        nesting_rules: Optional[NestingRules] = None
+    ) -> None:
         """
-        Initialize task service with database session.
+        Initialize task service with database session and optional nesting rules.
 
         Args:
             session: Active async database session
+            nesting_rules: Optional NestingRules instance for validation.
+                          If None, uses class methods (deprecated) for backward compatibility.
         """
         self.session = session
+        self._nesting_rules = nesting_rules
 
     # ==============================================================================
     # CONVERSION HELPERS
@@ -366,9 +373,16 @@ class TaskService:
             parent_orm = await self._get_task_or_raise(parent_id)
             parent_task = self._orm_to_pydantic(parent_orm)
 
-            # Validate nesting rules
-            if not NestingRules.can_create_child(parent_task, column):
+            # Validate nesting rules (use instance if available, otherwise class methods)
+            if self._nesting_rules:
+                can_create = self._nesting_rules.can_create_child_instance(parent_task, column)
+                max_depth = self._nesting_rules.get_max_depth_instance(column)
+            else:
+                # Backward compatibility: use deprecated class methods
+                can_create = NestingRules.can_create_child(parent_task, column)
                 max_depth = NestingRules.get_max_depth(column)
+
+            if not can_create:
                 logger.warning(f"Nesting limit reached: parent_level={parent_task.level}, max_depth={max_depth}, column={column}")
                 raise NestingLimitError(
                     f"Cannot create child task. Parent task at level {parent_task.level} "
@@ -376,7 +390,11 @@ class TaskService:
                 )
 
             # Get the allowed child level
-            child_level = NestingRules.get_allowed_child_level(parent_task, column)
+            if self._nesting_rules:
+                child_level = self._nesting_rules.get_allowed_child_level_instance(parent_task, column)
+            else:
+                # Backward compatibility: use deprecated class methods
+                child_level = NestingRules.get_allowed_child_level(parent_task, column)
             if child_level is None:
                 logger.error(f"Cannot determine child level: parent_level={parent_task.level}, column={column}")
                 raise NestingLimitError(
