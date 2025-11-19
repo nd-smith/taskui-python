@@ -25,3 +25,10 @@ mode = auto
 # Prefer using 'aws configure' or environment variables
 # aws_access_key_id = your-access-key-here
 # aws_secret_access_key = your-secret-key-here
+
+# End-to-End Encryption (HIGHLY RECOMMENDED)
+# Encrypts print job data before sending to SQS
+# Generate a key with: python scripts/generate_encryption_key.py
+# SECURITY WARNING: Do not commit encryption key to git!
+# The same key must be configured on both the app and Raspberry Pi
+# encryption_key = your-base64-encoded-key-here

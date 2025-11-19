@@ -21,18 +21,23 @@ import json
 import logging
 import time
 import sys
+import os
 from datetime import datetime
 from typing import Optional, Dict, Any
 from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Raspberry Pi specific imports
 try:
     from escpos.printer import Network
     import boto3
     from botocore.exceptions import NoCredentialsError, ClientError
+    from taskui.services.encryption import MessageEncryption
 except ImportError as e:
     print(f"Missing required package: {e}")
-    print("Install with: pip install boto3 python-escpos")
+    print("Install with: pip install boto3 python-escpos cryptography")
     sys.exit(1)
 
 
@@ -59,7 +64,8 @@ class PrintWorkerConfig:
         region: str = "us-east-1",
         poll_interval: int = 5,
         visibility_timeout: int = 30,
-        wait_time: int = 20
+        wait_time: int = 20,
+        encryption_key: Optional[str] = None
     ):
         """
         Initialize print worker configuration.
@@ -72,6 +78,7 @@ class PrintWorkerConfig:
             poll_interval: Seconds between polls (short polling)
             visibility_timeout: Message visibility timeout (seconds)
             wait_time: Long polling wait time (seconds, 0-20)
+            encryption_key: Base64-encoded encryption key for end-to-end encryption
         """
         self.queue_url = queue_url
         self.printer_host = printer_host
@@ -80,10 +87,16 @@ class PrintWorkerConfig:
         self.poll_interval = poll_interval
         self.visibility_timeout = visibility_timeout
         self.wait_time = wait_time
+        self.encryption_key = encryption_key
 
     @classmethod
     def from_args(cls, args) -> "PrintWorkerConfig":
         """Create config from command line arguments."""
+        # Get encryption key from args or environment variable
+        encryption_key = getattr(args, 'encryption_key', None)
+        if not encryption_key:
+            encryption_key = os.environ.get('TASKUI_ENCRYPTION_KEY')
+
         return cls(
             queue_url=args.queue_url,
             printer_host=args.printer_host,
@@ -91,7 +104,8 @@ class PrintWorkerConfig:
             region=args.region,
             poll_interval=args.poll_interval,
             visibility_timeout=args.visibility_timeout,
-            wait_time=args.wait_time
+            wait_time=args.wait_time,
+            encryption_key=encryption_key
         )
 
 
@@ -114,6 +128,13 @@ class PrintWorker:
             'jobs_failed': 0,
             'started_at': None
         }
+
+        # Initialize encryption
+        self.encryption = MessageEncryption(config.encryption_key)
+        if self.encryption.enabled:
+            logger.info("End-to-end encryption enabled for received messages")
+        else:
+            logger.warning("End-to-end encryption NOT enabled - expecting plaintext messages")
 
         logger.info(f"Print worker initialized for queue: {config.queue_url}")
 
@@ -223,8 +244,12 @@ class PrintWorker:
         receipt_handle = message['ReceiptHandle']
 
         try:
-            # Parse message body
-            job_data = json.loads(message['Body'])
+            # Get encrypted message body
+            encrypted_body = message['Body']
+
+            # Decrypt the message (if encryption is enabled)
+            job_data = self.encryption.decrypt_message(encrypted_body)
+
             logger.info(f"Processing job {message_id}: {job_data.get('task', {}).get('title', 'Unknown')}")
 
             # Execute print job
@@ -354,6 +379,10 @@ def main():
         type=int,
         default=20,
         help='Long polling wait time in seconds, 0-20 (default: 20)'
+    )
+    parser.add_argument(
+        '--encryption-key',
+        help='Base64-encoded encryption key (or use TASKUI_ENCRYPTION_KEY env var)'
     )
 
     args = parser.parse_args()
