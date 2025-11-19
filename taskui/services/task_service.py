@@ -871,6 +871,9 @@ class TaskService:
         """
         Unarchive (restore) an archived task.
 
+        If the task has a parent that is not active (archived or doesn't exist),
+        the task will be set as a top-level task (level 0, no parent).
+
         Args:
             task_id: UUID of the task to unarchive
 
@@ -882,6 +885,23 @@ class TaskService:
         """
         # Get the task
         task_orm = await self._get_task_or_raise(task_id)
+
+        # Check if task has a parent and if parent is active
+        if task_orm.parent_id:
+            parent_stmt = select(TaskORM).where(
+                TaskORM.id == task_orm.parent_id
+            )
+            result = await self.session.execute(parent_stmt)
+            parent = result.scalar_one_or_none()
+
+            # If parent doesn't exist or is archived, make this a top-level task
+            if not parent or parent.is_archived:
+                logger.info(
+                    f"Task {task_id} parent (id={task_orm.parent_id}) is not active. "
+                    f"Setting task as top-level (level 0)."
+                )
+                task_orm.parent_id = None
+                task_orm.level = 0
 
         # Unarchive the task
         task_orm.is_archived = False

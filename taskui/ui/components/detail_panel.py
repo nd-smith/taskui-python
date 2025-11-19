@@ -202,6 +202,10 @@ class DetailPanel(Widget):
         self.task_hierarchy = hierarchy or []
         self._render_details()
 
+    def clear(self) -> None:
+        """Clear the detail panel and show empty state."""
+        self.set_task(None, None)
+
     def _render_details(self) -> None:
         """Render the task details to the content container.
 
