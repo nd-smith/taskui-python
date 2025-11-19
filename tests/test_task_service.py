@@ -1082,6 +1082,39 @@ class TestTaskServiceArchive:
             await service.unarchive_task(uuid4())
 
     @pytest.mark.asyncio
+    async def test_unarchive_orphaned_child_becomes_top_level(self, db_session, sample_task_list, sample_list_id):
+        """Test that restoring a child task with archived parent becomes top-level."""
+        service = TaskService(db_session)
+
+        # Create parent task
+        parent_task = await service.create_task("Parent Task", sample_list_id)
+
+        # Create child task
+        child_task = await service.create_child_task(
+            parent_id=parent_task.id,
+            title="Child Task",
+            column=Column.COLUMN1
+        )
+
+        # Verify child has parent
+        assert child_task.parent_id == parent_task.id
+        assert child_task.level == 1
+
+        # Complete and archive both tasks
+        await service.toggle_completion(parent_task.id)
+        await service.archive_task(parent_task.id)
+        await service.toggle_completion(child_task.id)
+        await service.archive_task(child_task.id)
+
+        # Restore the child task (parent is still archived)
+        restored_child = await service.unarchive_task(child_task.id)
+
+        # Verify child is now top-level
+        assert restored_child.parent_id is None
+        assert restored_child.level == 0
+        assert not restored_child.is_archived
+
+    @pytest.mark.asyncio
     async def test_get_archived_tasks(self, db_session, sample_task_list, sample_list_id):
         """Test retrieving all archived tasks for a list."""
         service = TaskService(db_session)
