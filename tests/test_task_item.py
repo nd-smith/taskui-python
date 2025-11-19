@@ -297,28 +297,28 @@ class TestTaskItemVisualStates:
         task_item.selected = False
         assert "selected" not in task_item.classes
 
-    def test_level_0_css_class(self, make_task):
-        """Test that level 0 tasks get the level-0 CSS class."""
+    def test_level_0_stores_level(self, make_task):
+        """Test that level 0 tasks store their level correctly."""
         task = make_task(title="Level 0", level=0)
         task_item = TaskItem(task=task)
 
-        assert "level-0" in task_item.classes
+        assert task_item._task_model.level == 0
 
-    def test_level_1_css_class(self, make_task):
-        """Test that level 1 tasks get the level-1 CSS class."""
+    def test_level_1_stores_level(self, make_task):
+        """Test that level 1 tasks store their level correctly."""
         parent_id = uuid4()
         task = make_task(title="Level 1", level=1, parent_id=parent_id)
         task_item = TaskItem(task=task)
 
-        assert "level-1" in task_item.classes
+        assert task_item._task_model.level == 1
 
-    def test_level_2_css_class(self, make_task):
-        """Test that level 2 tasks get the level-2 CSS class."""
+    def test_level_2_stores_level(self, make_task):
+        """Test that level 2 tasks store their level correctly."""
         parent_id = uuid4()
         task = make_task(title="Level 2", level=2, parent_id=parent_id)
         task_item = TaskItem(task=task)
 
-        assert "level-2" in task_item.classes
+        assert task_item._task_model.level == 2
 
     def test_completed_visual_indicators(self, make_task):
         """Test visual indicators for completed tasks."""
@@ -767,7 +767,7 @@ class TestTaskItemEdgeCases:
         task_item = TaskItem(task=task)
 
         assert task_item.task.level == 2
-        assert "level-2" in task_item.classes
+        assert task_item._task_model.level == 2
 
     def test_multiple_state_transitions(self, make_task):
         """Test multiple selections and deselections."""

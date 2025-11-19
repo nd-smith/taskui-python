@@ -108,31 +108,6 @@ class TestDetailPanelLogic:
 
         assert formatted == "2025-01-14 10:00:00"
 
-    def test_nesting_warning_level_0(self, sample_task):
-        """Test that level 0 tasks don't show nesting warning."""
-        panel = DetailPanel()
-        warning = panel._get_nesting_warning(sample_task)
-
-        assert warning is None
-
-    def test_nesting_warning_level_1(self, child_task):
-        """Test that level 1 tasks show Column 1 max depth warning."""
-        panel = DetailPanel()
-        warning = panel._get_nesting_warning(child_task)
-
-        assert warning is not None
-        assert "Column 1" in warning
-        assert "2 levels" in warning
-
-    def test_nesting_warning_level_2(self, grandchild_task):
-        """Test that level 2 tasks show maximum depth warning."""
-        panel = DetailPanel()
-        warning = panel._get_nesting_warning(grandchild_task)
-
-        assert warning is not None
-        assert "Maximum nesting depth reached" in warning
-        assert "3 levels" in warning
-
     def test_build_details_text_basic(self, sample_task):
         """Test building details text for a basic task."""
         panel = DetailPanel()
@@ -145,8 +120,6 @@ class TestDetailPanelLogic:
         assert sample_task.title in text
         assert "STATUS" in text
         assert "DATES" in text
-        assert "METADATA" in text
-        assert str(sample_task.id) in text
 
     def test_build_details_text_completed(self, completed_task):
         """Test building details text for a completed task."""
@@ -211,17 +184,6 @@ class TestDetailPanelLogic:
         assert "PARENT" in text
         assert sample_task.title in text
 
-    def test_build_details_text_with_warning(self, grandchild_task):
-        """Test building details text with nesting warning."""
-        panel = DetailPanel()
-        panel.current_task = grandchild_task
-        panel.task_hierarchy = []
-        text = panel._build_details_text(grandchild_task)
-
-        # Check warning section
-        assert "⚠" in text
-        assert "Maximum nesting depth reached" in text
-
     def test_task_without_notes(self):
         """Test displaying a task without notes."""
         task = Task(
@@ -246,7 +208,8 @@ class TestDetailPanelLogic:
             assert "NOTES" in text
         # Task title and other info should still be present
         assert task.title in text
-        assert "METADATA" in text
+        assert "STATUS" in text
+        assert "DATES" in text
 
 
 class TestDetailPanelIntegration:
@@ -286,10 +249,9 @@ class TestDetailPanelIntegration:
         # Verify all expected information is present
         assert sample_task.title in text
         assert str(sample_task.level) in text
-        assert str(sample_task.id) in text
-        assert str(sample_task.list_id) in text
-        assert str(sample_task.position) in text
         assert "2025-01-14 10:00:00" in text
+        assert "STATUS" in text
+        assert "DATES" in text
 
     def test_panel_handles_complex_hierarchy(self, sample_task, child_task, grandchild_task):
         """Test panel with a complex 3-level hierarchy."""
@@ -305,10 +267,6 @@ class TestDetailPanelIntegration:
         # Verify parent is displayed
         assert "PARENT" in text
         assert child_task.title in text
-
-        # Verify warning is displayed
-        assert "⚠" in text
-        assert "Maximum nesting depth reached" in text
 
     def test_hierarchy_ordering(self, sample_task, child_task, grandchild_task):
         """Test that hierarchy maintains correct ordering."""

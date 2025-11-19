@@ -7,7 +7,6 @@ about a selected task including:
 - Complete hierarchy path
 - Parent information
 - Notes
-- Nesting warnings
 """
 
 from typing import Optional, List
@@ -51,7 +50,6 @@ class DetailPanel(Widget):
     - Complete hierarchy path from root
     - Parent task information
     - Task notes
-    - Nesting warnings when at maximum depth
     """
 
     # Disable keyboard focus - Column 3 is display-only
@@ -320,11 +318,6 @@ class DetailPanel(Widget):
                 lines.append(f"  [italic]{note_line}[/italic]")
             lines.append("")
 
-        # Nesting Warning Section
-        warning = self._get_nesting_warning(task)
-        if warning:
-            lines.append(f"[bold #FD971F]⚠ {warning}[/bold #FD971F]")
-
         return "\n".join(lines)
 
     def _format_datetime(self, dt: datetime) -> str:
@@ -337,26 +330,6 @@ class DetailPanel(Widget):
             Formatted datetime string
         """
         return dt.strftime("%Y-%m-%d %H:%M:%S")
-
-    def _get_nesting_warning(self, task: Task) -> Optional[str]:
-        """Get nesting warning message if task is at maximum depth.
-
-        Args:
-            task: Task to check
-
-        Returns:
-            Warning message string or None
-        """
-        warning = None
-        if task.level == 1:
-            warning = "Maximum nesting depth for Column 1 (2 levels)"
-        elif task.level == 2:
-            warning = "Maximum nesting depth reached (3 levels)"
-
-        if warning:
-            logger.debug(f"DetailPanel: Nesting warning for task {task.id}: {warning}")
-
-        return warning
 
     def on_focus(self) -> None:
         """Handle widget focus event.

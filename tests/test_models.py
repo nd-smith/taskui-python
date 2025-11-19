@@ -170,13 +170,13 @@ class TestTask:
         assert "greater than or equal to 0" in str(exc_info.value)
 
     def test_task_level_validation_too_high(self):
-        """Test that levels over 2 are rejected."""
+        """Test that levels over 2 are rejected (default behavior)."""
         list_id = uuid4()
         parent_id = uuid4()
         with pytest.raises(ValidationError) as exc_info:
             Task(title="Test", list_id=list_id, level=3, parent_id=parent_id)
 
-        assert "less than or equal to 2" in str(exc_info.value)
+        assert "Task level must be between 0 and 2" in str(exc_info.value)
 
     def test_task_level_0_cannot_have_parent(self):
         """Test that level 0 tasks cannot have a parent_id."""

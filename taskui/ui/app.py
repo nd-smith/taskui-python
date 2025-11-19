@@ -1,9 +1,11 @@
 """Main Textual application for TaskUI.
 
 This module contains the main TaskUI application with three-column layout:
-- Column 1: Tasks (max 2 levels)
-- Column 2: Subtasks (max 3 levels, context-relative)
+- Column 1: Tasks (configurable nesting depth)
+- Column 2: Subtasks (configurable nesting depth, context-relative)
 - Column 3: Details (task information)
+
+Nesting depth is configured via ~/.taskui/nesting.toml or uses sensible defaults.
 """
 
 from typing import Optional, Any, List
@@ -17,7 +19,8 @@ from textual.events import Key
 from taskui.database import DatabaseManager, get_database_manager
 from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
-from taskui.services.nesting_rules import Column as NestingColumn
+from taskui.config.nesting_config import NestingConfig
+from taskui.services.nesting_rules import Column as NestingColumn, NestingRules
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
 from taskui.services.printer_service import PrinterService, PrinterConfig
@@ -131,6 +134,20 @@ class TaskUI(App):
         self._current_list_id: Optional[UUID] = None  # Will be set after database initialization
         self._lists: List[TaskList] = []  # Store available lists
         self._printer_service: Optional[CloudPrintQueue] = None  # Cloud print queue service
+        self._nesting_rules: Optional[NestingRules] = None  # Nesting rules engine
+
+        # Load nesting configuration
+        try:
+            nesting_config = NestingConfig.from_toml_file()
+            self._nesting_rules = NestingRules(nesting_config)
+            logger.info(
+                f"Nesting config loaded: column1.max_depth={nesting_config.column1.max_depth}, "
+                f"column2.max_depth={nesting_config.column2.max_depth}"
+            )
+        except Exception as e:
+            # Fall back to default nesting rules if config loading fails
+            logger.warning(f"Failed to load nesting config, using defaults: {e}")
+            self._nesting_rules = NestingRules()  # Uses default config
 
     def compose(self) -> ComposeResult:
         """Compose the application layout.
@@ -249,7 +266,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 fresh_task = await task_service.get_task_by_id(message.task.id)
 
             if not fresh_task:
@@ -318,7 +335,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 # Unarchive (restore) the task
                 restored_task = await task_service.unarchive_task(message.task_id)
 
@@ -355,7 +372,7 @@ class TaskUI(App):
         if self._db_manager and self._current_list_id:
             try:
                 async with self._db_manager.get_session() as session:
-                    task_service = TaskService(session)
+                    task_service = TaskService(session, nesting_rules=self._nesting_rules)
                     tasks = await self._get_tasks_with_children(
                         task_service,
                         self._current_list_id,
@@ -549,7 +566,8 @@ class TaskUI(App):
         modal = TaskCreationModal(
             mode="create_sibling",
             parent_task=selected_task,
-            column=nesting_column
+            column=nesting_column,
+            nesting_rules=self._nesting_rules
         )
         self.push_screen(modal)
 
@@ -561,27 +579,27 @@ class TaskUI(App):
 
         Hierarchical creation:
         - Column 1 focused: Creates child of Column 1 selection
-        - Column 2 focused: Creates child of Column 1 selection (appears in Column 2)
+        - Column 2 focused: Creates child of Column 2 selection (or Column 1 if Column 2 is empty)
 
         Note: Column 3 is not focusable (display-only), so no handling needed.
         """
-        # Determine which column to get the parent task from
-        # When Column 2 is focused, use Column 1's selection as the parent
-        if self._focused_column_id == COLUMN_2_ID:
-            # Column 2 is filtered by Column 1's selection - use that as parent
-            try:
-                parent_column = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            except Exception as e:
-                logger.error(f"Could not get Column 1: {e}")
-                return
-        else:
-            # Column 1 focused - use its own selection
-            parent_column = self._get_focused_column()
+        # Use the currently focused column's selected task as the parent
+        parent_column = self._get_focused_column()
 
         if not parent_column:
             return
 
         selected_task = parent_column.get_selected_task()
+
+        # Fallback: If Column 2 is focused but empty, use Column 1's selection
+        if not selected_task and self._focused_column_id == COLUMN_2_ID:
+            try:
+                column1 = self.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+                selected_task = column1.get_selected_task()
+            except Exception as e:
+                logger.error(f"Could not get Column 1 selection: {e}")
+                return
+
         if not selected_task:
             # Can't create a child without a parent selected
             return
@@ -593,7 +611,8 @@ class TaskUI(App):
         modal = TaskCreationModal(
             mode="create_child",
             parent_task=selected_task,
-            column=nesting_column
+            column=nesting_column,
+            nesting_rules=self._nesting_rules
         )
         self.push_screen(modal)
 
@@ -621,7 +640,8 @@ class TaskUI(App):
             mode="edit",
             parent_task=None,  # Not needed for edit mode
             column=nesting_column,
-            edit_task=selected_task
+            edit_task=selected_task,
+            nesting_rules=self._nesting_rules
         )
         self.push_screen(modal)
 
@@ -652,7 +672,7 @@ class TaskUI(App):
         try:
             # Single combined session for toggle and fetch
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
 
                 # Toggle the task completion status
                 await task_service.toggle_completion(selected_task.id)
@@ -708,7 +728,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 # Archive the task
                 await task_service.archive_task(selected_task.id)
 
@@ -741,7 +761,7 @@ class TaskUI(App):
         try:
             # Get archived tasks for the current list
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 archived_tasks = await task_service.get_archived_tasks(
                     self._current_list_id
                 )
@@ -783,7 +803,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 # Soft delete the task (archives it without completion check)
                 await task_service.soft_delete_task(selected_task.id)
 
@@ -849,7 +869,7 @@ class TaskUI(App):
 
             # Get children from database
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 children = await task_service.get_children(selected_task.id, include_archived=False)
 
             # Send print job to cloud queue
@@ -1093,7 +1113,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 await task_service.update_task(task_id, title=title, notes=notes)
 
             # Notify user of successful edit
@@ -1127,7 +1147,7 @@ class TaskUI(App):
             parent_id = self._get_parent_id_for_sibling(parent_task)
 
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
 
                 if parent_id is None:
                     # Create top-level task
@@ -1172,7 +1192,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 # Create a child task under the selected parent
                 await task_service.create_child_task(
                     parent_id=parent_task.id,
@@ -1297,7 +1317,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 # Build the hierarchy by traversing up the parent chain
                 hierarchy: List[Task] = []
                 current_task = await task_service.get_task_by_id(task_id)
@@ -1337,7 +1357,7 @@ class TaskUI(App):
 
         try:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 # Get all descendants (children, grandchildren, etc.)
                 descendants = await task_service.get_all_descendants(parent_id, include_archived=False)
 
@@ -1417,7 +1437,7 @@ class TaskUI(App):
         # For Column 1, reload top-level tasks with their children (2 levels)
         if column.column_id == COLUMN_1_ID and self._current_list_id:
             async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+                task_service = TaskService(session, nesting_rules=self._nesting_rules)
                 tasks = await self._get_tasks_with_children(
                     task_service,
                     self._current_list_id,
@@ -1475,8 +1495,11 @@ class TaskUI(App):
         # Get children of the selected task
         children = await self._get_task_children(selected_task.id)
 
-        # Adjust levels to be context-relative (children start at level 0)
-        adjusted_children = self._make_levels_context_relative(children, selected_task.level)
+        # Adjust levels to be context-relative if configured (children start at level 0)
+        if self._nesting_rules._config.column2.context_relative:
+            adjusted_children = self._make_levels_context_relative(children, selected_task.level)
+        else:
+            adjusted_children = children
 
         # Update Column 2 header
         header_title = f"{selected_task.title} Subtasks"
