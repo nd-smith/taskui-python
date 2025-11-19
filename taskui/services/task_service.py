@@ -319,14 +319,25 @@ class TaskService:
             # Get next position
             position = await self._get_next_position(list_id, parent_id=None)
 
-            # Create task
-            task = Task(
-                title=title,
-                notes=notes,
-                list_id=list_id,
-                level=0,
-                position=position,
-                parent_id=None,
+            # Determine max_level for validation context
+            # Top-level tasks are in column1, so use column1's max_depth if available
+            if self._nesting_rules:
+                max_level = self._nesting_rules.get_max_depth_instance(Column.COLUMN1)
+            else:
+                # Backward compatibility: use max of all columns
+                max_level = 2
+
+            # Create task with validation context
+            task = Task.model_validate(
+                {
+                    'title': title,
+                    'notes': notes,
+                    'list_id': list_id,
+                    'level': 0,
+                    'position': position,
+                    'parent_id': None,
+                },
+                context={'max_level': max_level}
             )
 
             # Convert to ORM and save
@@ -405,14 +416,18 @@ class TaskService:
             # Get next position among siblings
             position = await self._get_next_position(parent_task.list_id, parent_id=parent_id)
 
-            # Create child task
-            child_task = Task(
-                title=title,
-                notes=notes,
-                list_id=parent_task.list_id,
-                parent_id=parent_id,
-                level=child_level,
-                position=position,
+            # Create child task with validation context
+            # Use the column's max_depth as max_level for validation
+            child_task = Task.model_validate(
+                {
+                    'title': title,
+                    'notes': notes,
+                    'list_id': parent_task.list_id,
+                    'parent_id': parent_id,
+                    'level': child_level,
+                    'position': position,
+                },
+                context={'max_level': max_depth}
             )
 
             # Convert to ORM and save
