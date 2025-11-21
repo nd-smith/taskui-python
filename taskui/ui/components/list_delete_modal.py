@@ -23,6 +23,7 @@ from textual.binding import Binding
 
 from taskui.logging_config import get_logger
 from taskui.models import TaskList
+from taskui.ui.base_styles import MODAL_BASE_CSS, BUTTON_BASE_CSS
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -30,8 +31,6 @@ from taskui.ui.theme import (
     SELECTION,
     LEVEL_0_COLOR,
     LEVEL_1_COLOR,
-    LEVEL_2_COLOR,
-    MODAL_OVERLAY_BG,
     ORANGE,
     RED,
 )
@@ -51,27 +50,19 @@ class ListDeleteModal(ModalScreen):
         DeleteCancelled: Emitted when deletion is cancelled
     """
 
-    DEFAULT_CSS = f"""
-    ListDeleteModal {{
-        align: center middle;
-        background: {MODAL_OVERLAY_BG};
-    }}
-
+    # Use base modal and button styles, plus modal-specific overrides
+    DEFAULT_CSS = MODAL_BASE_CSS + BUTTON_BASE_CSS + f"""
     ListDeleteModal > Container {{
         width: 75;
         height: auto;
-        background: {BACKGROUND};
         border: thick {RED};
-        padding: 1 2;
     }}
 
     ListDeleteModal .modal-header {{
         width: 100%;
         height: 3;
         content-align: center middle;
-        text-style: bold;
         color: {RED};
-        border-bottom: solid {BORDER};
         margin-bottom: 1;
     }}
 
@@ -89,7 +80,6 @@ class ListDeleteModal(ModalScreen):
     ListDeleteModal .info-text {{
         width: 100%;
         height: auto;
-        color: {FOREGROUND};
         text-align: center;
         margin-bottom: 1;
         padding: 0 1;
@@ -153,14 +143,6 @@ class ListDeleteModal(ModalScreen):
     ListDeleteModal Button {{
         margin: 0 1;
         min-width: 15;
-        background: {SELECTION};
-        color: {FOREGROUND};
-        border: solid {BORDER};
-    }}
-
-    ListDeleteModal Button:hover {{
-        background: {BORDER};
-        border: solid {LEVEL_0_COLOR};
     }}
 
     ListDeleteModal Button.confirm-button {{

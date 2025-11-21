@@ -18,15 +18,9 @@ from textual.binding import Binding
 
 from taskui.logging_config import get_logger
 from taskui.models import TaskList
+from taskui.ui.base_styles import MODAL_BASE_CSS, BUTTON_BASE_CSS
 from taskui.ui.theme import (
-    BACKGROUND,
-    FOREGROUND,
-    BORDER,
-    SELECTION,
-    LEVEL_0_COLOR,
     LEVEL_1_COLOR,
-    LEVEL_2_COLOR,
-    MODAL_OVERLAY_BG,
     ORANGE,
 )
 
@@ -45,27 +39,17 @@ class ListManagementModal(ModalScreen):
         ListCancelled: Emitted when the modal is cancelled
     """
 
-    DEFAULT_CSS = f"""
-    ListManagementModal {{
-        align: center middle;
-        background: {MODAL_OVERLAY_BG};
-    }}
-
+    # Use base modal and button styles, plus modal-specific overrides
+    DEFAULT_CSS = MODAL_BASE_CSS + BUTTON_BASE_CSS + f"""
     ListManagementModal > Container {{
         width: 60;
         height: auto;
-        background: {BACKGROUND};
-        border: thick {LEVEL_0_COLOR};
-        padding: 1 2;
     }}
 
     ListManagementModal .modal-header {{
         width: 100%;
         height: 3;
         content-align: center middle;
-        text-style: bold;
-        color: {LEVEL_0_COLOR};
-        border-bottom: solid {BORDER};
         margin-bottom: 1;
     }}
 
@@ -91,20 +75,12 @@ class ListManagementModal(ModalScreen):
     ListManagementModal .field-label {{
         width: 100%;
         height: 1;
-        color: {FOREGROUND};
         margin-top: 1;
     }}
 
     ListManagementModal Input {{
         width: 100%;
         margin-bottom: 1;
-        background: {BORDER};
-        color: {FOREGROUND};
-        border: solid {SELECTION};
-    }}
-
-    ListManagementModal Input:focus {{
-        border: solid {LEVEL_0_COLOR};
     }}
 
     ListManagementModal .button-container {{
@@ -118,32 +94,6 @@ class ListManagementModal(ModalScreen):
     ListManagementModal Button {{
         margin: 0 1;
         min-width: 15;
-        background: {SELECTION};
-        color: {FOREGROUND};
-        border: solid {BORDER};
-    }}
-
-    ListManagementModal Button:hover {{
-        background: {BORDER};
-        border: solid {LEVEL_0_COLOR};
-    }}
-
-    ListManagementModal Button.save-button {{
-        border: solid {LEVEL_1_COLOR};
-    }}
-
-    ListManagementModal Button.save-button:hover {{
-        background: {LEVEL_1_COLOR};
-        color: {BACKGROUND};
-    }}
-
-    ListManagementModal Button.cancel-button {{
-        border: solid {LEVEL_2_COLOR};
-    }}
-
-    ListManagementModal Button.cancel-button:hover {{
-        background: {LEVEL_2_COLOR};
-        color: {BACKGROUND};
     }}
     """
 
@@ -199,8 +149,8 @@ class ListManagementModal(ModalScreen):
 
             # Buttons
             with Container(classes="button-container"):
-                yield Button("Save [Enter]", variant="success", id="save-button", classes="save-button")
-                yield Button("Cancel [Esc]", variant="error", id="cancel-button", classes="cancel-button")
+                yield Button("Save [Enter]", id="save-button", classes="success")
+                yield Button("Cancel [Esc]", id="cancel-button", classes="error")
 
     def on_mount(self) -> None:
         """Called when the modal is mounted."""

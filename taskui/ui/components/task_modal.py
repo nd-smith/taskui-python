@@ -21,15 +21,9 @@ from textual.binding import Binding
 from taskui.logging_config import get_logger
 from taskui.models import Task
 from taskui.services.nesting_validation import can_create_child, MAX_NESTING_DEPTH
+from taskui.ui.base_styles import MODAL_BASE_CSS, BUTTON_BASE_CSS
 from taskui.ui.theme import (
-    BACKGROUND,
-    FOREGROUND,
-    BORDER,
-    SELECTION,
-    LEVEL_0_COLOR,
     LEVEL_1_COLOR,
-    LEVEL_2_COLOR,
-    MODAL_OVERLAY_BG,
     ORANGE,
 )
 
@@ -51,27 +45,17 @@ class TaskCreationModal(ModalScreen):
         TaskCancelled: Emitted when the modal is cancelled
     """
 
-    DEFAULT_CSS = f"""
-    TaskCreationModal {{
-        align: center middle;
-        background: {MODAL_OVERLAY_BG};
-    }}
-
+    # Use base modal and button styles, plus modal-specific overrides
+    DEFAULT_CSS = MODAL_BASE_CSS + BUTTON_BASE_CSS + f"""
     TaskCreationModal > Container {{
         width: 70;
         height: auto;
-        background: {BACKGROUND};
-        border: thick {LEVEL_0_COLOR};
-        padding: 1 2;
     }}
 
     TaskCreationModal .modal-header {{
         width: 100%;
         height: 3;
         content-align: center middle;
-        text-style: bold;
-        color: {LEVEL_0_COLOR};
-        border-bottom: solid {BORDER};
         margin-bottom: 1;
     }}
 
@@ -97,33 +81,18 @@ class TaskCreationModal(ModalScreen):
     TaskCreationModal .field-label {{
         width: 100%;
         height: 1;
-        color: {FOREGROUND};
         margin-top: 1;
     }}
 
     TaskCreationModal Input {{
         width: 100%;
         margin-bottom: 1;
-        background: {BORDER};
-        color: {FOREGROUND};
-        border: solid {SELECTION};
-    }}
-
-    TaskCreationModal Input:focus {{
-        border: solid {LEVEL_0_COLOR};
     }}
 
     TaskCreationModal TextArea {{
         width: 100%;
         height: 8;
         margin-bottom: 1;
-        background: {BORDER};
-        color: {FOREGROUND};
-        border: solid {SELECTION};
-    }}
-
-    TaskCreationModal TextArea:focus {{
-        border: solid {LEVEL_0_COLOR};
     }}
 
     TaskCreationModal .button-container {{
@@ -137,32 +106,6 @@ class TaskCreationModal(ModalScreen):
     TaskCreationModal Button {{
         margin: 0 1;
         min-width: 15;
-        background: {SELECTION};
-        color: {FOREGROUND};
-        border: solid {BORDER};
-    }}
-
-    TaskCreationModal Button:hover {{
-        background: {BORDER};
-        border: solid {LEVEL_0_COLOR};
-    }}
-
-    TaskCreationModal Button.save-button {{
-        border: solid {LEVEL_1_COLOR};
-    }}
-
-    TaskCreationModal Button.save-button:hover {{
-        background: {LEVEL_1_COLOR};
-        color: {BACKGROUND};
-    }}
-
-    TaskCreationModal Button.cancel-button {{
-        border: solid {LEVEL_2_COLOR};
-    }}
-
-    TaskCreationModal Button.cancel-button:hover {{
-        background: {LEVEL_2_COLOR};
-        color: {BACKGROUND};
     }}
     """
 
@@ -262,8 +205,8 @@ class TaskCreationModal(ModalScreen):
 
             # Buttons
             with Container(classes="button-container"):
-                yield Button("Save [Enter]", variant="success", id="save-button", classes="save-button")
-                yield Button("Cancel [Esc]", variant="error", id="cancel-button", classes="cancel-button")
+                yield Button("Save [Enter]", id="save-button", classes="success")
+                yield Button("Cancel [Esc]", id="cancel-button", classes="error")
 
     def _get_header_text(self) -> str:
         """Get the modal header text based on mode.

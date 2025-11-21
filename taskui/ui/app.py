@@ -8,6 +8,7 @@ This module contains the main TaskUI application with three-column layout:
 Nesting depth is configured via ~/.taskui/nesting.toml or uses sensible defaults.
 """
 
+from contextlib import asynccontextmanager
 from typing import Optional, Any, List
 from uuid import UUID
 
@@ -248,8 +249,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 fresh_task = await task_service.get_task_by_id(message.task.id)
 
             if not fresh_task:
@@ -324,8 +324,7 @@ class TaskUI(App):
         # Load tasks for the selected list into Column 1 (with 2 levels of hierarchy)
         if self._db_manager and self._current_list_id:
             try:
-                async with self._db_manager.get_session() as session:
-                    task_service = TaskService(session)
+                async with self._with_task_service() as task_service:
                     tasks = await self._get_tasks_with_children(
                         task_service,
                         self._current_list_id
@@ -347,9 +346,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                list_service = ListService(session)
-
+            async with self._with_list_service() as list_service:
                 if message.mode == "create":
                     # Create new list
                     new_list = await list_service.create_list(message.name)
@@ -392,9 +389,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                list_service = ListService(session)
-
+            async with self._with_list_service() as list_service:
                 if message.option == "migrate":
                     # Migrate tasks to another list
                     if not message.target_list_id:
@@ -595,9 +590,7 @@ class TaskUI(App):
 
         try:
             # Single combined session for toggle and fetch
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-
+            async with self._with_task_service() as task_service:
                 # Toggle the task completion status
                 await task_service.toggle_completion(selected_task.id)
 
@@ -651,8 +644,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 # Permanently delete the task
                 await task_service.delete_task(selected_task.id)
 
@@ -717,8 +709,7 @@ class TaskUI(App):
             logger.info(f"Printing task card: {selected_task.title}")
 
             # Get children from database
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 children = await task_service.get_children(selected_task.id)
 
             # Send print job to cloud queue
@@ -886,6 +877,34 @@ class TaskUI(App):
         """
         return self._db_manager is not None and self._current_list_id is not None
 
+    @asynccontextmanager
+    async def _with_task_service(self):
+        """Context manager for TaskService with database session.
+
+        Yields:
+            TaskService instance with active database session
+
+        Example:
+            async with self._with_task_service() as task_service:
+                task = await task_service.get_task_by_id(task_id)
+        """
+        async with self._db_manager.get_session() as session:
+            yield TaskService(session)
+
+    @asynccontextmanager
+    async def _with_list_service(self):
+        """Context manager for ListService with database session.
+
+        Yields:
+            ListService instance with active database session
+
+        Example:
+            async with self._with_list_service() as list_service:
+                lists = await list_service.get_all_lists()
+        """
+        async with self._db_manager.get_session() as session:
+            yield ListService(session)
+
     def _notify_task_success(self, action: str, title: str, icon: str = "✓") -> None:
         """Show success notification for task operation.
 
@@ -942,8 +961,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 await task_service.update_task(task_id, title=title, notes=notes)
 
             # Notify user of successful edit
@@ -974,9 +992,7 @@ class TaskUI(App):
         try:
             parent_id = self._get_parent_id_for_sibling(parent_task)
 
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-
+            async with self._with_task_service() as task_service:
                 if parent_id is None:
                     # Create top-level task
                     await task_service.create_task(
@@ -1016,8 +1032,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 # Create a child task under the selected parent
                 await task_service.create_child_task(
                     parent_id=parent_task.id,
@@ -1045,9 +1060,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                list_service = ListService(session)
-
+            async with self._with_list_service() as list_service:
                 # Ensure default lists exist (creates them if needed)
                 self._lists = await list_service.ensure_default_lists()
 
@@ -1076,8 +1089,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                list_service = ListService(session)
+            async with self._with_list_service() as list_service:
                 self._lists = await list_service.get_all_lists()
 
                 # Update the list bar with the loaded lists
@@ -1139,8 +1151,7 @@ class TaskUI(App):
             return []
 
         try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 # Build the hierarchy by traversing up the parent chain
                 hierarchy: List[Task] = []
                 current_task = await task_service.get_task_by_id(task_id)
@@ -1179,8 +1190,7 @@ class TaskUI(App):
             return []
 
         try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 # Get all descendants (children, grandchildren, etc.)
                 descendants = await task_service.get_all_descendants(parent_id)
 
@@ -1259,8 +1269,7 @@ class TaskUI(App):
         """
         # For Column 1, reload top-level tasks with their children (2 levels)
         if column.column_id == COLUMN_1_ID and self._current_list_id:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
+            async with self._with_task_service() as task_service:
                 tasks = await self._get_tasks_with_children(
                     task_service,
                     self._current_list_id
@@ -1285,8 +1294,7 @@ class TaskUI(App):
             return
 
         try:
-            async with self._db_manager.get_session() as session:
-                list_service = ListService(session)
+            async with self._with_list_service() as list_service:
                 # Reload only the affected list (3 queries: 1 list + 1 task count + 1 completed count)
                 updated_list = await list_service.get_list_by_id(list_id)
 
