@@ -98,13 +98,11 @@ class TestTask:
         assert isinstance(task.id, UUID)
         assert isinstance(task.created_at, datetime)
         assert task.is_completed is False
-        assert task.is_archived is False
         assert task.level == 0
         assert task.position == 0
         assert task.parent_id is None
         assert task.notes is None
         assert task.completed_at is None
-        assert task.archived_at is None
 
     def test_task_creation_full(self):
         """Test creating a task with all fields."""
@@ -118,7 +116,6 @@ class TestTask:
             title="Review code",
             notes="Focus on error handling",
             is_completed=False,
-            is_archived=False,
             parent_id=parent_id,
             level=1,
             position=2,
@@ -320,45 +317,6 @@ class TestTask:
 
         assert task.is_completed is False
         assert task.completed_at is None
-
-    def test_task_archive_completed(self):
-        """Test archiving a completed task."""
-        list_id = uuid4()
-        task = Task(title="Test", list_id=list_id)
-        task.mark_completed()
-
-        assert task.is_archived is False
-        assert task.archived_at is None
-
-        task.archive()
-
-        assert task.is_archived is True
-        assert isinstance(task.archived_at, datetime)
-
-    def test_task_archive_incomplete_raises_error(self):
-        """Test that archiving an incomplete task raises an error."""
-        list_id = uuid4()
-        task = Task(title="Test", list_id=list_id)
-
-        with pytest.raises(ValueError) as exc_info:
-            task.archive()
-
-        assert "Only completed tasks can be archived" in str(exc_info.value)
-
-    def test_task_unarchive(self):
-        """Test unarchiving a task."""
-        list_id = uuid4()
-        task = Task(title="Test", list_id=list_id)
-        task.mark_completed()
-        task.archive()
-
-        assert task.is_archived is True
-        assert task.archived_at is not None
-
-        task.unarchive()
-
-        assert task.is_archived is False
-        assert task.archived_at is None
 
     def test_task_update_child_counts(self):
         """Test updating child counts."""

@@ -231,7 +231,7 @@ class DetailPanel(Widget):
         task = self.current_task
         logger.debug(
             f"DetailPanel: Rendering task details - id={task.id}, "
-            f"completed={task.is_completed}, archived={task.is_archived}, "
+            f"completed={task.is_completed}, "
             f"has_notes={bool(task.notes)}, has_parent={bool(task.parent_id)}"
         )
 
@@ -261,8 +261,6 @@ class DetailPanel(Widget):
         title_line = f"  {task.title}"
         if task.is_completed:
             title_line += " [#A6E22E]✓ Complete[/#A6E22E]"
-        if task.is_archived:
-            title_line += " [#FD971F]📦 Archived[/#FD971F]"
         lines.append(title_line)
         lines.append("")
 
@@ -273,9 +271,6 @@ class DetailPanel(Widget):
         status_color = "#A6E22E" if task.is_completed else "#E6DB74"  # YELLOW for incomplete
         lines.append(f"  Completion: [{status_color}]{status_text}[/{status_color}]")
 
-        if task.is_archived:
-            lines.append(f"  Archive: [#FD971F]Archived[/#FD971F]")
-
         lines.append(f"  Level: {task.level}")
         lines.append("")
 
@@ -285,9 +280,6 @@ class DetailPanel(Widget):
 
         if task.completed_at:
             lines.append(f"  Completed: [#AE81FF]{self._format_datetime(task.completed_at)}[/#AE81FF]")
-
-        if task.archived_at:
-            lines.append(f"  Archived: [#AE81FF]{self._format_datetime(task.archived_at)}[/#AE81FF]")
 
         lines.append("")
 

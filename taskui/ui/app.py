@@ -24,7 +24,6 @@ from taskui.services.list_service import ListService
 from taskui.services.printer_service import PrinterService, PrinterConfig
 from taskui.services.cloud_print_queue import CloudPrintQueue, CloudPrintConfig
 from taskui.ui.components.task_modal import TaskCreationModal
-from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
 from taskui.ui.components.list_management_modal import ListManagementModal
@@ -304,35 +303,6 @@ class TaskUI(App):
         """
         pass
 
-    async def on_archive_modal_task_restored(self, message: ArchiveModal.TaskRestored) -> None:
-        """Handle task restore from archive modal.
-
-        Args:
-            message: The TaskRestored message with task_id
-        """
-        logger.debug(f"Handling restore for task_id={message.task_id}")
-
-        if not self._has_db_manager():
-            logger.debug("No database manager available for restore")
-            return
-
-        try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                # Unarchive (restore) the task
-                restored_task = await task_service.unarchive_task(message.task_id)
-
-            logger.info(f"Task restored: {restored_task.title[:50]}")
-
-            # Notify user of successful restore
-            self._notify_task_success("restored", restored_task.title)
-
-            # Refresh UI to show the restored task
-            await self._refresh_ui_after_task_change()
-
-        except Exception as e:
-            logger.error("Error restoring task from archive", exc_info=True)
-            self._notify_task_error("restore task")
 
     async def on_list_bar_list_selected(self, message: ListBar.ListSelected) -> None:
         """Handle list selection from the list bar.
@@ -358,8 +328,7 @@ class TaskUI(App):
                     task_service = TaskService(session)
                     tasks = await self._get_tasks_with_children(
                         task_service,
-                        self._current_list_id,
-                        include_archived=False
+                        self._current_list_id
                     )
                     column1.set_tasks(tasks)
                     # Note: set_tasks() now handles triggering selection automatically
@@ -441,18 +410,6 @@ class TaskUI(App):
                         logger.info(f"Migrated tasks and deleted list: {message.list_to_delete.name}")
                         self.notify(
                             f"✓ Migrated tasks and deleted list: {message.list_to_delete.name}",
-                            severity="information",
-                            timeout=NOTIFICATION_TIMEOUT_MEDIUM
-                        )
-
-                elif message.option == "archive":
-                    # Archive completed tasks, delete the rest
-                    success = await list_service.archive_tasks_and_delete_list(message.list_to_delete.id)
-
-                    if success:
-                        logger.info(f"Archived tasks and deleted list: {message.list_to_delete.name}")
-                        self.notify(
-                            f"✓ Archived tasks and deleted list: {message.list_to_delete.name}",
                             severity="information",
                             timeout=NOTIFICATION_TIMEOUT_MEDIUM
                         )
@@ -663,88 +620,13 @@ class TaskUI(App):
             logger.error("Error toggling task completion", exc_info=True)
             self._notify_task_error("toggle completion")
 
-    async def action_archive_task(self) -> None:
-        """Archive the selected completed task ('a' key).
 
-        Archives the currently selected task if it is completed.
-        Only completed tasks can be archived. Archived tasks are removed
-        from the normal view and can be viewed/restored via the archive modal.
-        """
-        logger.debug("Archive key pressed ('a')")
-
-        column = self._get_focused_column()
-        if not column:
-            logger.debug("No focused column found for archive")
-            return
-
-        # Get the currently selected task
-        selected_task = column.get_selected_task()
-        if not selected_task:
-            logger.debug("No task selected for archive")
-            return
-
-        # Check if task is completed
-        if not selected_task.is_completed:
-            logger.debug(f"Task {selected_task.id} is not completed, cannot archive")
-            self.notify("Only completed tasks can be archived", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-            return
-
-        if not self._has_db_manager():
-            logger.debug("No database manager available for archive")
-            return
-
-        try:
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                # Archive the task
-                await task_service.archive_task(selected_task.id)
-
-            # Notify user of successful archive
-            self._notify_task_success("archived", selected_task.title, icon="📦")
-
-            # Refresh UI to remove archived task and clear detail panel
-            await self._refresh_ui_after_task_change(clear_detail_panel=True)
-
-        except ValueError as e:
-            # Task was not completed (shouldn't happen as we check above)
-            logger.error(f"Error archiving task: {e}", exc_info=True)
-            self._notify_task_error("archive task")
-        except Exception as e:
-            logger.error("Error archiving task", exc_info=True)
-            self._notify_task_error("archive task")
-
-    async def action_view_archives(self) -> None:
-        """View archived tasks modal ('v' key).
-
-        Opens a modal showing all archived tasks for the current list,
-        with search/filter functionality and the ability to restore tasks.
-        """
-        logger.debug("View archives key pressed ('v')")
-
-        if not self._can_perform_task_operation():
-            logger.debug("No database manager or current list available for viewing archives")
-            return
-
-        try:
-            # Get archived tasks for the current list
-            async with self._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                archived_tasks = await task_service.get_archived_tasks(
-                    self._current_list_id
-                )
-
-            # Create and show the archive modal
-            modal = ArchiveModal(archived_tasks=archived_tasks)
-            self.push_screen(modal)
-
-        except Exception as e:
-            logger.error("Error loading archived tasks", exc_info=True)
 
     async def action_delete_task(self) -> None:
         """Delete the selected task (Delete/Backspace key).
 
-        Soft deletes the task by archiving it. Unlike archive, this works on any task
-        (completed or not). Deleted tasks can be restored via the archive modal.
+        Permanently deletes the task and all its descendants from the database.
+        This operation cannot be undone.
         """
         logger.debug("Delete key pressed")
 
@@ -771,8 +653,8 @@ class TaskUI(App):
         try:
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
-                # Soft delete the task (archives it without completion check)
-                await task_service.soft_delete_task(selected_task.id)
+                # Permanently delete the task
+                await task_service.delete_task(selected_task.id)
 
             # Notify user of successful deletion
             self._notify_task_success("deleted", selected_task.title, icon="🗑️")
@@ -792,7 +674,7 @@ class TaskUI(App):
         """Show help information."""
         # Show notification with basic help info (full help screen not yet implemented)
         self.notify(
-            "Keybindings shown in footer. N=New Task, C=Child, E=Edit, Space=Complete, A=Archive, V=View Archives",
+            "Keybindings shown in footer. N=New Task, C=Child, E=Edit, Space=Complete, Delete=Permanent Delete",
             severity="information",
             timeout=NOTIFICATION_TIMEOUT_LONG
         )
@@ -837,7 +719,7 @@ class TaskUI(App):
             # Get children from database
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
-                children = await task_service.get_children(selected_task.id, include_archived=False)
+                children = await task_service.get_children(selected_task.id)
 
             # Send print job to cloud queue
             self._printer_service.send_print_job(selected_task, children)
@@ -1219,7 +1101,7 @@ class TaskUI(App):
         except Exception as e:
             logger.error("Error refreshing lists", exc_info=True)
 
-    async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID, include_archived: bool = False) -> List[Task]:
+    async def _get_tasks_with_children(self, task_service: TaskService, list_id: UUID) -> List[Task]:
         """Get top-level tasks and their children for a list (2 levels).
 
         Note: Fetches from database.
@@ -1227,18 +1109,17 @@ class TaskUI(App):
         Args:
             task_service: TaskService instance
             list_id: UUID of the task list
-            include_archived: Whether to include archived tasks
 
         Returns:
             Flat list of tasks with parents followed by their children
         """
-        top_level_tasks = await task_service.get_tasks_for_list(list_id, include_archived)
+        top_level_tasks = await task_service.get_tasks_for_list(list_id)
 
         # Build flat list with children
         tasks_with_children = []
         for parent in top_level_tasks:
             tasks_with_children.append(parent)
-            children = await task_service.get_children(parent.id, include_archived)
+            children = await task_service.get_children(parent.id)
             tasks_with_children.extend(children)
 
         return tasks_with_children
@@ -1301,7 +1182,7 @@ class TaskUI(App):
             async with self._db_manager.get_session() as session:
                 task_service = TaskService(session)
                 # Get all descendants (children, grandchildren, etc.)
-                descendants = await task_service.get_all_descendants(parent_id, include_archived=False)
+                descendants = await task_service.get_all_descendants(parent_id)
 
                 # Debug logging
                 logger.debug(f"_get_task_children({parent_id}): fetched {len(descendants)} descendants")
@@ -1382,8 +1263,7 @@ class TaskUI(App):
                 task_service = TaskService(session)
                 tasks = await self._get_tasks_with_children(
                     task_service,
-                    self._current_list_id,
-                    include_archived=False
+                    self._current_list_id
                 )
                 column.set_tasks(tasks)
         # For Column 2, we need to reload children of the selected Column 1 task

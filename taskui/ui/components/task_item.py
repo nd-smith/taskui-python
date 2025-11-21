@@ -85,7 +85,7 @@ class TaskItem(Widget):
 
         logger.debug(
             f"TaskItem: Created for task '{task.title[:30]}' (id={task.id}, level={task.level}, "
-            f"completed={task.is_completed}, archived={task.is_archived})"
+            f"completed={task.is_completed})"
         )
 
     def on_mount(self) -> None:
@@ -119,7 +119,7 @@ class TaskItem(Widget):
         """
         logger.debug(
             f"TaskItem: Updating task '{task.title[:30]}' (id={task.id}, "
-            f"completed={task.is_completed}, archived={task.is_archived})"
+            f"completed={task.is_completed})"
         )
         self._task_model = task
         self.refresh()
@@ -177,11 +177,6 @@ class TaskItem(Widget):
             checkbox = "[ ] "
             text.append(checkbox, style=FOREGROUND)
 
-        # Add archive icon if archived
-        if self._task_model.is_archived:
-            archive_color = FOREGROUND if self.selected else ARCHIVE_COLOR
-            text.append("📦 ", style=archive_color)
-
         # Add task title with appropriate styling
         title = self._task_model.title
 
@@ -189,10 +184,6 @@ class TaskItem(Widget):
             # Strikethrough for completed tasks
             title_color = FOREGROUND if self.selected else COMPLETE_COLOR
             text.append(title, style=f"strike {title_color}")
-        elif self._task_model.is_archived:
-            # Dimmed for archived tasks
-            title_color = FOREGROUND if self.selected else ARCHIVE_COLOR
-            text.append(title, style=title_color)
         else:
             # Normal styling with level-specific color (or white if selected)
             text.append(title, style=base_color)

@@ -107,14 +107,12 @@ async def sample_task(db_session, sample_task_id, sample_list_id):
         title="Complete project documentation",
         notes="Include API docs and user guide",
         is_completed=False,
-        is_archived=False,
         parent_id=None,
         level=0,
         position=0,
         list_id=str(sample_list_id),
         created_at=datetime.utcnow(),
-        completed_at=None,
-        archived_at=None
+        completed_at=None
     )
     db_session.add(task)
     await db_session.commit()
@@ -150,7 +148,6 @@ async def task_hierarchy(db_session, sample_list_id):
         title="Parent Task",
         notes="Top level task",
         is_completed=False,
-        is_archived=False,
         parent_id=None,
         level=0,
         position=0,
@@ -164,7 +161,6 @@ async def task_hierarchy(db_session, sample_list_id):
         title="Child Task 1",
         notes="First child",
         is_completed=False,
-        is_archived=False,
         parent_id=parent_id,
         level=1,
         position=0,
@@ -177,7 +173,6 @@ async def task_hierarchy(db_session, sample_list_id):
         title="Child Task 2",
         notes="Second child",
         is_completed=False,
-        is_archived=False,
         parent_id=parent_id,
         level=1,
         position=1,
@@ -191,7 +186,6 @@ async def task_hierarchy(db_session, sample_list_id):
         title="Grandchild Task",
         notes="Third level task",
         is_completed=False,
-        is_archived=False,
         parent_id=child1_id,
         level=2,
         position=0,
@@ -252,14 +246,12 @@ def make_task():
         title: str = "Test Task",
         notes: str = None,
         is_completed: bool = False,
-        is_archived: bool = False,
         parent_id: UUID = None,
         level: int = 0,
         position: int = 0,
         list_id: UUID = None,
         created_at: datetime = None,
-        completed_at: datetime = None,
-        archived_at: datetime = None
+        completed_at: datetime = None
     ) -> Task:
         if list_id is None:
             list_id = uuid4()
@@ -269,13 +261,11 @@ def make_task():
             title=title,
             notes=notes,
             is_completed=is_completed,
-            is_archived=is_archived,
             parent_id=parent_id,
             level=level,
             position=position,
             list_id=list_id,
             created_at=created_at or datetime.utcnow(),
-            completed_at=completed_at,
-            archived_at=archived_at
+            completed_at=completed_at
         )
     return _make_task

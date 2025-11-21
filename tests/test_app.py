@@ -22,7 +22,6 @@ from taskui.ui.components.column import TaskColumn
 from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
 from taskui.ui.components.task_modal import TaskCreationModal
-from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.models import Task, TaskList
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
@@ -710,92 +709,6 @@ class TestActionMethodsTaskOperations:
             # Should complete without error
             assert True
 
-    @pytest.mark.asyncio
-    async def test_action_archive_task_archives_completed_task(self):
-        """Test that action_archive_task() archives a completed task.
-
-        Verifies:
-        - Task is archived in database
-        - Task is removed from UI
-        - Detail panel is cleared
-        - Only completed tasks can be archived
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create a task
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Task to Archive"
-            modal.action_save()
-            await pilot.pause()
-
-            # Select and complete the task
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            task = column1.get_selected_task()
-            task_id = task.id
-
-            await app.action_toggle_completion()
-            await pilot.pause()
-
-            # Archive the task
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Verify task is archived in database
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                archived_task = await task_service.get_task_by_id(task_id)
-                assert archived_task.is_archived is True
-
-            # Verify task is removed from Column 1
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            assert len(column1._tasks) == 0
-
-    @pytest.mark.asyncio
-    async def test_action_archive_task_rejects_incomplete_task(self):
-        """Test that action_archive_task() rejects incomplete tasks.
-
-        Verifies:
-        - Incomplete task cannot be archived
-        - Warning notification is shown
-        - Task remains in UI
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create a task (not completed)
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Incomplete Task"
-            modal.action_save()
-            await pilot.pause()
-
-            # Select the task (not completed)
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            task = column1.get_selected_task()
-            task_id = task.id
-
-            # Try to archive the incomplete task
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Verify task is NOT archived in database
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                task_in_db = await task_service.get_task_by_id(task_id)
-                assert task_in_db.is_archived is False
-
-            # Verify task is still in Column 1
-            assert len(column1._tasks) == 1
 
     @pytest.mark.asyncio
     async def test_action_delete_task_shows_not_implemented_notification(self):
@@ -829,44 +742,6 @@ class TestActionMethodsTaskOperations:
             # Verify task still exists (delete not implemented)
             assert len(column1._tasks) == 1
 
-    @pytest.mark.asyncio
-    async def test_action_view_archives_opens_archive_modal(self):
-        """Test that action_view_archives() opens archive modal.
-
-        Verifies:
-        - Archive modal is opened
-        - Modal receives archived tasks from current list
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create and archive a task
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Task to Archive"
-            modal.action_save()
-            await pilot.pause()
-
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-
-            # Complete and archive
-            await app.action_toggle_completion()
-            await pilot.pause()
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Open archive modal
-            await app.action_view_archives()
-            await pilot.pause()
-
-            # Verify archive modal is shown
-            modal = app.screen
-            assert isinstance(modal, ArchiveModal)
-            assert len(modal.archived_tasks) == 1
 
 
 class TestActionMethodsListSwitching:
@@ -1096,51 +971,6 @@ class TestEventHandlers:
                 updated_task = await task_service.get_task_by_id(task_id)
                 assert updated_task.title == "Updated Title"
 
-    @pytest.mark.asyncio
-    async def test_on_archive_modal_task_restored_restores_task(self):
-        """Test that on_archive_modal_task_restored() restores archived task.
-
-        Verifies:
-        - Task is unarchived in database
-        - UI is refreshed
-        - Task appears in Column 1
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create, complete, and archive task
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Task to Restore"
-            modal.action_save()
-            await pilot.pause()
-
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            task_id = column1.get_selected_task().id
-
-            await app.action_toggle_completion()
-            await pilot.pause()
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Restore task by posting restore message
-            from taskui.ui.components.archive_modal import ArchiveModal
-            app.post_message(ArchiveModal.TaskRestored(task_id=task_id))
-            await pilot.pause()
-
-            # Verify task is unarchived
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                restored_task = await task_service.get_task_by_id(task_id)
-                assert restored_task.is_archived is False
-
-            # Verify task appears in Column 1
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            assert len(column1._tasks) == 1
 
     @pytest.mark.asyncio
     async def test_on_list_bar_list_selected_switches_list(self):

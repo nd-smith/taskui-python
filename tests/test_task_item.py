@@ -144,42 +144,6 @@ class TestTaskItemStateRendering:
         assert "[ ]" in rendered_str  # Unchecked checkbox
         assert "[✓]" not in rendered_str
 
-    def test_render_archived_task(self, make_task):
-        """Test rendering an archived task with archive icon."""
-        task = make_task(
-            title="Archived Task",
-            level=0,
-            is_completed=True,
-            is_archived=True,
-            archived_at=datetime.utcnow()
-        )
-        task_item = TaskItem(task=task)
-
-        rendered = task_item.render()
-        rendered_str = str(rendered)
-
-        assert "📦" in rendered_str  # Archive icon
-        assert "Archived Task" in rendered_str
-
-    def test_render_completed_and_archived_task(self, make_task):
-        """Test rendering a task that is both completed and archived."""
-        task = make_task(
-            title="Done and Archived",
-            level=0,
-            is_completed=True,
-            is_archived=True,
-            completed_at=datetime.utcnow(),
-            archived_at=datetime.utcnow()
-        )
-        task_item = TaskItem(task=task)
-
-        rendered = task_item.render()
-        rendered_str = str(rendered)
-
-        assert "[✓]" in rendered_str  # Checkmark
-        assert "📦" in rendered_str  # Archive icon
-        assert "Done and Archived" in rendered_str
-
     def test_render_active_task(self, make_task):
         """Test rendering an active (not completed, not archived) task."""
         task = make_task(
@@ -337,24 +301,6 @@ class TestTaskItemVisualStates:
         assert "[✓]" in rendered_str
         # Title should be included
         assert "Completed" in rendered_str
-
-    def test_archived_visual_indicators(self, make_task):
-        """Test visual indicators for archived tasks."""
-        task = make_task(
-            title="Archived",
-            level=0,
-            is_completed=True,
-            is_archived=True,
-            archived_at=datetime.utcnow()
-        )
-        task_item = TaskItem(task=task)
-
-        rendered = task_item.render()
-        rendered_str = str(rendered)
-
-        # Should have archive icon
-        assert "📦" in rendered_str
-
 
 class TestTaskItemInteractions:
     """Tests for TaskItem interaction handling."""
@@ -582,27 +528,6 @@ class TestTaskItemComplexScenarios:
         assert "[✓]" in rendered_str
         assert "(3/3)" in rendered_str
         assert "Completed Parent" in rendered_str
-
-    def test_archived_task_with_children(self, make_task):
-        """Test rendering an archived task that has children."""
-        task = make_task(
-            title="Archived Parent",
-            level=0,
-            is_completed=True,
-            is_archived=True,
-            archived_at=datetime.utcnow()
-        )
-        task.update_child_counts(child_count=5, completed_child_count=5)
-
-        task_item = TaskItem(task=task)
-
-        rendered = task_item.render()
-        rendered_str = str(rendered)
-
-        assert "[✓]" in rendered_str
-        assert "📦" in rendered_str
-        assert "(5/5)" in rendered_str
-        assert "Archived Parent" in rendered_str
 
     def test_selected_completed_task(self, make_task):
         """Test rendering a selected task that is completed."""

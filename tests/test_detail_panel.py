@@ -44,16 +44,6 @@ def completed_task(sample_task):
 
 
 @pytest.fixture
-def archived_task(completed_task):
-    """Create an archived task for testing."""
-    task = completed_task.model_copy(update={
-        "is_archived": True,
-        "archived_at": datetime(2025, 1, 14, 14, 0, 0),
-    })
-    return task
-
-
-@pytest.fixture
 def child_task(sample_task):
     """Create a child task for testing."""
     parent_id = sample_task.id
@@ -132,17 +122,6 @@ class TestDetailPanelLogic:
         assert "Complete" in text
         assert "Completed:" in text
         assert "2025-01-14 12:00:00" in text
-
-    def test_build_details_text_archived(self, archived_task):
-        """Test building details text for an archived task."""
-        panel = DetailPanel()
-        panel.current_task = archived_task
-        panel.task_hierarchy = []
-        text = panel._build_details_text(archived_task)
-
-        # Check archive indicators
-        assert "Archived" in text
-        assert "2025-01-14 14:00:00" in text
 
     def test_build_details_text_with_notes(self, sample_task):
         """Test building details text for a task with notes."""

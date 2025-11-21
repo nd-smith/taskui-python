@@ -104,18 +104,6 @@ class TestTaskItem:
         assert "Completed Task" in rendered_str
         # Rich text should have strikethrough style (we can't easily test this without rendering)
 
-    def test_task_item_archived_rendering(self, make_task):
-        """Test rendering of archived task with 📦 icon."""
-        task = make_task(title="Archived Task", level=0, is_completed=True, is_archived=True)
-        task_item = TaskItem(task=task)
-
-        rendered = task_item.render()
-        rendered_str = str(rendered)
-
-        # Should show archive icon
-        assert "📦" in rendered_str
-        assert "Archived Task" in rendered_str
-
     def test_task_item_with_children_progress(self, make_task):
         """Test rendering of task with children showing progress indicator."""
         task = make_task(title="Parent Task", level=0)
