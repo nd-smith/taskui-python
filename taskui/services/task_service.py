@@ -16,7 +16,6 @@ from sqlalchemy.orm import selectinload
 from taskui.database import TaskORM, TaskListORM
 from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
-from taskui.services.nesting_rules import Column, NestingRules
 
 logger = get_logger(__name__)
 
@@ -51,19 +50,15 @@ class TaskService:
 
     def __init__(
         self,
-        session: AsyncSession,
-        nesting_rules: Optional[NestingRules] = None
+        session: AsyncSession
     ) -> None:
         """
-        Initialize task service with database session and optional nesting rules.
+        Initialize task service with database session.
 
         Args:
             session: Active async database session
-            nesting_rules: Optional NestingRules instance for validation.
-                          If None, uses class methods (deprecated) for backward compatibility.
         """
         self.session = session
-        self._nesting_rules = nesting_rules
 
     # ==============================================================================
     # CONVERSION HELPERS
@@ -73,7 +68,7 @@ class TaskService:
         """
         Convert TaskORM to Pydantic Task model.
 
-        Uses dynamic max_level from nesting rules config for validation.
+        Uses global MAX_NESTING_DEPTH for validation.
 
         Args:
             task_orm: SQLAlchemy ORM task instance
@@ -81,15 +76,7 @@ class TaskService:
         Returns:
             Pydantic Task instance
         """
-        # Get max level from config for validation context
-        # Use the maximum of column1 and column2 to allow loading any task
-        if self._nesting_rules:
-            max_level = max(
-                self._nesting_rules.get_max_depth_instance(Column.COLUMN1),
-                self._nesting_rules.get_max_depth_instance(Column.COLUMN2)
-            )
-        else:
-            max_level = 2  # Backward compatibility default
+        from taskui.services.nesting_validation import MAX_NESTING_DEPTH
 
         # Use model_validate with context to pass max_level to validator
         return Task.model_validate(
@@ -107,7 +94,7 @@ class TaskService:
                 "completed_at": task_orm.completed_at,
                 "archived_at": task_orm.archived_at,
             },
-            context={"max_level": max_level}
+            context={"max_level": MAX_NESTING_DEPTH}
         )
 
     @staticmethod
@@ -334,13 +321,8 @@ class TaskService:
             # Get next position
             position = await self._get_next_position(list_id, parent_id=None)
 
-            # Determine max_level for validation context
-            # Top-level tasks are in column1, so use column1's max_depth if available
-            if self._nesting_rules:
-                max_level = self._nesting_rules.get_max_depth_instance(Column.COLUMN1)
-            else:
-                # Backward compatibility: use max of all columns
-                max_level = 2
+            # Import global max depth for validation
+            from taskui.services.nesting_validation import MAX_NESTING_DEPTH
 
             # Create task with validation context
             task = Task.model_validate(
@@ -352,7 +334,7 @@ class TaskService:
                     'position': position,
                     'parent_id': None,
                 },
-                context={'max_level': max_level}
+                context={'max_level': MAX_NESTING_DEPTH}
             )
 
             # Convert to ORM and save
@@ -373,7 +355,6 @@ class TaskService:
         self,
         parent_id: UUID,
         title: str,
-        column: Column,
         notes: Optional[str] = None,
     ) -> Task:
         """
@@ -382,7 +363,6 @@ class TaskService:
         Args:
             parent_id: UUID of the parent task
             title: Child task title
-            column: Column context (COLUMN1 or COLUMN2)
             notes: Optional task notes
 
         Returns:
@@ -392,47 +372,42 @@ class TaskService:
             TaskNotFoundError: If parent task does not exist
             NestingLimitError: If nesting limit is exceeded
         """
+        from taskui.services.nesting_validation import (
+            can_create_child,
+            get_child_level,
+            NestingLimitError as ValidationNestingError,
+            MAX_NESTING_DEPTH
+        )
+
         try:
-            logger.debug(f"Creating child task: title='{title}', parent_id={parent_id}, column={column}")
+            logger.debug(f"Creating child task: title='{title}', parent_id={parent_id}")
 
             # Get parent task
             parent_orm = await self._get_task_or_raise(parent_id)
             parent_task = self._orm_to_pydantic(parent_orm)
 
-            # Validate nesting rules (use instance if available, otherwise class methods)
-            if self._nesting_rules:
-                can_create = self._nesting_rules.can_create_child_instance(parent_task, column)
-                max_depth = self._nesting_rules.get_max_depth_instance(column)
-            else:
-                # Backward compatibility: use deprecated class methods
-                can_create = NestingRules.can_create_child(parent_task, column)
-                max_depth = NestingRules.get_max_depth(column)
-
-            if not can_create:
-                logger.warning(f"Nesting limit reached: parent_level={parent_task.level}, max_depth={max_depth}, column={column}")
+            # Validate nesting depth
+            if not can_create_child(parent_task.level):
+                logger.warning(
+                    f"Nesting limit reached: parent_level={parent_task.level}, "
+                    f"max_depth={MAX_NESTING_DEPTH}"
+                )
                 raise NestingLimitError(
                     f"Cannot create child task. Parent task at level {parent_task.level} "
-                    f"has reached maximum nesting depth ({max_depth}) for {column.value}."
+                    f"has reached maximum nesting depth ({MAX_NESTING_DEPTH})."
                 )
 
-            # Get the allowed child level
-            if self._nesting_rules:
-                child_level = self._nesting_rules.get_allowed_child_level_instance(parent_task, column)
-            else:
-                # Backward compatibility: use deprecated class methods
-                child_level = NestingRules.get_allowed_child_level(parent_task, column)
-            if child_level is None:
-                logger.error(f"Cannot determine child level: parent_level={parent_task.level}, column={column}")
-                raise NestingLimitError(
-                    f"Cannot determine child level for parent at level {parent_task.level} "
-                    f"in {column.value}."
-                )
+            # Calculate child level
+            try:
+                child_level = get_child_level(parent_task.level)
+            except ValidationNestingError as e:
+                logger.error(f"Cannot determine child level: parent_level={parent_task.level}")
+                raise NestingLimitError(str(e))
 
             # Get next position among siblings
             position = await self._get_next_position(parent_task.list_id, parent_id=parent_id)
 
-            # Create child task with validation context
-            # Use the column's max_depth as max_level for validation
+            # Create child task
             child_task = Task.model_validate(
                 {
                     'title': title,
@@ -442,7 +417,7 @@ class TaskService:
                     'level': child_level,
                     'position': position,
                 },
-                context={'max_level': max_depth}
+                context={'max_level': MAX_NESTING_DEPTH}
             )
 
             # Convert to ORM and save
@@ -450,7 +425,10 @@ class TaskService:
             self.session.add(task_orm)
             await self.session.flush()
 
-            logger.info(f"Created child task: id={child_task.id}, title='{title}', level={child_level}, parent_id={parent_id}")
+            logger.info(
+                f"Created child task: id={child_task.id}, title='{title}', "
+                f"level={child_level}, parent_id={parent_id}"
+            )
             return child_task
         except (TaskNotFoundError, NestingLimitError):
             # These are already logged above, just re-raise
