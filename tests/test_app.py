@@ -26,7 +26,6 @@ from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.models import Task, TaskList
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
-from taskui.services.nesting_rules import Column as NestingColumn
 from taskui.database import DatabaseManager, get_database_manager
 from taskui.ui.keybindings import COLUMN_1_ID, COLUMN_2_ID, COLUMN_3_ID
 import taskui.database
@@ -480,7 +479,6 @@ class TestActionMethodsTaskOperations:
             assert isinstance(modal, TaskCreationModal)
             assert modal.mode == "create_sibling"
             assert modal.parent_task == selected_task
-            assert modal.column == NestingColumn.COLUMN1
 
     @pytest.mark.asyncio
     async def test_action_new_sibling_task_with_no_selection(self):
@@ -546,7 +544,6 @@ class TestActionMethodsTaskOperations:
             assert isinstance(modal, TaskCreationModal)
             assert modal.mode == "create_child"
             assert modal.parent_task == parent_task
-            assert modal.column == NestingColumn.COLUMN1
 
     @pytest.mark.asyncio
     async def test_action_new_child_task_requires_selection(self):
@@ -1527,30 +1524,6 @@ class TestHelperMethods:
             assert column is None
 
     @pytest.mark.asyncio
-    async def test_get_nesting_column_from_id_converts_correctly(self):
-        """Test that _get_nesting_column_from_id() converts IDs correctly.
-
-        Verifies:
-        - COLUMN_1_ID maps to NestingColumn.COLUMN1
-        - COLUMN_2_ID maps to NestingColumn.COLUMN2
-        - COLUMN_3_ID maps to NestingColumn.COLUMN1 (default)
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-
-            # Column 1 maps to COLUMN1
-            nesting_col = app._get_nesting_column_from_id(COLUMN_1_ID)
-            assert nesting_col == NestingColumn.COLUMN1
-
-            # Column 2 maps to COLUMN2
-            nesting_col = app._get_nesting_column_from_id(COLUMN_2_ID)
-            assert nesting_col == NestingColumn.COLUMN2
-
-            # Column 3 maps to COLUMN1 (default)
-            nesting_col = app._get_nesting_column_from_id(COLUMN_3_ID)
-            assert nesting_col == NestingColumn.COLUMN1
-
-    @pytest.mark.asyncio
     async def test_get_parent_id_for_sibling_returns_correct_parent(self):
         """Test that _get_parent_id_for_sibling() returns correct parent ID.
 
@@ -1603,67 +1576,3 @@ class TestHelperMethods:
             parent_id = app._get_parent_id_for_sibling(child_task)
             assert parent_id == parent_task.id
 
-    @pytest.mark.asyncio
-    async def test_make_levels_context_relative_adjusts_levels(self):
-        """Test that _make_levels_context_relative() adjusts task levels.
-
-        Verifies:
-        - Levels are adjusted relative to parent level
-        - Children start at level 0 in relative context
-        - Grandchildren are at level 1 in relative context
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create parent (level 0) with child (level 1) and grandchild (level 2)
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Parent"
-            modal.action_save()
-            await pilot.pause()
-
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            parent_task = column1.get_selected_task()
-
-            app.action_new_child_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Child"
-            modal.action_save()
-            await pilot.pause()
-
-            # Get child task and create grandchild
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                children = await task_service.get_children(parent_task.id)
-                child_task = children[0]
-
-                # Create grandchild
-                await task_service.create_child_task(
-                    parent_id=child_task.id,
-                    title="Grandchild",
-                    column=NestingColumn.COLUMN2,
-                    notes=None
-                )
-
-                # Get all descendants
-                descendants = await task_service.get_all_descendants(
-                    parent_task.id,
-                    include_archived=False
-                )
-
-            # Adjust levels relative to parent (level 0)
-            adjusted = app._make_levels_context_relative(descendants, parent_task.level)
-
-            # Child should be level 0 (relative to parent)
-            child_adjusted = next(t for t in adjusted if t.title == "Child")
-            assert child_adjusted.level == 0
-
-            # Grandchild should be level 1 (relative to parent)
-            grandchild_adjusted = next(t for t in adjusted if t.title == "Grandchild")
-            assert grandchild_adjusted.level == 1
