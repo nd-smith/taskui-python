@@ -323,58 +323,6 @@ class ListService:
             )
             raise
 
-    async def archive_tasks_and_delete_list(self, list_id: UUID) -> bool:
-        """
-        Archive all completed tasks in the list, then delete the list.
-
-        This operation is atomic - if any step fails, the entire operation is rolled back.
-        Only completed tasks will be archived; incomplete tasks will be deleted with the list.
-
-        Args:
-            list_id: UUID of the list to delete
-
-        Returns:
-            True if successful, False if list not found
-
-        Raises:
-            ValueError: If attempting to delete the last list
-        """
-        try:
-            logger.debug(f"Archiving tasks and deleting list {list_id}")
-
-            # Verify list exists
-            task_list = await self.get_list_by_id(list_id)
-            if not task_list:
-                logger.warning(f"Archive/delete failed - list not found: {list_id}")
-                return False
-
-            # Prevent deletion of last list
-            list_count = await self.get_list_count()
-            if list_count <= 1:
-                raise ValueError("Cannot delete the last remaining list")
-
-            # Archive all completed tasks in the list
-            from taskui.services.task_service import TaskService
-            task_service = TaskService(self.session)
-            archived_count = await task_service.bulk_archive_tasks(list_id)
-
-            # Delete the list (will cascade delete remaining tasks)
-            await self.delete_list(list_id)
-
-            logger.info(
-                f"Successfully archived {archived_count} completed tasks "
-                f"and deleted list '{task_list.name}'"
-            )
-            return True
-        except ValueError:
-            # Already logged, just re-raise
-            raise
-        except Exception as e:
-            logger.error(
-                f"Failed to archive tasks and delete list {list_id}: {e}",
-                exc_info=True
-            )
-            raise
 
     async def ensure_default_lists(self) -> List[TaskList]:
         """
@@ -466,35 +414,33 @@ class ListService:
 
     async def _get_task_count(self, list_id: UUID) -> int:
         """
-        Get total number of non-archived tasks in a list.
+        Get total number of tasks in a list.
 
         Args:
             list_id: UUID of the list
 
         Returns:
-            Count of non-archived tasks
+            Count of tasks
         """
         result = await self.session.execute(
             select(func.count(TaskORM.id))
             .where(TaskORM.list_id == str(list_id))
-            .where(TaskORM.is_archived == False)  # noqa: E712
         )
         return result.scalar_one()
 
     async def _get_completed_count(self, list_id: UUID) -> int:
         """
-        Get number of completed non-archived tasks in a list.
+        Get number of completed tasks in a list.
 
         Args:
             list_id: UUID of the list
 
         Returns:
-            Count of completed non-archived tasks
+            Count of completed tasks
         """
         result = await self.session.execute(
             select(func.count(TaskORM.id))
             .where(TaskORM.list_id == str(list_id))
             .where(TaskORM.is_completed == True)  # noqa: E712
-            .where(TaskORM.is_archived == False)  # noqa: E712
         )
         return result.scalar_one()

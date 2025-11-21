@@ -16,7 +16,6 @@ from sqlalchemy.orm import selectinload
 from taskui.database import TaskORM, TaskListORM
 from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
-from taskui.services.nesting_rules import Column, NestingRules
 
 logger = get_logger(__name__)
 
@@ -51,19 +50,15 @@ class TaskService:
 
     def __init__(
         self,
-        session: AsyncSession,
-        nesting_rules: Optional[NestingRules] = None
+        session: AsyncSession
     ) -> None:
         """
-        Initialize task service with database session and optional nesting rules.
+        Initialize task service with database session.
 
         Args:
             session: Active async database session
-            nesting_rules: Optional NestingRules instance for validation.
-                          If None, uses class methods (deprecated) for backward compatibility.
         """
         self.session = session
-        self._nesting_rules = nesting_rules
 
     # ==============================================================================
     # CONVERSION HELPERS
@@ -73,7 +68,7 @@ class TaskService:
         """
         Convert TaskORM to Pydantic Task model.
 
-        Uses dynamic max_level from nesting rules config for validation.
+        Uses global MAX_NESTING_DEPTH for validation.
 
         Args:
             task_orm: SQLAlchemy ORM task instance
@@ -81,15 +76,7 @@ class TaskService:
         Returns:
             Pydantic Task instance
         """
-        # Get max level from config for validation context
-        # Use the maximum of column1 and column2 to allow loading any task
-        if self._nesting_rules:
-            max_level = max(
-                self._nesting_rules.get_max_depth_instance(Column.COLUMN1),
-                self._nesting_rules.get_max_depth_instance(Column.COLUMN2)
-            )
-        else:
-            max_level = 2  # Backward compatibility default
+        from taskui.services.nesting_validation import MAX_NESTING_DEPTH
 
         # Use model_validate with context to pass max_level to validator
         return Task.model_validate(
@@ -98,16 +85,14 @@ class TaskService:
                 "title": task_orm.title,
                 "notes": task_orm.notes,
                 "is_completed": task_orm.is_completed,
-                "is_archived": task_orm.is_archived,
                 "parent_id": UUID(task_orm.parent_id) if task_orm.parent_id else None,
                 "level": task_orm.level,
                 "position": task_orm.position,
                 "list_id": UUID(task_orm.list_id),
                 "created_at": task_orm.created_at,
                 "completed_at": task_orm.completed_at,
-                "archived_at": task_orm.archived_at,
             },
-            context={"max_level": max_level}
+            context={"max_level": MAX_NESTING_DEPTH}
         )
 
     @staticmethod
@@ -126,14 +111,12 @@ class TaskService:
             title=task.title,
             notes=task.notes,
             is_completed=task.is_completed,
-            is_archived=task.is_archived,
             parent_id=str(task.parent_id) if task.parent_id else None,
             level=task.level,
             position=task.position,
             list_id=str(task.list_id),
             created_at=task.created_at,
             completed_at=task.completed_at,
-            archived_at=task.archived_at,
         )
 
     # ==============================================================================
@@ -210,7 +193,7 @@ class TaskService:
 
     def _query_active_tasks(self, list_id: UUID):
         """
-        Build query for active (non-archived) tasks in a list.
+        Build query for tasks in a list.
 
         Args:
             list_id: List to query
@@ -221,7 +204,6 @@ class TaskService:
         return (
             select(TaskORM)
             .where(TaskORM.list_id == str(list_id))
-            .where(TaskORM.is_archived == False)
             .order_by(TaskORM.position)
         )
 
@@ -253,7 +235,6 @@ class TaskService:
         return (
             select(TaskORM)
             .where(TaskORM.parent_id == str(parent_id))
-            .where(TaskORM.is_archived == False)
             .order_by(TaskORM.position)
         )
 
@@ -334,13 +315,8 @@ class TaskService:
             # Get next position
             position = await self._get_next_position(list_id, parent_id=None)
 
-            # Determine max_level for validation context
-            # Top-level tasks are in column1, so use column1's max_depth if available
-            if self._nesting_rules:
-                max_level = self._nesting_rules.get_max_depth_instance(Column.COLUMN1)
-            else:
-                # Backward compatibility: use max of all columns
-                max_level = 2
+            # Import global max depth for validation
+            from taskui.services.nesting_validation import MAX_NESTING_DEPTH
 
             # Create task with validation context
             task = Task.model_validate(
@@ -352,7 +328,7 @@ class TaskService:
                     'position': position,
                     'parent_id': None,
                 },
-                context={'max_level': max_level}
+                context={'max_level': MAX_NESTING_DEPTH}
             )
 
             # Convert to ORM and save
@@ -373,7 +349,6 @@ class TaskService:
         self,
         parent_id: UUID,
         title: str,
-        column: Column,
         notes: Optional[str] = None,
     ) -> Task:
         """
@@ -382,7 +357,6 @@ class TaskService:
         Args:
             parent_id: UUID of the parent task
             title: Child task title
-            column: Column context (COLUMN1 or COLUMN2)
             notes: Optional task notes
 
         Returns:
@@ -392,47 +366,42 @@ class TaskService:
             TaskNotFoundError: If parent task does not exist
             NestingLimitError: If nesting limit is exceeded
         """
+        from taskui.services.nesting_validation import (
+            can_create_child,
+            get_child_level,
+            NestingLimitError as ValidationNestingError,
+            MAX_NESTING_DEPTH
+        )
+
         try:
-            logger.debug(f"Creating child task: title='{title}', parent_id={parent_id}, column={column}")
+            logger.debug(f"Creating child task: title='{title}', parent_id={parent_id}")
 
             # Get parent task
             parent_orm = await self._get_task_or_raise(parent_id)
             parent_task = self._orm_to_pydantic(parent_orm)
 
-            # Validate nesting rules (use instance if available, otherwise class methods)
-            if self._nesting_rules:
-                can_create = self._nesting_rules.can_create_child_instance(parent_task, column)
-                max_depth = self._nesting_rules.get_max_depth_instance(column)
-            else:
-                # Backward compatibility: use deprecated class methods
-                can_create = NestingRules.can_create_child(parent_task, column)
-                max_depth = NestingRules.get_max_depth(column)
-
-            if not can_create:
-                logger.warning(f"Nesting limit reached: parent_level={parent_task.level}, max_depth={max_depth}, column={column}")
+            # Validate nesting depth
+            if not can_create_child(parent_task.level):
+                logger.warning(
+                    f"Nesting limit reached: parent_level={parent_task.level}, "
+                    f"max_depth={MAX_NESTING_DEPTH}"
+                )
                 raise NestingLimitError(
                     f"Cannot create child task. Parent task at level {parent_task.level} "
-                    f"has reached maximum nesting depth ({max_depth}) for {column.value}."
+                    f"has reached maximum nesting depth ({MAX_NESTING_DEPTH})."
                 )
 
-            # Get the allowed child level
-            if self._nesting_rules:
-                child_level = self._nesting_rules.get_allowed_child_level_instance(parent_task, column)
-            else:
-                # Backward compatibility: use deprecated class methods
-                child_level = NestingRules.get_allowed_child_level(parent_task, column)
-            if child_level is None:
-                logger.error(f"Cannot determine child level: parent_level={parent_task.level}, column={column}")
-                raise NestingLimitError(
-                    f"Cannot determine child level for parent at level {parent_task.level} "
-                    f"in {column.value}."
-                )
+            # Calculate child level
+            try:
+                child_level = get_child_level(parent_task.level)
+            except ValidationNestingError as e:
+                logger.error(f"Cannot determine child level: parent_level={parent_task.level}")
+                raise NestingLimitError(str(e))
 
             # Get next position among siblings
             position = await self._get_next_position(parent_task.list_id, parent_id=parent_id)
 
-            # Create child task with validation context
-            # Use the column's max_depth as max_level for validation
+            # Create child task
             child_task = Task.model_validate(
                 {
                     'title': title,
@@ -442,7 +411,7 @@ class TaskService:
                     'level': child_level,
                     'position': position,
                 },
-                context={'max_level': max_depth}
+                context={'max_level': MAX_NESTING_DEPTH}
             )
 
             # Convert to ORM and save
@@ -450,7 +419,10 @@ class TaskService:
             self.session.add(task_orm)
             await self.session.flush()
 
-            logger.info(f"Created child task: id={child_task.id}, title='{title}', level={child_level}, parent_id={parent_id}")
+            logger.info(
+                f"Created child task: id={child_task.id}, title='{title}', "
+                f"level={child_level}, parent_id={parent_id}"
+            )
             return child_task
         except (TaskNotFoundError, NestingLimitError):
             # These are already logged above, just re-raise
@@ -463,13 +435,12 @@ class TaskService:
     # READ OPERATIONS
     # ==============================================================================
 
-    async def get_tasks_for_list(self, list_id: UUID, include_archived: bool = False) -> List[Task]:
+    async def get_tasks_for_list(self, list_id: UUID) -> List[Task]:
         """
         Get all top-level tasks (level 0) for a task list.
 
         Args:
             list_id: UUID of the task list
-            include_archived: Whether to include archived tasks
 
         Returns:
             List of Task instances ordered by position
@@ -480,18 +451,8 @@ class TaskService:
         # Verify list exists
         await self._verify_list_exists(list_id)
 
-        # Build query using helper
-        if include_archived:
-            # Build query manually when including archived
-            query = (
-                select(TaskORM)
-                .where(TaskORM.list_id == str(list_id))
-                .where(TaskORM.parent_id.is_(None))
-                .order_by(TaskORM.position)
-            )
-        else:
-            # Use helper for active tasks only
-            query = self._query_top_level_tasks(list_id)
+        # Build query using helper for active tasks only
+        query = self._query_top_level_tasks(list_id)
 
         # Execute query
         result = await self.session.execute(query)
@@ -500,13 +461,12 @@ class TaskService:
         # Convert to Pydantic with counts using helper
         return await self._fetch_tasks_with_counts(task_orms)
 
-    async def get_children(self, parent_id: UUID, include_archived: bool = False) -> List[Task]:
+    async def get_children(self, parent_id: UUID) -> List[Task]:
         """
         Get all direct children of a parent task.
 
         Args:
             parent_id: UUID of the parent task
-            include_archived: Whether to include archived tasks
 
         Returns:
             List of Task instances ordered by position
@@ -517,17 +477,8 @@ class TaskService:
         # Verify parent exists
         await self._get_task_or_raise(parent_id)
 
-        # Build query using helper
-        if include_archived:
-            # Build query manually when including archived
-            query = (
-                select(TaskORM)
-                .where(TaskORM.parent_id == str(parent_id))
-                .order_by(TaskORM.position)
-            )
-        else:
-            # Use helper for active tasks only
-            query = self._query_child_tasks(parent_id)
+        # Build query using helper for active tasks only
+        query = self._query_child_tasks(parent_id)
 
         # Execute query
         result = await self.session.execute(query)
@@ -538,8 +489,7 @@ class TaskService:
 
     async def get_all_descendants(
         self,
-        parent_id: UUID,
-        include_archived: bool = False
+        parent_id: UUID
     ) -> List[Task]:
         """
         Get all descendants (children, grandchildren, etc.) of a parent task.
@@ -548,7 +498,6 @@ class TaskService:
 
         Args:
             parent_id: UUID of the parent task
-            include_archived: Whether to include archived tasks
 
         Returns:
             List of all descendant Task instances in hierarchical order
@@ -563,7 +512,7 @@ class TaskService:
 
         # Helper function for recursive traversal
         async def collect_descendants(current_parent_id: UUID) -> None:
-            children = await self.get_children(current_parent_id, include_archived=include_archived)
+            children = await self.get_children(current_parent_id)
             for child in children:
                 descendants.append(child)
                 # Recursively get this child's descendants
@@ -726,7 +675,7 @@ class TaskService:
             task_title = task_orm.title
 
             # Get all descendants for cascade deletion
-            descendants = await self.get_all_descendants(task_id, include_archived=True)
+            descendants = await self.get_all_descendants(task_id)
             descendant_count = len(descendants)
 
             # Delete descendants in reverse hierarchical order (deepest first)
@@ -749,235 +698,9 @@ class TaskService:
             logger.error(f"Failed to delete task {task_id}: {e}", exc_info=True)
             raise
 
-    async def archive_task(self, task_id: UUID) -> Task:
-        """
-        Archive a completed task and all its descendants.
 
-        This operation cascades to all descendants to prevent orphaned tasks.
-        Note: This only archives the parent if it's completed, but will archive
-        all descendants regardless of their completion status.
 
-        Args:
-            task_id: UUID of the task to archive
 
-        Returns:
-            Updated Task instance
-
-        Raises:
-            TaskNotFoundError: If task does not exist
-            ValueError: If task is not completed
-        """
-        # Get the task
-        task_orm = await self._get_task_or_raise(task_id)
-
-        # Check if task is completed
-        if not task_orm.is_completed:
-            logger.warning(
-                f"Attempted to archive incomplete task: task_id={task_id}"
-            )
-            raise ValueError("Only completed tasks can be archived")
-
-        archive_time = datetime.utcnow()
-
-        # Get all descendants for cascade archiving
-        descendants = await self.get_all_descendants(task_id, include_archived=False)
-        descendant_count = len(descendants)
-
-        # Archive all descendants (deepest first to maintain integrity)
-        for descendant in reversed(descendants):
-            descendant_orm = await self._get_task_or_raise(descendant.id)
-            descendant_orm.is_archived = True
-            descendant_orm.archived_at = archive_time
-
-        # Archive the task itself
-        task_orm.is_archived = True
-        task_orm.archived_at = archive_time
-
-        logger.info(
-            f"Task archived: task_id={task_id}, "
-            f"archive_timestamp={task_orm.archived_at.isoformat()}, "
-            f"descendants_archived={descendant_count}"
-        )
-
-        # Flush changes to database
-        try:
-            await self.session.flush()
-        except Exception as e:
-            logger.error(
-                f"Archive operation failed for task_id={task_id}",
-                exc_info=True
-            )
-            raise
-
-        # Convert back to Pydantic with counts using helper
-        return await self._fetch_task_with_counts(task_orm)
-
-    async def soft_delete_task(self, task_id: UUID) -> Task:
-        """
-        Soft delete a task by archiving it and all its descendants.
-
-        This provides a "delete" operation that is recoverable via the archive/restore
-        functionality. Unlike archive_task(), this does not require the task to be completed.
-        This operation cascades to all descendants to prevent orphaned tasks.
-
-        Args:
-            task_id: UUID of the task to soft delete
-
-        Returns:
-            Updated Task instance
-
-        Raises:
-            TaskNotFoundError: If task does not exist
-        """
-        # Get the task
-        task_orm = await self._get_task_or_raise(task_id)
-        archive_time = datetime.utcnow()
-
-        # Get all descendants for cascade archiving
-        descendants = await self.get_all_descendants(task_id, include_archived=False)
-        descendant_count = len(descendants)
-
-        # Archive all descendants (deepest first to maintain integrity)
-        for descendant in reversed(descendants):
-            descendant_orm = await self._get_task_or_raise(descendant.id)
-            descendant_orm.is_archived = True
-            descendant_orm.archived_at = archive_time
-
-        # Archive the task itself (soft delete - no completion check)
-        task_orm.is_archived = True
-        task_orm.archived_at = archive_time
-
-        logger.info(
-            f"Task soft-deleted (archived): task_id={task_id}, "
-            f"archive_timestamp={task_orm.archived_at.isoformat()}, "
-            f"was_completed={task_orm.is_completed}, "
-            f"descendants_archived={descendant_count}"
-        )
-
-        # Flush changes to database
-        try:
-            await self.session.flush()
-        except Exception as e:
-            logger.error(
-                f"Soft delete operation failed for task_id={task_id}",
-                exc_info=True
-            )
-            raise
-
-        # Convert back to Pydantic with counts using helper
-        return await self._fetch_task_with_counts(task_orm)
-
-    async def unarchive_task(self, task_id: UUID) -> Task:
-        """
-        Unarchive (restore) an archived task.
-
-        If the task has a parent that is not active (archived or doesn't exist),
-        the task will be set as a top-level task (level 0, no parent).
-
-        Args:
-            task_id: UUID of the task to unarchive
-
-        Returns:
-            Updated Task instance
-
-        Raises:
-            TaskNotFoundError: If task does not exist
-        """
-        # Get the task
-        task_orm = await self._get_task_or_raise(task_id)
-
-        # Check if task has a parent and if parent is active
-        if task_orm.parent_id:
-            parent_stmt = select(TaskORM).where(
-                TaskORM.id == task_orm.parent_id
-            )
-            result = await self.session.execute(parent_stmt)
-            parent = result.scalar_one_or_none()
-
-            # If parent doesn't exist or is archived, make this a top-level task
-            if not parent or parent.is_archived:
-                logger.info(
-                    f"Task {task_id} parent (id={task_orm.parent_id}) is not active. "
-                    f"Setting task as top-level (level 0)."
-                )
-                task_orm.parent_id = None
-                task_orm.level = 0
-
-        # Unarchive the task
-        task_orm.is_archived = False
-        task_orm.archived_at = None
-
-        logger.info(
-            f"Task unarchived (restored): task_id={task_id}"
-        )
-
-        # Flush changes to database
-        try:
-            await self.session.flush()
-        except Exception as e:
-            logger.error(
-                f"Unarchive operation failed for task_id={task_id}",
-                exc_info=True
-            )
-            raise
-
-        # Convert back to Pydantic with counts using helper
-        return await self._fetch_task_with_counts(task_orm)
-
-    async def get_archived_tasks(
-        self,
-        list_id: UUID,
-        search_query: Optional[str] = None
-    ) -> List[Task]:
-        """
-        Get all archived tasks for a list, optionally filtered by search query.
-
-        Args:
-            list_id: UUID of the task list
-            search_query: Optional search string to filter by title or notes
-
-        Returns:
-            List of archived Task instances ordered by archived date (newest first)
-
-        Raises:
-            TaskListNotFoundError: If list does not exist
-        """
-        # Verify list exists
-        await self._verify_list_exists(list_id)
-
-        # Build query for archived tasks only
-        query = select(TaskORM).where(
-            TaskORM.list_id == str(list_id),
-            TaskORM.is_archived == True,
-        )
-
-        # Apply search filter if provided
-        if search_query:
-            search_pattern = f"%{search_query}%"
-            from sqlalchemy import or_
-            query = query.where(
-                or_(
-                    TaskORM.title.ilike(search_pattern),
-                    TaskORM.notes.ilike(search_pattern)
-                )
-            )
-
-        # Order by archived date, newest first
-        query = query.order_by(TaskORM.archived_at.desc())
-
-        # Execute query
-        result = await self.session.execute(query)
-        task_orms = result.scalars().all()
-
-        # Convert to Pydantic with counts using helper
-        tasks = await self._fetch_tasks_with_counts(task_orms)
-
-        logger.debug(
-            f"Retrieved {len(tasks)} archived tasks for list_id={list_id}"
-            + (f" with search query '{search_query}'" if search_query else "")
-        )
-
-        return tasks
 
     async def bulk_migrate_tasks(
         self,
@@ -1038,60 +761,6 @@ class TaskService:
             )
             raise
 
-    async def bulk_archive_tasks(self, list_id: UUID) -> int:
-        """
-        Archive all completed tasks in a list.
-
-        Only tasks that are completed and not already archived will be archived.
-        Incomplete tasks are not affected.
-
-        Args:
-            list_id: UUID of the task list
-
-        Returns:
-            Number of tasks archived
-
-        Raises:
-            TaskListNotFoundError: If list does not exist
-        """
-        from sqlalchemy import update
-
-        try:
-            logger.debug(f"Bulk archiving completed tasks in list {list_id}")
-
-            # Verify list exists
-            await self._verify_list_exists(list_id)
-
-            # Get current timestamp for archived_at
-            archived_at = datetime.utcnow()
-
-            # Update all completed, non-archived tasks in the list
-            result = await self.session.execute(
-                update(TaskORM)
-                .where(TaskORM.list_id == str(list_id))
-                .where(TaskORM.is_completed == True)  # noqa: E712
-                .where(TaskORM.is_archived == False)  # noqa: E712
-                .values(is_archived=True, archived_at=archived_at)
-            )
-
-            archived_count = result.rowcount
-
-            await self.session.flush()
-
-            logger.info(
-                f"Bulk archived {archived_count} completed tasks in list {list_id}"
-            )
-
-            return archived_count
-        except TaskListNotFoundError:
-            # Already logged, just re-raise
-            raise
-        except Exception as e:
-            logger.error(
-                f"Failed to bulk archive tasks in list {list_id}: {e}",
-                exc_info=True
-            )
-            raise
 
     # ==============================================================================
     # HIERARCHY OPERATIONS
@@ -1137,7 +806,7 @@ class TaskService:
                 raise ValueError("Cannot move task to be its own parent")
 
             # Check if new_parent_id is a descendant of task_id
-            descendants = await self.get_all_descendants(task_id, include_archived=True)
+            descendants = await self.get_all_descendants(task_id)
             if any(d.id == new_parent_id for d in descendants):
                 raise ValueError("Cannot move task to be a descendant of itself")
 
@@ -1237,7 +906,7 @@ class TaskService:
             parent_level: New level of the parent task
         """
         # Get direct children
-        children = await self.get_children(parent_id, include_archived=True)
+        children = await self.get_children(parent_id)
 
         for child in children:
             # Update child level
@@ -1264,10 +933,6 @@ class TaskService:
         """
         Get the total and completed child counts for a task, including all descendants.
 
-        This method recursively counts all non-archived descendants, even if their
-        immediate parent is archived. This handles orphaned tasks that remain visible
-        when their parent is archived without cascading the archive operation.
-
         Args:
             parent_id: UUID of the parent task
 
@@ -1282,7 +947,7 @@ class TaskService:
             async def count_descendants(current_parent_id: UUID) -> None:
                 nonlocal total_count, completed_count
 
-                # Get ALL direct children (including archived ones for traversal)
+                # Get all direct children
                 query = select(TaskORM).where(
                     TaskORM.parent_id == str(current_parent_id),
                 )
@@ -1292,14 +957,11 @@ class TaskService:
 
                 # Process each child
                 for child in children:
-                    # Only count non-archived children
-                    if not child.is_archived:
-                        total_count += 1
-                        if child.is_completed:
-                            completed_count += 1
+                    total_count += 1
+                    if child.is_completed:
+                        completed_count += 1
 
-                    # Always recurse to find non-archived descendants,
-                    # even if this child is archived (to handle orphaned tasks)
+                    # Recursively count descendants
                     await count_descendants(UUID(child.id))
 
             await count_descendants(parent_id)

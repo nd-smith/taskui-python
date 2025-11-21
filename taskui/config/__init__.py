@@ -25,9 +25,7 @@ if config_file.exists():
 else:
     Config = None
 
-from taskui.config.nesting_config import ColumnNestingConfig, NestingConfig
-
 if Config is not None:
-    __all__ = ["Config", "ColumnNestingConfig", "NestingConfig"]
+    __all__ = ["Config"]
 else:
-    __all__ = ["ColumnNestingConfig", "NestingConfig"]
+    __all__ = []

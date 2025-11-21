@@ -20,16 +20,10 @@ from textual.binding import Binding
 
 from taskui.logging_config import get_logger
 from taskui.models import Task
-from taskui.services.nesting_rules import Column, NestingRules
+from taskui.services.nesting_validation import can_create_child, MAX_NESTING_DEPTH
+from taskui.ui.base_styles import MODAL_BASE_CSS, BUTTON_BASE_CSS
 from taskui.ui.theme import (
-    BACKGROUND,
-    FOREGROUND,
-    BORDER,
-    SELECTION,
-    LEVEL_0_COLOR,
     LEVEL_1_COLOR,
-    LEVEL_2_COLOR,
-    MODAL_OVERLAY_BG,
     ORANGE,
 )
 
@@ -51,27 +45,17 @@ class TaskCreationModal(ModalScreen):
         TaskCancelled: Emitted when the modal is cancelled
     """
 
-    DEFAULT_CSS = f"""
-    TaskCreationModal {{
-        align: center middle;
-        background: {MODAL_OVERLAY_BG};
-    }}
-
+    # Use base modal and button styles, plus modal-specific overrides
+    DEFAULT_CSS = MODAL_BASE_CSS + BUTTON_BASE_CSS + f"""
     TaskCreationModal > Container {{
         width: 70;
         height: auto;
-        background: {BACKGROUND};
-        border: thick {LEVEL_0_COLOR};
-        padding: 1 2;
     }}
 
     TaskCreationModal .modal-header {{
         width: 100%;
         height: 3;
         content-align: center middle;
-        text-style: bold;
-        color: {LEVEL_0_COLOR};
-        border-bottom: solid {BORDER};
         margin-bottom: 1;
     }}
 
@@ -97,33 +81,18 @@ class TaskCreationModal(ModalScreen):
     TaskCreationModal .field-label {{
         width: 100%;
         height: 1;
-        color: {FOREGROUND};
         margin-top: 1;
     }}
 
     TaskCreationModal Input {{
         width: 100%;
         margin-bottom: 1;
-        background: {BORDER};
-        color: {FOREGROUND};
-        border: solid {SELECTION};
-    }}
-
-    TaskCreationModal Input:focus {{
-        border: solid {LEVEL_0_COLOR};
     }}
 
     TaskCreationModal TextArea {{
         width: 100%;
         height: 8;
         margin-bottom: 1;
-        background: {BORDER};
-        color: {FOREGROUND};
-        border: solid {SELECTION};
-    }}
-
-    TaskCreationModal TextArea:focus {{
-        border: solid {LEVEL_0_COLOR};
     }}
 
     TaskCreationModal .button-container {{
@@ -137,32 +106,6 @@ class TaskCreationModal(ModalScreen):
     TaskCreationModal Button {{
         margin: 0 1;
         min-width: 15;
-        background: {SELECTION};
-        color: {FOREGROUND};
-        border: solid {BORDER};
-    }}
-
-    TaskCreationModal Button:hover {{
-        background: {BORDER};
-        border: solid {LEVEL_0_COLOR};
-    }}
-
-    TaskCreationModal Button.save-button {{
-        border: solid {LEVEL_1_COLOR};
-    }}
-
-    TaskCreationModal Button.save-button:hover {{
-        background: {LEVEL_1_COLOR};
-        color: {BACKGROUND};
-    }}
-
-    TaskCreationModal Button.cancel-button {{
-        border: solid {LEVEL_2_COLOR};
-    }}
-
-    TaskCreationModal Button.cancel-button:hover {{
-        background: {LEVEL_2_COLOR};
-        color: {BACKGROUND};
     }}
     """
 
@@ -175,9 +118,7 @@ class TaskCreationModal(ModalScreen):
         self,
         mode: str = "create_sibling",
         parent_task: Optional[Task] = None,
-        column: Column = Column.COLUMN1,
         edit_task: Optional[Task] = None,
-        nesting_rules: Optional['NestingRules'] = None,
         **kwargs
     ) -> None:
         """Initialize the task creation modal.
@@ -189,22 +130,18 @@ class TaskCreationModal(ModalScreen):
 
         Validation Logic:
             For "create_child" mode, performs nesting constraint validation before the modal
-            is even displayed. If the parent task has reached the maximum nesting depth for
-            the specified column, a validation_error is set and the save button is disabled.
+            is even displayed. If the parent task has reached the maximum nesting depth,
+            a validation_error is set and the save button is disabled.
             This prevents users from attempting an operation that would violate nesting rules.
 
         Nesting Limit Checks:
-            - Uses NestingRules instance methods to check if a child can be created
-            - Retrieves the column-specific max depth from config
-            - Stores error message if constraints are violated (e.g., "Cannot create child:
-              Parent at level 2 has reached max nesting depth (10) for COLUMN2")
+            - Uses global MAX_NESTING_DEPTH to check if a child can be created
+            - Stores error message if constraints are violated
 
         Args:
             mode: Creation mode - "create_sibling", "create_child", or "edit"
             parent_task: Parent task for child creation or sibling reference
-            column: Column context (COLUMN1 or COLUMN2) used for nesting limit validation
             edit_task: Task to edit (for edit mode)
-            nesting_rules: NestingRules instance for validation (uses config if provided)
             **kwargs: Additional keyword arguments for ModalScreen
 
         Attributes:
@@ -214,29 +151,19 @@ class TaskCreationModal(ModalScreen):
         super().__init__(**kwargs)
         self.mode = mode
         self.parent_task = parent_task
-        self.column = column
         self.edit_task = edit_task
-        self._nesting_rules = nesting_rules
         self.validation_error: Optional[str] = None
 
         # Validate nesting constraints for child creation
         if mode == "create_child" and parent_task is not None:
-            # Use instance methods if available, otherwise fall back to deprecated class methods
-            if self._nesting_rules:
-                can_create = self._nesting_rules.can_create_child_instance(parent_task, column)
-                max_depth = self._nesting_rules.get_max_depth_instance(column)
-            else:
-                can_create = NestingRules.can_create_child(parent_task, column)
-                max_depth = NestingRules.get_max_depth(column)
-
-            if not can_create:
+            if not can_create_child(parent_task.level):
                 self.validation_error = (
                     f"Cannot create child: Parent at level {parent_task.level} "
-                    f"has reached max nesting depth ({max_depth}) for {column.value}"
+                    f"has reached maximum nesting depth ({MAX_NESTING_DEPTH})"
                 )
                 logger.warning(
                     f"TaskModal: Nesting limit violation - parent_id={parent_task.id}, "
-                    f"parent_level={parent_task.level}, column={column.value}, max_depth={max_depth}"
+                    f"parent_level={parent_task.level}, max_depth={MAX_NESTING_DEPTH}"
                 )
 
     def compose(self) -> ComposeResult:
@@ -278,8 +205,8 @@ class TaskCreationModal(ModalScreen):
 
             # Buttons
             with Container(classes="button-container"):
-                yield Button("Save [Enter]", variant="success", id="save-button", classes="save-button")
-                yield Button("Cancel [Esc]", variant="error", id="cancel-button", classes="cancel-button")
+                yield Button("Save [Enter]", id="save-button", classes="success")
+                yield Button("Cancel [Esc]", id="cancel-button", classes="error")
 
     def _get_header_text(self) -> str:
         """Get the modal header text based on mode.
@@ -317,28 +244,24 @@ class TaskCreationModal(ModalScreen):
         """Get context text for child creation.
 
         This helper method generates context information for child task creation, showing
-        the parent task and calculated child level. It uses NestingRules to determine the
-        appropriate level for the new child task based on the parent's level and column.
+        the parent task and calculated child level.
 
         Nesting Limit Validation:
-            - Calls NestingRules.get_allowed_child_level() to determine the child's level
-            - This method respects column-specific nesting limits already validated in __init__
-            - The child level is always parent.level + 1 if child creation is allowed
+            - Child level is always parent.level + 1 if child creation is allowed
             - If nesting limits were exceeded, a validation_error would be set in __init__
               and this method would not be called
 
         Returns:
             Context string showing parent task and child level (e.g., "Creating child under:
-            Parent Task...\nNew task level: 2 | Column: COLUMN1") or empty string if
-            parent_task is not set
+            Parent Task...\nNew task level: 2") or empty string if parent_task is not set
         """
         if not self.parent_task:
             return ""
 
-        child_level = NestingRules.get_allowed_child_level(self.parent_task, self.column)
+        child_level = self.parent_task.level + 1
         return (
             f"Creating child under: {self.parent_task.title[:30]}...\n"
-            f"New task level: {child_level} | Column: {self.column.value}"
+            f"New task level: {child_level}"
         )
 
     def _get_sibling_context_text(self) -> str:
@@ -351,20 +274,15 @@ class TaskCreationModal(ModalScreen):
         Validation Considerations:
             - No explicit nesting limit check is performed for sibling creation
             - Top-level tasks (level 0) have no nesting depth constraints
-            - Column information is always displayed to help users understand the context
             - Sibling creation does not require parent_task to be set
 
         Returns:
-            Context string showing sibling level and column (e.g., "Creating sibling at
-            level: 1 | Column: COLUMN1") or "Creating new top-level task | Column: COLUMN1"
-            if no parent task is specified
+            Context string showing sibling level (e.g., "Creating sibling at level: 1")
+            or "Creating new top-level task" if no parent task is specified
         """
         if self.parent_task:
-            return (
-                f"Creating sibling at level: {self.parent_task.level} | "
-                f"Column: {self.column.value}"
-            )
-        return f"Creating new top-level task | Column: {self.column.value}"
+            return f"Creating sibling at level: {self.parent_task.level}"
+        return "Creating new top-level task"
 
     def _get_context_text(self) -> str:
         """Get the context information text.
@@ -410,7 +328,7 @@ class TaskCreationModal(ModalScreen):
         if self.mode == "edit" and self.edit_task:
             context_info = f", edit_task_id={self.edit_task.id}"
         elif self.parent_task:
-            context_info = f", parent_id={self.parent_task.id}, column={self.column.value}"
+            context_info = f", parent_id={self.parent_task.id}"
 
         logger.info(f"TaskModal: Opened in {self.mode} mode{context_info}")
 
@@ -489,7 +407,6 @@ class TaskCreationModal(ModalScreen):
                 notes=notes,
                 mode=self.mode,
                 parent_task=self.parent_task,
-                column=self.column,
                 edit_task=self.edit_task,
             )
         )
@@ -545,7 +462,6 @@ class TaskCreationModal(ModalScreen):
             notes: Optional[str],
             mode: str,
             parent_task: Optional[Task],
-            column: Column,
             edit_task: Optional[Task] = None,
         ) -> None:
             """Initialize the TaskCreated message.
@@ -555,7 +471,6 @@ class TaskCreationModal(ModalScreen):
                 notes: Optional task notes
                 mode: Creation mode
                 parent_task: Parent task reference
-                column: Column context
                 edit_task: Task being edited (if any)
             """
             super().__init__()
@@ -563,7 +478,6 @@ class TaskCreationModal(ModalScreen):
             self.notes = notes
             self.mode = mode
             self.parent_task = parent_task
-            self.column = column
             self.edit_task = edit_task
 
     class TaskCancelled(Message):

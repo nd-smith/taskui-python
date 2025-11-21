@@ -13,8 +13,6 @@ from taskui.services.task_service import (
     TaskNotFoundError,
     TaskListNotFoundError,
 )
-from taskui.services.nesting_rules import Column, NestingRules
-from taskui.config.nesting_config import NestingConfig
 from taskui.database import TaskORM
 
 
@@ -39,7 +37,6 @@ class TestTaskServiceCreate:
         assert task.list_id == sample_list_id
         assert task.position == 0
         assert not task.is_completed
-        assert not task.is_archived
 
     @pytest.mark.asyncio
     async def test_create_task_saves_to_database(self, db_session, sample_task_list, sample_list_id):
@@ -88,17 +85,16 @@ class TestTaskServiceCreateChild:
 
     @pytest.mark.asyncio
     async def test_create_child_in_column1(self, db_session, sample_task_list, sample_list_id):
-        """Test creating a child task in Column 1 context."""
+        """Test creating a child task."""
         service = TaskService(db_session)
 
         # Create parent (level 0)
         parent = await service.create_task("Parent Task", sample_list_id)
 
-        # Create child in Column 1
+        # Create child
         child = await service.create_child_task(
             parent_id=parent.id,
             title="Child Task",
-            column=Column.COLUMN1,
             notes="Child notes"
         )
 
@@ -111,68 +107,47 @@ class TestTaskServiceCreateChild:
 
     @pytest.mark.asyncio
     async def test_create_child_in_column2(self, db_session, sample_task_list, sample_list_id):
-        """Test creating nested children in Column 2 context."""
+        """Test creating nested children."""
         service = TaskService(db_session)
 
         # Create parent (level 0)
         parent = await service.create_task("Parent Task", sample_list_id)
 
-        # Create level 1 child in Column 2
+        # Create level 1 child
         child = await service.create_child_task(
             parent_id=parent.id,
-            title="Level 1 Child",
-            column=Column.COLUMN2
+            title="Level 1 Child"
         )
 
         assert child.level == 1
         assert child.parent_id == parent.id
 
-        # Create level 2 grandchild in Column 2
+        # Create level 2 grandchild
         grandchild = await service.create_child_task(
             parent_id=child.id,
-            title="Level 2 Grandchild",
-            column=Column.COLUMN2
+            title="Level 2 Grandchild"
         )
 
         assert grandchild.level == 2
         assert grandchild.parent_id == child.id
 
     @pytest.mark.asyncio
-    async def test_create_child_exceeds_column1_limit(self, db_session, sample_task_list, sample_list_id):
-        """Test that Column 1 nesting limit is enforced."""
+    async def test_create_child_exceeds_global_limit(self, db_session, sample_task_list, sample_list_id):
+        """Test that global nesting limit (max depth 4) is enforced."""
         service = TaskService(db_session)
 
-        # Create parent (level 0) and child (level 1)
-        parent = await service.create_task("Parent", sample_list_id)
-        child = await service.create_child_task(
-            parent_id=parent.id,
-            title="Child",
-            column=Column.COLUMN1
-        )
-
-        # Try to create grandchild in Column 1 (should fail)
-        with pytest.raises(NestingLimitError) as exc_info:
-            await service.create_child_task(
-                parent_id=child.id,
-                title="Grandchild",
-                column=Column.COLUMN1
-            )
-
-        assert "maximum nesting depth" in str(exc_info.value).lower()
-
-    @pytest.mark.asyncio
-    async def test_create_child_exceeds_column2_limit(self, db_session, sample_task_list, sample_list_id):
-        """Test that Column 2 nesting limit is enforced."""
-        service = TaskService(db_session)
-
-        # Create full depth hierarchy in Column 2
+        # Create full depth hierarchy (levels 0-4)
         level0 = await service.create_task("Level 0", sample_list_id)
-        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
-        level2 = await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
+        level1 = await service.create_child_task(level0.id, "Level 1")
+        level2 = await service.create_child_task(level1.id, "Level 2")
+        level3 = await service.create_child_task(level2.id, "Level 3")
+        level4 = await service.create_child_task(level3.id, "Level 4")
 
-        # Try to create level 3 (should fail)
-        with pytest.raises(NestingLimitError):
-            await service.create_child_task(level2.id, "Level 3", Column.COLUMN2)
+        # Try to create level 5 (should fail - exceeds max depth of 4)
+        with pytest.raises(NestingLimitError) as exc_info:
+            await service.create_child_task(level4.id, "Level 5")
+
+        assert "maximum nesting depth" in str(exc_info.value).lower() or "max depth" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_create_child_nonexistent_parent(self, db_session, sample_task_list):
@@ -183,8 +158,7 @@ class TestTaskServiceCreateChild:
         with pytest.raises(TaskNotFoundError):
             await service.create_child_task(
                 parent_id=fake_parent_id,
-                title="Orphan Child",
-                column=Column.COLUMN1
+                title="Orphan Child"
             )
 
     @pytest.mark.asyncio
@@ -194,9 +168,9 @@ class TestTaskServiceCreateChild:
 
         parent = await service.create_task("Parent", sample_list_id)
 
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
-        child3 = await service.create_child_task(parent.id, "Child 3", Column.COLUMN1)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
+        child3 = await service.create_child_task(parent.id, "Child 3")
 
         assert child1.position == 0
         assert child2.position == 1
@@ -247,55 +221,13 @@ class TestTaskServiceRead:
 
         # Create parent and children
         parent = await service.create_task("Parent", sample_list_id)
-        await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
+        await service.create_child_task(parent.id, "Child 1")
+        await service.create_child_task(parent.id, "Child 2")
 
         # Should only return parent
         tasks = await service.get_tasks_for_list(sample_list_id)
         assert len(tasks) == 1
         assert tasks[0].id == parent.id
-
-    @pytest.mark.asyncio
-    async def test_get_tasks_for_list_excludes_archived(self, db_session, sample_task_list, sample_list_id):
-        """Test that archived tasks are excluded by default."""
-        service = TaskService(db_session)
-
-        # Create active and archived tasks
-        task1 = await service.create_task("Active Task", sample_list_id)
-        task2 = await service.create_task("Archived Task", sample_list_id)
-
-        # Manually archive task2 in database
-        from sqlalchemy import update
-        from taskui.database import TaskORM
-        await db_session.execute(
-            update(TaskORM).where(TaskORM.id == str(task2.id)).values(is_archived=True)
-        )
-        await db_session.commit()
-
-        # Should only return active task
-        tasks = await service.get_tasks_for_list(sample_list_id, include_archived=False)
-        assert len(tasks) == 1
-        assert tasks[0].id == task1.id
-
-    @pytest.mark.asyncio
-    async def test_get_tasks_for_list_includes_archived(self, db_session, sample_task_list, sample_list_id):
-        """Test that archived tasks are included when requested."""
-        service = TaskService(db_session)
-
-        task1 = await service.create_task("Active Task", sample_list_id)
-        task2 = await service.create_task("Archived Task", sample_list_id)
-
-        # Manually archive task2
-        from sqlalchemy import update
-        from taskui.database import TaskORM
-        await db_session.execute(
-            update(TaskORM).where(TaskORM.id == str(task2.id)).values(is_archived=True)
-        )
-        await db_session.commit()
-
-        # Should return both tasks
-        tasks = await service.get_tasks_for_list(sample_list_id, include_archived=True)
-        assert len(tasks) == 2
 
     @pytest.mark.asyncio
     async def test_get_tasks_for_nonexistent_list(self, db_session):
@@ -312,8 +244,8 @@ class TestTaskServiceRead:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
 
         children = await service.get_children(parent.id)
 
@@ -328,9 +260,9 @@ class TestTaskServiceRead:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        await service.create_child_task(parent.id, "First", Column.COLUMN1)
-        await service.create_child_task(parent.id, "Second", Column.COLUMN1)
-        await service.create_child_task(parent.id, "Third", Column.COLUMN1)
+        await service.create_child_task(parent.id, "First")
+        await service.create_child_task(parent.id, "Second")
+        await service.create_child_task(parent.id, "Third")
 
         children = await service.get_children(parent.id)
 
@@ -344,8 +276,8 @@ class TestTaskServiceRead:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child = await service.create_child_task(parent.id, "Child", Column.COLUMN2)
-        grandchild = await service.create_child_task(child.id, "Grandchild", Column.COLUMN2)
+        child = await service.create_child_task(parent.id, "Child")
+        grandchild = await service.create_child_task(child.id, "Grandchild")
 
         children = await service.get_children(parent.id)
 
@@ -368,10 +300,10 @@ class TestTaskServiceRead:
 
         # Create hierarchy
         parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN2)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN2)
-        grandchild1 = await service.create_child_task(child1.id, "Grandchild 1", Column.COLUMN2)
-        grandchild2 = await service.create_child_task(child1.id, "Grandchild 2", Column.COLUMN2)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
+        grandchild1 = await service.create_child_task(child1.id, "Grandchild 1")
+        grandchild2 = await service.create_child_task(child1.id, "Grandchild 2")
 
         descendants = await service.get_all_descendants(parent.id)
 
@@ -390,9 +322,9 @@ class TestTaskServiceRead:
 
         # Create hierarchy
         parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN2)
-        grandchild1 = await service.create_child_task(child1.id, "Grandchild 1", Column.COLUMN2)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN2)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        grandchild1 = await service.create_child_task(child1.id, "Grandchild 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
 
         descendants = await service.get_all_descendants(parent.id)
 
@@ -443,9 +375,9 @@ class TestTaskServiceChildCounts:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
-        await service.create_child_task(parent.id, "Child 3", Column.COLUMN1)
+        await service.create_child_task(parent.id, "Child 1")
+        await service.create_child_task(parent.id, "Child 2")
+        await service.create_child_task(parent.id, "Child 3")
 
         retrieved_parent = await service.get_task_by_id(parent.id)
 
@@ -458,9 +390,9 @@ class TestTaskServiceChildCounts:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
-        child3 = await service.create_child_task(parent.id, "Child 3", Column.COLUMN1)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
+        child3 = await service.create_child_task(parent.id, "Child 3")
 
         # Mark two children as completed
         from sqlalchemy import update
@@ -571,7 +503,7 @@ class TestTaskServiceUpdate:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child = await service.create_child_task(parent.id, "Child", Column.COLUMN1)
+        child = await service.create_child_task(parent.id, "Child")
 
         # Update parent
         await service.update_task(parent.id, title="Updated Parent")
@@ -607,8 +539,8 @@ class TestTaskServiceDelete:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
 
         # Delete parent
         await service.delete_task(parent.id)
@@ -626,8 +558,8 @@ class TestTaskServiceDelete:
 
         # Create hierarchy
         level0 = await service.create_task("Level 0", sample_list_id)
-        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
-        level2 = await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
+        level1 = await service.create_child_task(level0.id, "Level 1")
+        level2 = await service.create_child_task(level1.id, "Level 2")
 
         # Delete root
         await service.delete_task(level0.id)
@@ -653,9 +585,9 @@ class TestTaskServiceDelete:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
-        child3 = await service.create_child_task(parent.id, "Child 3", Column.COLUMN1)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
+        child3 = await service.create_child_task(parent.id, "Child 3")
 
         # Delete middle child
         await service.delete_task(child2.id)
@@ -678,7 +610,7 @@ class TestTaskServiceMove:
 
         parent1 = await service.create_task("Parent 1", sample_list_id)
         parent2 = await service.create_task("Parent 2", sample_list_id)
-        child = await service.create_child_task(parent1.id, "Child", Column.COLUMN1)
+        child = await service.create_child_task(parent1.id, "Child")
 
         # Move child to parent2
         moved_task = await service.move_task(child.id, new_parent_id=parent2.id)
@@ -700,7 +632,7 @@ class TestTaskServiceMove:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child = await service.create_child_task(parent.id, "Child", Column.COLUMN1)
+        child = await service.create_child_task(parent.id, "Child")
 
         # Move to top level
         moved_task = await service.move_task(child.id, new_parent_id=None)
@@ -722,9 +654,9 @@ class TestTaskServiceMove:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
-        child3 = await service.create_child_task(parent.id, "Child 3", Column.COLUMN1)
+        child1 = await service.create_child_task(parent.id, "Child 1")
+        child2 = await service.create_child_task(parent.id, "Child 2")
+        child3 = await service.create_child_task(parent.id, "Child 3")
 
         # Move child3 to position 0
         await service.move_task(child3.id, new_parent_id=parent.id, new_position=0)
@@ -747,8 +679,8 @@ class TestTaskServiceMove:
 
         # Create hierarchy
         level0 = await service.create_task("Level 0", sample_list_id)
-        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
-        level2 = await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
+        level1 = await service.create_child_task(level0.id, "Level 1")
+        level2 = await service.create_child_task(level1.id, "Level 2")
 
         # Move level1 to top level
         await service.move_task(level1.id, new_parent_id=None)
@@ -776,8 +708,8 @@ class TestTaskServiceMove:
         service = TaskService(db_session)
 
         parent = await service.create_task("Parent", sample_list_id)
-        child = await service.create_child_task(parent.id, "Child", Column.COLUMN2)
-        grandchild = await service.create_child_task(child.id, "Grandchild", Column.COLUMN2)
+        child = await service.create_child_task(parent.id, "Child")
+        grandchild = await service.create_child_task(child.id, "Grandchild")
 
         with pytest.raises(ValueError, match="descendant of itself"):
             await service.move_task(parent.id, new_parent_id=grandchild.id)
@@ -789,13 +721,13 @@ class TestTaskServiceMove:
 
         # Create hierarchy with task that has children
         level0 = await service.create_task("Level 0", sample_list_id)
-        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
-        level2a = await service.create_child_task(level1.id, "Level 2a", Column.COLUMN2)
-        level2b = await service.create_child_task(level1.id, "Level 2b", Column.COLUMN2)
+        level1 = await service.create_child_task(level0.id, "Level 1")
+        level2a = await service.create_child_task(level1.id, "Level 2a")
+        level2b = await service.create_child_task(level1.id, "Level 2b")
 
         # Create another hierarchy at max depth
         another_level0 = await service.create_task("Another Level 0", sample_list_id)
-        another_level1 = await service.create_child_task(another_level0.id, "Another Level 1", Column.COLUMN2)
+        another_level1 = await service.create_child_task(another_level0.id, "Another Level 1")
 
         # Try to move level1 (which has children at level 2) under another_level1
         # This would make level1 -> level 2, and its children -> level 3 (exceeds limit)
@@ -833,12 +765,12 @@ class TestTaskServiceIntegration:
 
         # Create Column 1 hierarchy (max 2 levels)
         sprint = await service.create_task("Sprint Planning", sample_list_id)
-        review = await service.create_child_task(sprint.id, "Review backlog", Column.COLUMN1)
+        review = await service.create_child_task(sprint.id, "Review backlog")
 
         # Create Column 2 hierarchy (max 3 levels)
         api = await service.create_task("API Development", sample_list_id)
-        auth = await service.create_child_task(api.id, "Auth endpoints", Column.COLUMN2)
-        session = await service.create_child_task(auth.id, "Session mgmt", Column.COLUMN2)
+        auth = await service.create_child_task(api.id, "Auth endpoints")
+        session = await service.create_child_task(auth.id, "Session mgmt")
 
         # Verify hierarchy
         sprint_children = await service.get_children(sprint.id)
@@ -958,606 +890,3 @@ class TestTaskServiceToggleCompletion:
         # Try to toggle a non-existent task
         with pytest.raises(TaskNotFoundError):
             await service.toggle_completion(uuid4())
-
-
-class TestTaskServiceArchive:
-    """Tests for task archive operations."""
-
-    @pytest.mark.asyncio
-    async def test_archive_completed_task(self, db_session, sample_task_list, sample_list_id):
-        """Test archiving a completed task."""
-        service = TaskService(db_session)
-
-        # Create and complete a task
-        task = await service.create_task(
-            title="Test Task",
-            list_id=sample_list_id
-        )
-        completed_task = await service.toggle_completion(task.id)
-        assert completed_task.is_completed
-
-        # Archive the task
-        archived_task = await service.archive_task(task.id)
-
-        # Verify archived
-        assert archived_task.is_archived
-        assert archived_task.archived_at is not None
-
-    @pytest.mark.asyncio
-    async def test_archive_incomplete_task_raises_error(self, db_session, sample_task_list, sample_list_id):
-        """Test archiving an incomplete task raises ValueError."""
-        service = TaskService(db_session)
-
-        # Create an incomplete task
-        task = await service.create_task(
-            title="Incomplete Task",
-            list_id=sample_list_id
-        )
-
-        # Try to archive incomplete task
-        with pytest.raises(ValueError, match="Only completed tasks can be archived"):
-            await service.archive_task(task.id)
-
-    @pytest.mark.asyncio
-    async def test_archive_persistence(self, db_session, sample_task_list, sample_list_id):
-        """Test that archive status persists to database."""
-        service = TaskService(db_session)
-
-        # Create, complete, and archive a task
-        task = await service.create_task(
-            title="Test Task",
-            list_id=sample_list_id
-        )
-        await service.toggle_completion(task.id)
-        await service.archive_task(task.id)
-        await db_session.commit()
-
-        # Retrieve from database
-        retrieved_task = await service.get_task_by_id(task.id)
-
-        # Verify persistence
-        assert retrieved_task.is_archived
-        assert retrieved_task.archived_at is not None
-
-    @pytest.mark.asyncio
-    async def test_archive_nonexistent_task(self, db_session):
-        """Test archiving a non-existent task raises error."""
-        service = TaskService(db_session)
-
-        # Try to archive a non-existent task
-        with pytest.raises(TaskNotFoundError):
-            await service.archive_task(uuid4())
-
-    @pytest.mark.asyncio
-    async def test_unarchive_task(self, db_session, sample_task_list, sample_list_id):
-        """Test unarchiving (restoring) a task."""
-        service = TaskService(db_session)
-
-        # Create, complete, and archive a task
-        task = await service.create_task(
-            title="Test Task",
-            list_id=sample_list_id
-        )
-        await service.toggle_completion(task.id)
-        archived_task = await service.archive_task(task.id)
-        assert archived_task.is_archived
-
-        # Unarchive the task
-        unarchived_task = await service.unarchive_task(task.id)
-
-        # Verify unarchived
-        assert not unarchived_task.is_archived
-        assert unarchived_task.archived_at is None
-        assert unarchived_task.is_completed  # Should still be completed
-
-    @pytest.mark.asyncio
-    async def test_unarchive_persistence(self, db_session, sample_task_list, sample_list_id):
-        """Test that unarchive status persists to database."""
-        service = TaskService(db_session)
-
-        # Create, complete, and archive a task
-        task = await service.create_task(
-            title="Test Task",
-            list_id=sample_list_id
-        )
-        await service.toggle_completion(task.id)
-        await service.archive_task(task.id)
-        await service.unarchive_task(task.id)
-        await db_session.commit()
-
-        # Retrieve from database
-        retrieved_task = await service.get_task_by_id(task.id)
-
-        # Verify persistence
-        assert not retrieved_task.is_archived
-        assert retrieved_task.archived_at is None
-
-    @pytest.mark.asyncio
-    async def test_unarchive_nonexistent_task(self, db_session):
-        """Test unarchiving a non-existent task raises error."""
-        service = TaskService(db_session)
-
-        # Try to unarchive a non-existent task
-        with pytest.raises(TaskNotFoundError):
-            await service.unarchive_task(uuid4())
-
-    @pytest.mark.asyncio
-    async def test_unarchive_orphaned_child_becomes_top_level(self, db_session, sample_task_list, sample_list_id):
-        """Test that restoring a child task with archived parent becomes top-level."""
-        service = TaskService(db_session)
-
-        # Create parent task
-        parent_task = await service.create_task("Parent Task", sample_list_id)
-
-        # Create child task
-        child_task = await service.create_child_task(
-            parent_id=parent_task.id,
-            title="Child Task",
-            column=Column.COLUMN1
-        )
-
-        # Verify child has parent
-        assert child_task.parent_id == parent_task.id
-        assert child_task.level == 1
-
-        # Complete and archive both tasks
-        await service.toggle_completion(parent_task.id)
-        await service.archive_task(parent_task.id)
-        await service.toggle_completion(child_task.id)
-        await service.archive_task(child_task.id)
-
-        # Restore the child task (parent is still archived)
-        restored_child = await service.unarchive_task(child_task.id)
-
-        # Verify child is now top-level
-        assert restored_child.parent_id is None
-        assert restored_child.level == 0
-        assert not restored_child.is_archived
-
-    @pytest.mark.asyncio
-    async def test_get_archived_tasks(self, db_session, sample_task_list, sample_list_id):
-        """Test retrieving all archived tasks for a list."""
-        service = TaskService(db_session)
-
-        # Create and archive multiple tasks
-        task1 = await service.create_task("Task 1", sample_list_id)
-        task2 = await service.create_task("Task 2", sample_list_id)
-        task3 = await service.create_task("Task 3", sample_list_id)
-
-        # Complete and archive task1 and task3
-        await service.toggle_completion(task1.id)
-        await service.archive_task(task1.id)
-        await service.toggle_completion(task3.id)
-        await service.archive_task(task3.id)
-
-        # Get archived tasks
-        archived_tasks = await service.get_archived_tasks(sample_list_id)
-
-        # Verify we get 2 archived tasks
-        assert len(archived_tasks) == 2
-        archived_ids = {task.id for task in archived_tasks}
-        assert task1.id in archived_ids
-        assert task3.id in archived_ids
-        assert task2.id not in archived_ids
-
-    @pytest.mark.asyncio
-    async def test_get_archived_tasks_ordered_by_date(self, db_session, sample_task_list, sample_list_id):
-        """Test archived tasks are ordered by archived date (newest first)."""
-        import asyncio
-        service = TaskService(db_session)
-
-        # Create and archive multiple tasks with small delays
-        task1 = await service.create_task("Task 1", sample_list_id)
-        await service.toggle_completion(task1.id)
-        await service.archive_task(task1.id)
-
-        await asyncio.sleep(0.01)  # Small delay to ensure different timestamps
-
-        task2 = await service.create_task("Task 2", sample_list_id)
-        await service.toggle_completion(task2.id)
-        await service.archive_task(task2.id)
-
-        # Get archived tasks
-        archived_tasks = await service.get_archived_tasks(sample_list_id)
-
-        # Verify order (newest first)
-        assert len(archived_tasks) == 2
-        assert archived_tasks[0].id == task2.id  # Most recently archived
-        assert archived_tasks[1].id == task1.id
-
-    @pytest.mark.asyncio
-    async def test_get_archived_tasks_with_search(self, db_session, sample_task_list, sample_list_id):
-        """Test searching archived tasks by title or notes."""
-        service = TaskService(db_session)
-
-        # Create tasks with different titles and notes
-        task1 = await service.create_task("Important meeting", sample_list_id, notes="Discuss project")
-        task2 = await service.create_task("Code review", sample_list_id, notes="Review PR #123")
-        task3 = await service.create_task("Write documentation", sample_list_id, notes="API docs")
-
-        # Complete and archive all tasks
-        for task in [task1, task2, task3]:
-            await service.toggle_completion(task.id)
-            await service.archive_task(task.id)
-
-        # Search by title
-        results = await service.get_archived_tasks(sample_list_id, search_query="meeting")
-        assert len(results) == 1
-        assert results[0].id == task1.id
-
-        # Search by notes
-        results = await service.get_archived_tasks(sample_list_id, search_query="API")
-        assert len(results) == 1
-        assert results[0].id == task3.id
-
-        # Search with no matches
-        results = await service.get_archived_tasks(sample_list_id, search_query="nonexistent")
-        assert len(results) == 0
-
-        # Search case-insensitive
-        results = await service.get_archived_tasks(sample_list_id, search_query="MEETING")
-        assert len(results) == 1
-        assert results[0].id == task1.id
-
-    @pytest.mark.asyncio
-    async def test_get_archived_tasks_empty_list(self, db_session, sample_task_list, sample_list_id):
-        """Test getting archived tasks when none exist."""
-        service = TaskService(db_session)
-
-        # Get archived tasks (should be empty)
-        archived_tasks = await service.get_archived_tasks(sample_list_id)
-
-        # Verify empty
-        assert len(archived_tasks) == 0
-
-    @pytest.mark.asyncio
-    async def test_get_archived_tasks_invalid_list(self, db_session):
-        """Test getting archived tasks for non-existent list raises error."""
-        service = TaskService(db_session)
-        fake_list_id = uuid4()
-
-        # Try to get archived tasks for non-existent list
-        with pytest.raises(TaskListNotFoundError):
-            await service.get_archived_tasks(fake_list_id)
-
-    @pytest.mark.asyncio
-    async def test_archived_tasks_excluded_from_normal_queries(self, db_session, sample_task_list, sample_list_id):
-        """Test that archived tasks are excluded from normal task queries."""
-        service = TaskService(db_session)
-
-        # Create tasks
-        task1 = await service.create_task("Task 1", sample_list_id)
-        task2 = await service.create_task("Task 2", sample_list_id)
-
-        # Archive task1
-        await service.toggle_completion(task1.id)
-        await service.archive_task(task1.id)
-
-        # Get tasks for list (should exclude archived)
-        tasks = await service.get_tasks_for_list(sample_list_id, include_archived=False)
-
-        # Verify only non-archived task is returned
-        assert len(tasks) == 1
-        assert tasks[0].id == task2.id
-
-    @pytest.mark.asyncio
-    async def test_archived_tasks_excluded_from_child_counts(self, db_session, sample_task_list, sample_list_id):
-        """Test that archived children are excluded from parent's child counts."""
-        service = TaskService(db_session)
-
-        # Create parent with children
-        parent = await service.create_task("Parent", sample_list_id)
-        child1 = await service.create_child_task(parent.id, "Child 1", Column.COLUMN1)
-        child2 = await service.create_child_task(parent.id, "Child 2", Column.COLUMN1)
-        child3 = await service.create_child_task(parent.id, "Child 3", Column.COLUMN1)
-
-        # Complete and archive child2
-        await service.toggle_completion(child2.id)
-        await service.archive_task(child2.id)
-
-        # Get parent and check child counts
-        parent_task = await service.get_task_by_id(parent.id)
-
-        # Should only count non-archived children
-        assert parent_task.has_children
-        # The progress_string property is based on child counts, which excludes archived
-        # So we should have 2 children, not 3
-
-    @pytest.mark.asyncio
-    async def test_archive_then_complete_toggle(self, db_session, sample_task_list, sample_list_id):
-        """Test that archived tasks remain archived even if completion is toggled."""
-        service = TaskService(db_session)
-
-        # Create, complete, and archive a task
-        task = await service.create_task("Test Task", sample_list_id)
-        await service.toggle_completion(task.id)
-        await service.archive_task(task.id)
-
-        # Toggle completion (mark incomplete)
-        updated_task = await service.toggle_completion(task.id)
-
-        # Verify task remains archived
-        assert updated_task.is_archived
-        assert not updated_task.is_completed
-
-
-class TestTaskServiceSoftDelete:
-    """Tests for task soft delete operations."""
-
-    @pytest.mark.asyncio
-    async def test_soft_delete_incomplete_task(self, db_session, sample_task_list, sample_list_id):
-        """Test soft deleting an incomplete task (unlike archive, this works)."""
-        service = TaskService(db_session)
-
-        # Create an incomplete task
-        task = await service.create_task(
-            title="Incomplete Task",
-            list_id=sample_list_id
-        )
-        assert not task.is_completed
-
-        # Soft delete the task (should work even though incomplete)
-        deleted_task = await service.soft_delete_task(task.id)
-
-        # Verify soft deleted (archived)
-        assert deleted_task.is_archived
-        assert deleted_task.archived_at is not None
-        assert not deleted_task.is_completed  # Should still be incomplete
-
-    @pytest.mark.asyncio
-    async def test_soft_delete_completed_task(self, db_session, sample_task_list, sample_list_id):
-        """Test soft deleting a completed task."""
-        service = TaskService(db_session)
-
-        # Create and complete a task
-        task = await service.create_task(
-            title="Completed Task",
-            list_id=sample_list_id
-        )
-        completed_task = await service.toggle_completion(task.id)
-        assert completed_task.is_completed
-
-        # Soft delete the task
-        deleted_task = await service.soft_delete_task(task.id)
-
-        # Verify soft deleted (archived)
-        assert deleted_task.is_archived
-        assert deleted_task.archived_at is not None
-        assert deleted_task.is_completed  # Should still be completed
-
-    @pytest.mark.asyncio
-    async def test_soft_delete_persistence(self, db_session, sample_task_list, sample_list_id):
-        """Test that soft delete status persists to database."""
-        service = TaskService(db_session)
-
-        # Create and soft delete a task
-        task = await service.create_task(
-            title="Test Task",
-            list_id=sample_list_id
-        )
-        await service.soft_delete_task(task.id)
-
-        # Query back from database
-        await db_session.flush()
-        retrieved_task = await service.get_task_by_id(task.id)
-
-        # Verify persisted as archived
-        assert retrieved_task.is_archived
-        assert retrieved_task.archived_at is not None
-
-    @pytest.mark.asyncio
-    async def test_soft_delete_excludes_from_normal_queries(self, db_session, sample_task_list, sample_list_id):
-        """Test that soft deleted tasks are excluded from normal queries."""
-        service = TaskService(db_session)
-
-        # Create two tasks
-        task1 = await service.create_task("Task 1", sample_list_id)
-        task2 = await service.create_task("Task 2", sample_list_id)
-
-        # Soft delete one task
-        await service.soft_delete_task(task1.id)
-
-        # Get tasks (without archived)
-        tasks = await service.get_tasks_for_list(sample_list_id)
-
-        # Should only see task2
-        assert len(tasks) == 1
-        assert tasks[0].id == task2.id
-
-    @pytest.mark.asyncio
-    async def test_soft_delete_can_be_restored(self, db_session, sample_task_list, sample_list_id):
-        """Test that soft deleted tasks can be restored via unarchive."""
-        service = TaskService(db_session)
-
-        # Create and soft delete a task
-        task = await service.create_task("Test Task", sample_list_id)
-        await service.soft_delete_task(task.id)
-
-        # Verify deleted (archived)
-        deleted_task = await service.get_task_by_id(task.id)
-        assert deleted_task.is_archived
-
-        # Restore via unarchive
-        restored_task = await service.unarchive_task(task.id)
-
-        # Verify restored
-        assert not restored_task.is_archived
-        assert restored_task.archived_at is None
-
-        # Should appear in normal queries now
-        tasks = await service.get_tasks_for_list(sample_list_id)
-        assert len(tasks) == 1
-        assert tasks[0].id == task.id
-
-    @pytest.mark.asyncio
-    async def test_soft_delete_appears_in_archived_tasks(self, db_session, sample_task_list, sample_list_id):
-        """Test that soft deleted tasks appear in get_archived_tasks."""
-        service = TaskService(db_session)
-
-        # Create incomplete task and soft delete it
-        task1 = await service.create_task("Deleted Incomplete", sample_list_id)
-        await service.soft_delete_task(task1.id)
-
-        # Create completed task and archive it normally
-        task2 = await service.create_task("Archived Completed", sample_list_id)
-        await service.toggle_completion(task2.id)
-        await service.archive_task(task2.id)
-
-        # Get archived tasks
-        archived = await service.get_archived_tasks(sample_list_id)
-
-        # Both should appear
-        assert len(archived) == 2
-        archived_ids = {t.id for t in archived}
-        assert task1.id in archived_ids
-        assert task2.id in archived_ids
-
-    @pytest.mark.asyncio
-    async def test_soft_delete_nonexistent_task(self, db_session):
-        """Test soft deleting a non-existent task raises error."""
-        service = TaskService(db_session)
-
-        # Try to soft delete non-existent task
-        with pytest.raises(TaskNotFoundError):
-            await service.soft_delete_task(uuid4())
-
-
-class TestTaskServiceWithCustomNestingRules:
-    """Tests for TaskService with custom NestingRules instances."""
-
-    @pytest.mark.asyncio
-    async def test_task_service_with_default_nesting_rules(self, db_session, sample_task_list, sample_list_id):
-        """Test TaskService works with default behavior when no nesting_rules provided."""
-        # No nesting_rules parameter - should use deprecated class methods
-        service = TaskService(db_session)
-
-        # Should work with default Column 1 limits (max 2 levels)
-        parent = await service.create_task("Parent", sample_list_id)
-        child = await service.create_child_task(parent.id, "Child", Column.COLUMN1)
-
-        assert child.level == 1
-        assert child.parent_id == parent.id
-
-        # Should fail at level 2 for Column 1
-        with pytest.raises(NestingLimitError):
-            await service.create_child_task(child.id, "Grandchild", Column.COLUMN1)
-
-    @pytest.mark.asyncio
-    async def test_task_service_with_custom_nesting_rules(self, db_session, sample_task_list, sample_list_id):
-        """Test TaskService with custom NestingRules instance."""
-        # Create custom config allowing Column2 up to level 2
-        config = NestingConfig(
-            column1={'max_depth': 1},  # Default
-            column2={'max_depth': 2}   # Allow up to level 2
-        )
-        nesting_rules = NestingRules(config)
-        service = TaskService(db_session, nesting_rules=nesting_rules)
-
-        # Should allow level 2 in Column 2 now
-        level0 = await service.create_task("Level 0", sample_list_id)
-        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
-        level2 = await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
-
-        assert level2.level == 2
-        assert level2.parent_id == level1.id
-
-        # Level 2 cannot have children (at max_depth)
-        with pytest.raises(NestingLimitError):
-            await service.create_child_task(level2.id, "Level 3", Column.COLUMN2)
-
-    @pytest.mark.asyncio
-    async def test_task_service_respects_column2_custom_depth(self, db_session, sample_task_list, sample_list_id):
-        """Test TaskService respects custom max_depth for Column 2."""
-        # Create config with shallow Column 2 depth (only level 1)
-        config = NestingConfig(
-            column1={'max_depth': 1},
-            column2={'max_depth': 1}  # Allow up to level 1 only
-        )
-        nesting_rules = NestingRules(config)
-        service = TaskService(db_session, nesting_rules=nesting_rules)
-
-        # Create hierarchy in Column 2
-        level0 = await service.create_task("Level 0", sample_list_id)
-        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
-
-        assert level1.level == 1
-
-        # Should fail at level 2 (exceeds max_depth of 1)
-        with pytest.raises(NestingLimitError):
-            await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
-
-    @pytest.mark.asyncio
-    async def test_task_service_with_zero_nesting_depth(self, db_session, sample_task_list, sample_list_id):
-        """Test TaskService with zero nesting depth (no children allowed)."""
-        # Create config with no nesting allowed
-        config = NestingConfig(
-            column1={'max_depth': 0},  # Only level 0 tasks allowed
-            column2={'max_depth': 0}
-        )
-        nesting_rules = NestingRules(config)
-        service = TaskService(db_session, nesting_rules=nesting_rules)
-
-        # Should allow creating level 0 tasks
-        task = await service.create_task("Level 0 Task", sample_list_id)
-        assert task.level == 0
-
-        # Should not allow creating children in either column
-        with pytest.raises(NestingLimitError):
-            await service.create_child_task(task.id, "Child", Column.COLUMN1)
-
-        with pytest.raises(NestingLimitError):
-            await service.create_child_task(task.id, "Child", Column.COLUMN2)
-
-    @pytest.mark.asyncio
-    async def test_task_service_move_respects_custom_nesting_rules(self, db_session, sample_task_list, sample_list_id):
-        """Test that move operations respect custom nesting rules."""
-        # Create config with standard depth
-        config = NestingConfig(
-            column1={'max_depth': 1},
-            column2={'max_depth': 2}  # Allow up to level 2
-        )
-        nesting_rules = NestingRules(config)
-        service = TaskService(db_session, nesting_rules=nesting_rules)
-
-        # Create a hierarchy
-        level0 = await service.create_task("Level 0", sample_list_id)
-        level1 = await service.create_child_task(level0.id, "Level 1", Column.COLUMN2)
-        level2 = await service.create_child_task(level1.id, "Level 2", Column.COLUMN2)
-
-        # Try to move level1 (which has a child at level 2) under another level 1 task
-        another_level0 = await service.create_task("Another Level 0", sample_list_id)
-        another_level1 = await service.create_child_task(another_level0.id, "Another Level 1", Column.COLUMN2)
-
-        # This would make level1 -> level 2, level2 -> level 3 (exceeds max_depth of 2)
-        # This should fail
-        with pytest.raises(NestingLimitError):
-            await service.move_task(level1.id, new_parent_id=another_level1.id)
-
-    @pytest.mark.asyncio
-    async def test_multiple_services_with_different_rules(self, db_session, sample_task_list, sample_list_id):
-        """Test that multiple TaskService instances can have different nesting rules."""
-        # Create two services with different rules
-        config_shallow = NestingConfig(
-            column1={'max_depth': 0},  # No nesting
-            column2={'max_depth': 1}   # Only 1 level
-        )
-        config_normal = NestingConfig(
-            column1={'max_depth': 1},  # 1 level
-            column2={'max_depth': 2}   # 2 levels
-        )
-
-        service_shallow = TaskService(db_session, nesting_rules=NestingRules(config_shallow))
-        service_normal = TaskService(db_session, nesting_rules=NestingRules(config_normal))
-
-        # Shallow service should enforce shallow limits
-        parent = await service_shallow.create_task("Parent", sample_list_id)
-
-        with pytest.raises(NestingLimitError):
-            await service_shallow.create_child_task(parent.id, "Child", Column.COLUMN1)
-
-        # Normal service should allow standard nesting
-        parent2 = await service_normal.create_task("Parent2", sample_list_id)
-        child2 = await service_normal.create_child_task(parent2.id, "Child2", Column.COLUMN2)
-        grandchild2 = await service_normal.create_child_task(child2.id, "Grandchild2", Column.COLUMN2)
-
-        assert grandchild2.level == 2  # Should succeed with normal config

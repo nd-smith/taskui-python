@@ -88,7 +88,6 @@ class Task(BaseModel):
 
     # Status flags
     is_completed: bool = Field(default=False, description="Whether the task is completed")
-    is_archived: bool = Field(default=False, description="Whether the task is archived")
 
     # Hierarchy
     parent_id: Optional[UUID] = Field(default=None, description="Parent task ID for nesting")
@@ -101,7 +100,6 @@ class Task(BaseModel):
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
     completed_at: Optional[datetime] = Field(default=None, description="Completion timestamp")
-    archived_at: Optional[datetime] = Field(default=None, description="Archive timestamp")
 
     # Private attributes for computed properties
     _child_count: int = PrivateAttr(default=0)
@@ -116,7 +114,6 @@ class Task(BaseModel):
                 "title": "Complete project documentation",
                 "notes": "Include API docs and user guide",
                 "is_completed": False,
-                "is_archived": False,
                 "parent_id": None,
                 "level": 0,
                 "position": 0,
@@ -276,19 +273,3 @@ class Task(BaseModel):
         self.is_completed = False
         self.completed_at = None
 
-    def archive(self) -> None:
-        """
-        Archive the task.
-
-        Raises:
-            ValueError: If task is not completed
-        """
-        if not self.is_completed:
-            raise ValueError("Only completed tasks can be archived")
-        self.is_archived = True
-        self.archived_at = datetime.utcnow()
-
-    def unarchive(self) -> None:
-        """Remove the task from archive."""
-        self.is_archived = False
-        self.archived_at = None

@@ -69,7 +69,6 @@ class TaskORM(Base):
 
     # Status flags
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Hierarchy
     parent_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
@@ -84,7 +83,6 @@ class TaskORM(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Relationship to task list
     task_list: Mapped["TaskListORM"] = relationship("TaskListORM", back_populates="tasks")

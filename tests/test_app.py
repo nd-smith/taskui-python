@@ -22,11 +22,9 @@ from taskui.ui.components.column import TaskColumn
 from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
 from taskui.ui.components.task_modal import TaskCreationModal
-from taskui.ui.components.archive_modal import ArchiveModal
 from taskui.models import Task, TaskList
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
-from taskui.services.nesting_rules import Column as NestingColumn
 from taskui.database import DatabaseManager, get_database_manager
 from taskui.ui.keybindings import COLUMN_1_ID, COLUMN_2_ID, COLUMN_3_ID
 import taskui.database
@@ -480,7 +478,6 @@ class TestActionMethodsTaskOperations:
             assert isinstance(modal, TaskCreationModal)
             assert modal.mode == "create_sibling"
             assert modal.parent_task == selected_task
-            assert modal.column == NestingColumn.COLUMN1
 
     @pytest.mark.asyncio
     async def test_action_new_sibling_task_with_no_selection(self):
@@ -546,7 +543,6 @@ class TestActionMethodsTaskOperations:
             assert isinstance(modal, TaskCreationModal)
             assert modal.mode == "create_child"
             assert modal.parent_task == parent_task
-            assert modal.column == NestingColumn.COLUMN1
 
     @pytest.mark.asyncio
     async def test_action_new_child_task_requires_selection(self):
@@ -713,92 +709,6 @@ class TestActionMethodsTaskOperations:
             # Should complete without error
             assert True
 
-    @pytest.mark.asyncio
-    async def test_action_archive_task_archives_completed_task(self):
-        """Test that action_archive_task() archives a completed task.
-
-        Verifies:
-        - Task is archived in database
-        - Task is removed from UI
-        - Detail panel is cleared
-        - Only completed tasks can be archived
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create a task
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Task to Archive"
-            modal.action_save()
-            await pilot.pause()
-
-            # Select and complete the task
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            task = column1.get_selected_task()
-            task_id = task.id
-
-            await app.action_toggle_completion()
-            await pilot.pause()
-
-            # Archive the task
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Verify task is archived in database
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                archived_task = await task_service.get_task_by_id(task_id)
-                assert archived_task.is_archived is True
-
-            # Verify task is removed from Column 1
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            assert len(column1._tasks) == 0
-
-    @pytest.mark.asyncio
-    async def test_action_archive_task_rejects_incomplete_task(self):
-        """Test that action_archive_task() rejects incomplete tasks.
-
-        Verifies:
-        - Incomplete task cannot be archived
-        - Warning notification is shown
-        - Task remains in UI
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create a task (not completed)
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Incomplete Task"
-            modal.action_save()
-            await pilot.pause()
-
-            # Select the task (not completed)
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            task = column1.get_selected_task()
-            task_id = task.id
-
-            # Try to archive the incomplete task
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Verify task is NOT archived in database
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                task_in_db = await task_service.get_task_by_id(task_id)
-                assert task_in_db.is_archived is False
-
-            # Verify task is still in Column 1
-            assert len(column1._tasks) == 1
 
     @pytest.mark.asyncio
     async def test_action_delete_task_shows_not_implemented_notification(self):
@@ -832,44 +742,6 @@ class TestActionMethodsTaskOperations:
             # Verify task still exists (delete not implemented)
             assert len(column1._tasks) == 1
 
-    @pytest.mark.asyncio
-    async def test_action_view_archives_opens_archive_modal(self):
-        """Test that action_view_archives() opens archive modal.
-
-        Verifies:
-        - Archive modal is opened
-        - Modal receives archived tasks from current list
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create and archive a task
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Task to Archive"
-            modal.action_save()
-            await pilot.pause()
-
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-
-            # Complete and archive
-            await app.action_toggle_completion()
-            await pilot.pause()
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Open archive modal
-            await app.action_view_archives()
-            await pilot.pause()
-
-            # Verify archive modal is shown
-            modal = app.screen
-            assert isinstance(modal, ArchiveModal)
-            assert len(modal.archived_tasks) == 1
 
 
 class TestActionMethodsListSwitching:
@@ -1099,51 +971,6 @@ class TestEventHandlers:
                 updated_task = await task_service.get_task_by_id(task_id)
                 assert updated_task.title == "Updated Title"
 
-    @pytest.mark.asyncio
-    async def test_on_archive_modal_task_restored_restores_task(self):
-        """Test that on_archive_modal_task_restored() restores archived task.
-
-        Verifies:
-        - Task is unarchived in database
-        - UI is refreshed
-        - Task appears in Column 1
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create, complete, and archive task
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Task to Restore"
-            modal.action_save()
-            await pilot.pause()
-
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            task_id = column1.get_selected_task().id
-
-            await app.action_toggle_completion()
-            await pilot.pause()
-            await app.action_archive_task()
-            await pilot.pause()
-
-            # Restore task by posting restore message
-            from taskui.ui.components.archive_modal import ArchiveModal
-            app.post_message(ArchiveModal.TaskRestored(task_id=task_id))
-            await pilot.pause()
-
-            # Verify task is unarchived
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                restored_task = await task_service.get_task_by_id(task_id)
-                assert restored_task.is_archived is False
-
-            # Verify task appears in Column 1
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            assert len(column1._tasks) == 1
 
     @pytest.mark.asyncio
     async def test_on_list_bar_list_selected_switches_list(self):
@@ -1527,30 +1354,6 @@ class TestHelperMethods:
             assert column is None
 
     @pytest.mark.asyncio
-    async def test_get_nesting_column_from_id_converts_correctly(self):
-        """Test that _get_nesting_column_from_id() converts IDs correctly.
-
-        Verifies:
-        - COLUMN_1_ID maps to NestingColumn.COLUMN1
-        - COLUMN_2_ID maps to NestingColumn.COLUMN2
-        - COLUMN_3_ID maps to NestingColumn.COLUMN1 (default)
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-
-            # Column 1 maps to COLUMN1
-            nesting_col = app._get_nesting_column_from_id(COLUMN_1_ID)
-            assert nesting_col == NestingColumn.COLUMN1
-
-            # Column 2 maps to COLUMN2
-            nesting_col = app._get_nesting_column_from_id(COLUMN_2_ID)
-            assert nesting_col == NestingColumn.COLUMN2
-
-            # Column 3 maps to COLUMN1 (default)
-            nesting_col = app._get_nesting_column_from_id(COLUMN_3_ID)
-            assert nesting_col == NestingColumn.COLUMN1
-
-    @pytest.mark.asyncio
     async def test_get_parent_id_for_sibling_returns_correct_parent(self):
         """Test that _get_parent_id_for_sibling() returns correct parent ID.
 
@@ -1603,67 +1406,3 @@ class TestHelperMethods:
             parent_id = app._get_parent_id_for_sibling(child_task)
             assert parent_id == parent_task.id
 
-    @pytest.mark.asyncio
-    async def test_make_levels_context_relative_adjusts_levels(self):
-        """Test that _make_levels_context_relative() adjusts task levels.
-
-        Verifies:
-        - Levels are adjusted relative to parent level
-        - Children start at level 0 in relative context
-        - Grandchildren are at level 1 in relative context
-        """
-        async with TaskUI().run_test() as pilot:
-            app = pilot.app
-            await pilot.pause()
-
-            # Create parent (level 0) with child (level 1) and grandchild (level 2)
-            app.action_new_sibling_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Parent"
-            modal.action_save()
-            await pilot.pause()
-
-            column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
-            column1._selected_index = 0
-            parent_task = column1.get_selected_task()
-
-            app.action_new_child_task()
-            await pilot.pause()
-            modal = app.screen
-            title_input = modal.query_one("#title-input")
-            title_input.value = "Child"
-            modal.action_save()
-            await pilot.pause()
-
-            # Get child task and create grandchild
-            async with app._db_manager.get_session() as session:
-                task_service = TaskService(session)
-                children = await task_service.get_children(parent_task.id)
-                child_task = children[0]
-
-                # Create grandchild
-                await task_service.create_child_task(
-                    parent_id=child_task.id,
-                    title="Grandchild",
-                    column=NestingColumn.COLUMN2,
-                    notes=None
-                )
-
-                # Get all descendants
-                descendants = await task_service.get_all_descendants(
-                    parent_task.id,
-                    include_archived=False
-                )
-
-            # Adjust levels relative to parent (level 0)
-            adjusted = app._make_levels_context_relative(descendants, parent_task.level)
-
-            # Child should be level 0 (relative to parent)
-            child_adjusted = next(t for t in adjusted if t.title == "Child")
-            assert child_adjusted.level == 0
-
-            # Grandchild should be level 1 (relative to parent)
-            grandchild_adjusted = next(t for t in adjusted if t.title == "Grandchild")
-            assert grandchild_adjusted.level == 1

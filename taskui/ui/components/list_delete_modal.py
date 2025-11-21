@@ -1,9 +1,8 @@
 """List deletion modal for TaskUI.
 
-This module provides a modal dialog for deleting task lists with three options:
+This module provides a modal dialog for deleting task lists with two options:
 1. Migrate tasks to another list
-2. Archive completed tasks, delete the rest
-3. Delete all tasks (cascade)
+2. Delete all tasks (cascade)
 
 Features:
 - Warning message showing task count
@@ -24,6 +23,7 @@ from textual.binding import Binding
 
 from taskui.logging_config import get_logger
 from taskui.models import TaskList
+from taskui.ui.base_styles import MODAL_BASE_CSS, BUTTON_BASE_CSS
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -31,8 +31,6 @@ from taskui.ui.theme import (
     SELECTION,
     LEVEL_0_COLOR,
     LEVEL_1_COLOR,
-    LEVEL_2_COLOR,
-    MODAL_OVERLAY_BG,
     ORANGE,
     RED,
 )
@@ -45,7 +43,6 @@ class ListDeleteModal(ModalScreen):
 
     Displays options for:
     - Migrating tasks to another list
-    - Archiving completed tasks
     - Deleting all tasks (cascade)
 
     Messages:
@@ -53,27 +50,19 @@ class ListDeleteModal(ModalScreen):
         DeleteCancelled: Emitted when deletion is cancelled
     """
 
-    DEFAULT_CSS = f"""
-    ListDeleteModal {{
-        align: center middle;
-        background: {MODAL_OVERLAY_BG};
-    }}
-
+    # Use base modal and button styles, plus modal-specific overrides
+    DEFAULT_CSS = MODAL_BASE_CSS + BUTTON_BASE_CSS + f"""
     ListDeleteModal > Container {{
         width: 75;
         height: auto;
-        background: {BACKGROUND};
         border: thick {RED};
-        padding: 1 2;
     }}
 
     ListDeleteModal .modal-header {{
         width: 100%;
         height: 3;
         content-align: center middle;
-        text-style: bold;
         color: {RED};
-        border-bottom: solid {BORDER};
         margin-bottom: 1;
     }}
 
@@ -91,7 +80,6 @@ class ListDeleteModal(ModalScreen):
     ListDeleteModal .info-text {{
         width: 100%;
         height: auto;
-        color: {FOREGROUND};
         text-align: center;
         margin-bottom: 1;
         padding: 0 1;
@@ -155,14 +143,6 @@ class ListDeleteModal(ModalScreen):
     ListDeleteModal Button {{
         margin: 0 1;
         min-width: 15;
-        background: {SELECTION};
-        color: {FOREGROUND};
-        border: solid {BORDER};
-    }}
-
-    ListDeleteModal Button:hover {{
-        background: {BORDER};
-        border: solid {LEVEL_0_COLOR};
     }}
 
     ListDeleteModal Button.confirm-button {{
@@ -261,17 +241,7 @@ class ListDeleteModal(ModalScreen):
                             classes="option-label"
                         )
 
-                    # Option 2: Archive
-                    yield RadioButton(
-                        "📁 Archive completed tasks, delete incomplete tasks",
-                        id="option-archive"
-                    )
-                    yield Label(
-                        f"{completed_count} completed task(s) will be archived",
-                        classes="option-label"
-                    )
-
-                    # Option 3: Delete all
+                    # Option 2: Delete all
                     yield RadioButton(
                         "💥 Delete all tasks (cascade delete)",
                         id="option-delete-all"
@@ -298,10 +268,10 @@ class ListDeleteModal(ModalScreen):
             migrate_button = self.query_one("#option-migrate", RadioButton)
             migrate_button.disabled = True
 
-            # Select archive option instead
-            archive_button = self.query_one("#option-archive", RadioButton)
-            archive_button.value = True
-            self.selected_option = "archive"
+            # Select delete_all option instead
+            delete_all_button = self.query_one("#option-delete-all", RadioButton)
+            delete_all_button.value = True
+            self.selected_option = "delete_all"
 
             # Disable target list selector
             target_select = self.query_one("#target-list-select", Select)
@@ -317,11 +287,6 @@ class ListDeleteModal(ModalScreen):
             if self.available_lists:
                 target_select = self.query_one("#target-list-select", Select)
                 target_select.disabled = False
-        elif pressed_id == "option-archive":
-            self.selected_option = "archive"
-            # Disable list selector
-            target_select = self.query_one("#target-list-select", Select)
-            target_select.disabled = True
         elif pressed_id == "option-delete-all":
             self.selected_option = "delete_all"
             # Disable list selector
@@ -392,7 +357,7 @@ class ListDeleteModal(ModalScreen):
 
             Args:
                 list_to_delete: The list being deleted
-                option: Deletion option ("migrate", "archive", or "delete_all")
+                option: Deletion option ("migrate" or "delete_all")
                 target_list_id: Target list for migration (if applicable)
             """
             super().__init__()

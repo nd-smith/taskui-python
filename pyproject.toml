@@ -34,6 +34,10 @@ dependencies = [
     "aiosqlite>=0.19.0",
     "typing-extensions>=4.8.0",
     "tomli>=2.0.0; python_version<'3.11'",
+    # Printing infrastructure
+    "boto3>=1.28.0",              # AWS SQS for cloud print queue
+    "python-escpos>=3.0",         # ESC/POS thermal printer support
+    "cryptography>=41.0.0",       # AES-256-GCM encryption for print jobs
 ]
 
 [project.optional-dependencies]
