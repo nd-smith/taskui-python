@@ -15,7 +15,9 @@ from typing import Optional
 
 
 # Log file configuration
-LOG_DIR = Path.home() / ".taskui" / "logs"
+_PROJECT_ROOT = Path(__file__).parent.parent
+_CONFIG_DIR = _PROJECT_ROOT / "config"
+LOG_DIR = _CONFIG_DIR / "logs"
 LOG_FILE = LOG_DIR / "taskui.log"
 
 # Log format configuration

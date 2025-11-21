@@ -11,7 +11,6 @@ from datetime import datetime
 
 from taskui.database import DatabaseManager, TaskORM, TaskListORM
 from taskui.services.task_service import TaskService
-from taskui.services.nesting_rules import Column
 
 
 @pytest.mark.asyncio
@@ -130,7 +129,6 @@ async def test_child_task_creation_persists_with_hierarchy(
         child_task = await task_service.create_child_task(
             parent_id=parent_id,
             title=child_title,
-            column=Column.COLUMN1,
             notes="Child notes"
         )
         child_id = child_task.id
@@ -344,7 +342,6 @@ async def test_state_restoration_after_restart(db_manager, sample_task_list, sam
         child = await task_service.create_child_task(
             parent_id=task_ids[0],
             title="Child of Task 0",
-            column=Column.COLUMN1,
             notes="Child task"
         )
         task_ids.append(child.id)

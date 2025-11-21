@@ -13,7 +13,6 @@ from uuid import UUID, uuid4
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from taskui.models import Task
-from taskui.services.nesting_rules import Column
 from taskui.services.task_service import TaskService
 from taskui.ui.app import TaskUI
 from taskui.ui.components.task_modal import TaskCreationModal
@@ -33,8 +32,7 @@ class TestEditTaskModalIntegration:
 
         modal = TaskCreationModal(
             mode="edit",
-            edit_task=task,
-            column=Column.COLUMN1
+            edit_task=task
         )
 
         # Verify modal is in edit mode
@@ -53,8 +51,7 @@ class TestEditTaskModalIntegration:
 
         modal = TaskCreationModal(
             mode="edit",
-            edit_task=task,
-            column=Column.COLUMN1
+            edit_task=task
         )
 
         header_text = modal._get_header_text()
@@ -70,8 +67,7 @@ class TestEditTaskModalIntegration:
 
         modal = TaskCreationModal(
             mode="edit",
-            edit_task=task,
-            column=Column.COLUMN1
+            edit_task=task
         )
 
         context_text = modal._get_context_text()
@@ -89,8 +85,7 @@ class TestEditTaskModalIntegration:
 
         modal = TaskCreationModal(
             mode="edit",
-            edit_task=task,
-            column=Column.COLUMN1
+            edit_task=task
         )
 
         # Should not raise an error
@@ -244,9 +239,9 @@ class TestEditTaskServiceIntegration:
         assert updated_task.list_id == original_list_id
         assert updated_task.level == original_level
         assert updated_task.position == original_position
-        assert updated_task.created_at == original_created_at
+        # Compare timestamps without timezone info
+        assert updated_task.created_at.replace(tzinfo=None) == original_created_at.replace(tzinfo=None)
         assert updated_task.is_completed is False
-        assert updated_task.is_archived is False
 
 
 class TestEditTaskEdgeCases:
@@ -289,8 +284,7 @@ class TestEditTaskEdgeCases:
 
         modal = TaskCreationModal(
             mode="edit",
-            edit_task=task,
-            column=Column.COLUMN1
+            edit_task=task
         )
 
         # The modal should preserve the edit_task for result handling

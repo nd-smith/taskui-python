@@ -100,7 +100,7 @@ class TaskColumn(Widget):
         self.header_title = title
         self.empty_message = empty_message
         self._tasks: List[Task] = []
-        self._selected_index: int = 0
+        self._selected_index: int = -1
 
     def compose(self):
         """Compose the column layout.
@@ -127,6 +127,8 @@ class TaskColumn(Widget):
             len(tasks) == len(self._tasks) and
             all(
                 new.id == old.id and
+                new.title == old.title and
+                new.notes == old.notes and
                 new._child_count == old._child_count and
                 new._completed_child_count == old._completed_child_count and
                 new.is_completed == old.is_completed

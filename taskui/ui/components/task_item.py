@@ -83,6 +83,9 @@ class TaskItem(Widget):
         self._is_last_child = is_last_child
         self.task_id = task.id
 
+        # Add level-specific CSS class
+        self.add_class(f"level-{task.level}")
+
         logger.debug(
             f"TaskItem: Created for task '{task.title[:30]}' (id={task.id}, level={task.level}, "
             f"completed={task.is_completed})"

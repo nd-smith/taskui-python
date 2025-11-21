@@ -24,6 +24,12 @@ from taskui.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Database path in config directory
+_PROJECT_ROOT = Path(__file__).parent.parent
+_CONFIG_DIR = _PROJECT_ROOT / "config"
+_DEFAULT_DB_PATH = _CONFIG_DIR / "taskui.db"
+_DEFAULT_DB_URL = f"sqlite+aiosqlite:///{_DEFAULT_DB_PATH}"
+
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
@@ -99,7 +105,7 @@ class DatabaseManager:
     initialization for both production and testing scenarios.
     """
 
-    def __init__(self, database_url: str = "sqlite+aiosqlite:///taskui.db"):
+    def __init__(self, database_url: str = _DEFAULT_DB_URL):
         """
         Initialize database manager with connection URL.
 
@@ -185,7 +191,7 @@ class DatabaseManager:
 _db_manager: Optional[DatabaseManager] = None
 
 
-def get_database_manager(database_url: str = "sqlite+aiosqlite:///taskui.db") -> DatabaseManager:
+def get_database_manager(database_url: str = _DEFAULT_DB_URL) -> DatabaseManager:
     """
     Get or create the global database manager instance.
 
@@ -201,7 +207,7 @@ def get_database_manager(database_url: str = "sqlite+aiosqlite:///taskui.db") ->
     return _db_manager
 
 
-async def init_database(database_url: str = "sqlite+aiosqlite:///taskui.db") -> DatabaseManager:
+async def init_database(database_url: str = _DEFAULT_DB_URL) -> DatabaseManager:
     """
     Initialize the database and return the manager instance.
 

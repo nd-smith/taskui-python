@@ -34,7 +34,7 @@ class TestTaskColumnCreation:
         assert column.header_title == "Test Column"
         assert column.empty_message == "No tasks"
         assert column._tasks == []
-        assert column._selected_index == 0
+        assert column._selected_index == -1  # No selection initially
 
     def test_column_creation_custom_empty_message(self):
         """Test TaskColumn creation with custom empty message."""
@@ -57,7 +57,7 @@ class TestTaskColumnCreation:
 
         # Initial state should be empty
         assert len(column._tasks) == 0
-        assert column._selected_index == 0
+        assert column._selected_index == -1  # No selection initially
         assert column.can_focus is True
         assert column.focused is False
         assert column.selected_task_id is None
@@ -134,15 +134,13 @@ class TestTaskColumnRendering:
         tasks = [
             make_task(title="Incomplete", is_completed=False),
             make_task(title="Completed", is_completed=True),
-            make_task(title="Archived", is_completed=True, is_archived=True),
         ]
 
         column._tasks = tasks
 
-        assert len(column._tasks) == 3
+        assert len(column._tasks) == 2
         assert column._tasks[0].is_completed is False
         assert column._tasks[1].is_completed is True
-        assert column._tasks[2].is_archived is True
 
     def test_header_title_property(self):
         """Test that header_title reactive property can be read and updated."""
@@ -170,7 +168,7 @@ class TestTaskColumnSelection:
         """Test initial selection state with no tasks."""
         column = TaskColumn(column_id="col", title="Tasks")
 
-        assert column._selected_index == 0
+        assert column._selected_index == -1  # No selection in empty column
         assert column.get_selected_task() is None
 
     def test_initial_selection_state_with_tasks(self, make_task):
@@ -657,9 +655,11 @@ class TestTaskColumnMessageHandling:
 
     def test_task_selected_message_preserves_task_data(self, make_task):
         """Test that TaskSelected message preserves all task data."""
+        parent_id = uuid4()
         task = make_task(
             title="Important Task",
             notes="Important notes",
+            parent_id=parent_id,
             level=1,
             is_completed=True
         )
@@ -698,9 +698,9 @@ class TestTaskColumnGrouping:
         column = TaskColumn(column_id="col", title="Tasks")
 
         tasks = [
-            make_task(title="Parent", parent_id=None),
-            make_task(title="Child 1", parent_id=parent_id),
-            make_task(title="Child 2", parent_id=parent_id),
+            make_task(title="Parent", parent_id=None, level=0),
+            make_task(title="Child 1", parent_id=parent_id, level=1),
+            make_task(title="Child 2", parent_id=parent_id, level=1),
         ]
 
         # Manually set parent task to have the known parent_id

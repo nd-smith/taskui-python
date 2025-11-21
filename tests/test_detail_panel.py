@@ -278,15 +278,6 @@ class TestDetailPanelIntegration:
         assert "Complete" in text2
         assert "Completed:" in text2
 
-        # Test archived task
-        archived = completed.model_copy(update={
-            "is_archived": True,
-            "archived_at": datetime(2025, 1, 14, 14, 0, 0)
-        })
-        panel.current_task = archived
-        text3 = panel._build_details_text(archived)
-        assert "Archived" in text3
-
     def test_multiline_notes_display(self):
         """Test that multiline notes are displayed correctly."""
         task = Task(
@@ -294,7 +285,6 @@ class TestDetailPanelIntegration:
             title="Task with multiline notes",
             notes="Line 1\nLine 2\nLine 3\nLine 4",
             is_completed=False,
-            is_archived=False,
             parent_id=None,
             level=0,
             position=0,

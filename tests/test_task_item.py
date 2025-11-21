@@ -145,12 +145,11 @@ class TestTaskItemStateRendering:
         assert "[✓]" not in rendered_str
 
     def test_render_active_task(self, make_task):
-        """Test rendering an active (not completed, not archived) task."""
+        """Test rendering an active (not completed) task."""
         task = make_task(
             title="Active Task",
             level=0,
-            is_completed=False,
-            is_archived=False
+            is_completed=False
         )
         task_item = TaskItem(task=task)
 

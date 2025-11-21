@@ -27,6 +27,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 .serena/
+docs/
 
 # PyInstaller
 *.manifest
@@ -136,16 +137,14 @@ dmypy.json
 .DS_Store
 Thumbs.db
 
-# Project specific
+# Project specific - old locations (for cleanup/backward compatibility)
 taskui.db
-*.db
-*.db-journal
 backup/
 *.backup
 
-# Sensitive configuration files
-config.ini
-.taskui/config.ini
+# Config directory - runtime data only
+# (config/ directory has its own .gitignore for selective tracking)
+# Database, logs, and settings.ini are gitignored there
 
 # Debug logs
 debug/

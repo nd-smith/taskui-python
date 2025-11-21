@@ -1,0 +1,22 @@
+# Ignore database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Ignore log files
+logs/
+*.log
+
+# Ignore receipts (personal data)
+receipts/
+
+# Ignore settings files with credentials (SECURITY)
+settings.ini
+*.local.toml
+*.local.ini
+
+# Keep only example files and documentation
+!*.example
+!.gitignore
+!README.md

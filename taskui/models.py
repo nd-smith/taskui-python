@@ -5,7 +5,7 @@ Defines the core data structures for tasks and task lists with validation,
 computed properties, and proper typing.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 from uuid import UUID, uuid4
 
@@ -21,7 +21,7 @@ class TaskList(BaseModel):
 
     id: UUID = Field(default_factory=uuid4, description="Unique identifier for the list")
     name: str = Field(..., min_length=1, max_length=100, description="List name")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp")
 
     # Private attributes for computed properties
     _task_count: int = PrivateAttr(default=0)
@@ -98,7 +98,7 @@ class Task(BaseModel):
     list_id: UUID = Field(..., description="ID of the list this task belongs to")
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp")
     completed_at: Optional[datetime] = Field(default=None, description="Completion timestamp")
 
     # Private attributes for computed properties
@@ -266,7 +266,7 @@ class Task(BaseModel):
     def mark_completed(self) -> None:
         """Mark the task as completed with timestamp."""
         self.is_completed = True
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
     def mark_incomplete(self) -> None:
         """Mark the task as incomplete, removing completion timestamp."""

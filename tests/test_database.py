@@ -165,7 +165,6 @@ class TestTaskListORM:
             level=0,
             position=0,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
         db_session.add(task)
@@ -194,7 +193,6 @@ class TestTaskORM:
             title="Complete documentation",
             notes="Include API and user guide",
             is_completed=False,
-            is_archived=False,
             parent_id=None,
             level=0,
             position=0,
@@ -214,7 +212,7 @@ class TestTaskORM:
         assert saved_task.title == "Complete documentation"
         assert saved_task.notes == "Include API and user guide"
         assert saved_task.is_completed is False
-        assert saved_task.is_archived is False
+        # is_archived field was removed from schema
         assert saved_task.level == 0
 
     @pytest.mark.asyncio
@@ -227,7 +225,6 @@ class TestTaskORM:
             level=0,
             position=0,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
         db_session.add(task)
@@ -249,7 +246,6 @@ class TestTaskORM:
             level=0,
             position=0,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
         db_session.add(task)
@@ -275,7 +271,6 @@ class TestTaskORM:
             level=0,
             position=0,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
 
@@ -287,7 +282,6 @@ class TestTaskORM:
             level=1,
             position=0,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
 
@@ -312,7 +306,6 @@ class TestTaskORM:
             level=0,
             position=0,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
         db_session.add(task)

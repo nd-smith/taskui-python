@@ -254,7 +254,6 @@ class TestListServiceDelete:
             level=0,
             position=0,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
         db_session.add(task)
@@ -339,7 +338,6 @@ class TestListServiceTaskCounts:
             level=0,
             position=0,
             is_completed=True,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
         task2 = TaskORM(
@@ -349,7 +347,6 @@ class TestListServiceTaskCounts:
             level=0,
             position=1,
             is_completed=False,
-            is_archived=False,
             created_at=datetime.utcnow()
         )
         db_session.add_all([task1, task2])

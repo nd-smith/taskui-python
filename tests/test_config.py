@@ -17,10 +17,11 @@ class TestConfig:
     """Tests for Config class."""
 
     def test_default_config_path(self):
-        """Test default config path is ~/.taskui/config.ini."""
+        """Test default config path is config/settings.ini."""
         config = Config()
-        expected = Path.home() / ".taskui" / "config.ini"
-        assert config.config_path == expected
+        # Config now uses project-local config directory
+        assert config.config_path.name == "settings.ini"
+        assert "config" in str(config.config_path)
 
     def test_custom_config_path(self):
         """Test custom config path is used."""

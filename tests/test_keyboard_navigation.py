@@ -63,12 +63,6 @@ class TestKeybindings:
         assert "e,E" in binding_dict
         assert binding_dict["e,E"] == "edit_task"
 
-        assert "a,A" in binding_dict
-        assert binding_dict["a,A"] == "archive_task"
-
-        assert "v,V" in binding_dict
-        assert binding_dict["v,V"] == "view_archives"
-
         # Test print binding
         assert "p,P" in binding_dict
         assert binding_dict["p,P"] == "print_column"

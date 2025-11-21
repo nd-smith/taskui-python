@@ -23,7 +23,7 @@ class Config:
         Initialize configuration manager.
 
         Args:
-            config_path: Path to config file, defaults to ~/.taskui/config.ini
+            config_path: Path to config file, defaults to config/settings.ini
         """
         self.config_path = config_path or self._default_config_path()
         self._config = configparser.ConfigParser()
@@ -31,7 +31,8 @@ class Config:
 
     def _default_config_path(self) -> Path:
         """Get default config path."""
-        return Path.home() / ".taskui" / "config.ini"
+        project_root = Path(__file__).parent.parent
+        return project_root / "config" / "settings.ini"
 
     def _load(self):
         """Load configuration from file."""

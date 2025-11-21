@@ -63,7 +63,7 @@ class CloudPrintConfig:
         Load cloud print configuration from config.ini.
 
         Args:
-            config_path: Path to config file (default: ~/.taskui/config.ini)
+            config_path: Path to config file (default: config/settings.ini)
 
         Returns:
             CloudPrintConfig instance

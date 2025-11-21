@@ -225,10 +225,10 @@ class TestAppStateManagement:
             await pilot.pause()
             assert app._focused_column_id == COLUMN_2_ID
 
-            # Navigate to Column 3
+            # Navigate cycles back to Column 1 (Column 3 is non-focusable)
             app.action_navigate_next_column()
             await pilot.pause()
-            assert app._focused_column_id == COLUMN_3_ID
+            assert app._focused_column_id == COLUMN_1_ID
 
             # Navigate back to Column 2
             app.action_navigate_prev_column()
@@ -397,24 +397,24 @@ class TestActionMethodsNavigation:
             await pilot.pause()
             assert app._focused_column_id == COLUMN_2_ID
 
-            # Navigate to Column 3
-            app.action_navigate_next_column()
-            await pilot.pause()
-            assert app._focused_column_id == COLUMN_3_ID
-
-            # Navigate wraps to Column 1
+            # Navigate wraps back to Column 1 (Column 3 is non-focusable)
             app.action_navigate_next_column()
             await pilot.pause()
             assert app._focused_column_id == COLUMN_1_ID
+
+            # Navigate cycles back to Column 2
+            app.action_navigate_next_column()
+            await pilot.pause()
+            assert app._focused_column_id == COLUMN_2_ID
 
     @pytest.mark.asyncio
     async def test_action_navigate_prev_column_cycles_backward(self):
         """Test that action_navigate_prev_column() cycles through columns backward.
 
         Verifies:
-        - Shift+Tab moves from Column 1 to Column 3
-        - Shift+Tab moves from Column 3 to Column 2
+        - Shift+Tab moves from Column 1 to Column 2 (wraps backward)
         - Shift+Tab moves from Column 2 to Column 1
+        Note: Column 3 (DetailPanel) is non-focusable
         """
         async with TaskUI().run_test() as pilot:
             app = pilot.app
@@ -422,12 +422,7 @@ class TestActionMethodsNavigation:
             # Start at Column 1
             assert app._focused_column_id == COLUMN_1_ID
 
-            # Navigate backward to Column 3
-            app.action_navigate_prev_column()
-            await pilot.pause()
-            assert app._focused_column_id == COLUMN_3_ID
-
-            # Navigate backward to Column 2
+            # Navigate backward to Column 2 (wraps around)
             app.action_navigate_prev_column()
             await pilot.pause()
             assert app._focused_column_id == COLUMN_2_ID
@@ -564,8 +559,8 @@ class TestActionMethodsTaskOperations:
             app.action_new_child_task()
             await pilot.pause()
 
-            # Verify modal did not open (screen is still main app)
-            assert app.screen == app
+            # Verify modal did not open (screen is still main app, not a modal)
+            assert not isinstance(app.screen, TaskCreationModal)
 
     @pytest.mark.asyncio
     async def test_action_edit_task_opens_modal_with_task_data(self):
@@ -631,8 +626,8 @@ class TestActionMethodsTaskOperations:
             app.action_edit_task()
             await pilot.pause()
 
-            # Verify modal did not open
-            assert app.screen == app
+            # Verify modal did not open (screen is still main app, not a modal)
+            assert not isinstance(app.screen, TaskCreationModal)
 
     @pytest.mark.asyncio
     async def test_action_toggle_completion_updates_task_state(self):
@@ -918,8 +913,7 @@ class TestEventHandlers:
             async with app._db_manager.get_session() as session:
                 task_service = TaskService(session)
                 tasks = await task_service.get_tasks_for_list(
-                    app._current_list_id,
-                    include_archived=False
+                    app._current_list_id
                 )
                 assert len(tasks) == 1
                 assert tasks[0].title == "New Task"
@@ -996,8 +990,9 @@ class TestEventHandlers:
 
             # Switch to second list
             list_bar = app.query_one(ListBar)
-            second_list_id = app._lists[1].id
-            list_bar.post_message(ListBar.ListSelected(list_id=second_list_id))
+            second_list = app._lists[1]
+            second_list_id = second_list.id
+            list_bar.post_message(ListBar.ListSelected(list_id=second_list_id, list_name=second_list.name))
             await pilot.pause()
 
             # Verify list ID updated
@@ -1048,8 +1043,7 @@ class TestComponentOrchestration:
             async with app._db_manager.get_session() as session:
                 task_service = TaskService(session)
                 tasks = await task_service.get_tasks_for_list(
-                    app._current_list_id,
-                    include_archived=False
+                    app._current_list_id
                 )
                 assert len(tasks) == 1
                 assert tasks[0].title == "Test Task"
@@ -1236,10 +1230,8 @@ class TestUIRefresh:
             column3 = app.query_one(f"#{COLUMN_3_ID}", DetailPanel)
             assert column3.current_task is not None
 
-            # Complete and archive task (clears detail panel)
-            await app.action_toggle_completion()
-            await pilot.pause()
-            await app.action_archive_task()
+            # Delete task (clears detail panel)
+            await app.action_delete_task()
             await pilot.pause()
 
             # Detail panel should be cleared

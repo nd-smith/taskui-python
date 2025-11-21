@@ -48,7 +48,7 @@ class PrinterConfig:
         Load printer configuration from config.ini file.
 
         Args:
-            config_path: Path to config file, defaults to ~/.taskui/config.ini
+            config_path: Path to config file, defaults to config/settings.ini
 
         Returns:
             PrinterConfig instance with loaded settings
