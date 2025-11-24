@@ -291,6 +291,7 @@ class TaskService:
         title: str,
         list_id: UUID,
         notes: Optional[str] = None,
+        url: Optional[str] = None,
     ) -> Task:
         """
         Create a new top-level task (level 0).
@@ -299,6 +300,7 @@ class TaskService:
             title: Task title
             list_id: UUID of the task list
             notes: Optional task notes
+            url: Optional URL/link
 
         Returns:
             Created Task instance
@@ -323,6 +325,7 @@ class TaskService:
                 {
                     'title': title,
                     'notes': notes,
+                    'url': url,
                     'list_id': list_id,
                     'level': 0,
                     'position': position,
@@ -350,6 +353,7 @@ class TaskService:
         parent_id: UUID,
         title: str,
         notes: Optional[str] = None,
+        url: Optional[str] = None,
     ) -> Task:
         """
         Create a child task under a parent task with nesting validation.
@@ -358,6 +362,7 @@ class TaskService:
             parent_id: UUID of the parent task
             title: Child task title
             notes: Optional task notes
+            url: Optional URL/link
 
         Returns:
             Created Task instance
@@ -406,6 +411,7 @@ class TaskService:
                 {
                     'title': title,
                     'notes': notes,
+                    'url': url,
                     'list_id': parent_task.list_id,
                     'parent_id': parent_id,
                     'level': child_level,
@@ -552,27 +558,29 @@ class TaskService:
         task_id: UUID,
         title: Optional[str] = None,
         notes: Optional[str] = None,
+        url: Optional[str] = None,
     ) -> Task:
         """
-        Update a task's properties (title and/or notes).
+        Update a task's properties (title, notes, and/or URL).
 
         Args:
             task_id: UUID of the task to update
             title: New title (if provided)
             notes: New notes (if provided)
+            url: New URL (if provided)
 
         Returns:
             Updated Task instance
 
         Raises:
             TaskNotFoundError: If task does not exist
-            ValueError: If neither title nor notes is provided
+            ValueError: If no fields are provided for update
         """
-        if title is None and notes is None:
-            raise ValueError("At least one of title or notes must be provided")
+        if title is None and notes is None and url is None:
+            raise ValueError("At least one of title, notes, or url must be provided")
 
         try:
-            logger.debug(f"Updating task {task_id}: title={title}, notes={'<provided>' if notes else None}")
+            logger.debug(f"Updating task {task_id}: title={title}, notes={'<provided>' if notes else None}, url={'<provided>' if url else None}")
 
             # Get existing task
             task_orm = await self._get_task_or_raise(task_id)
@@ -582,6 +590,8 @@ class TaskService:
                 task_orm.title = title
             if notes is not None:
                 task_orm.notes = notes
+            if url is not None:
+                task_orm.url = url
 
             # Flush changes to database
             await self.session.flush()

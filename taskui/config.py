@@ -54,6 +54,7 @@ class Config:
         - TASKUI_PRINTER_PORT
         - TASKUI_PRINTER_TIMEOUT
         - TASKUI_PRINTER_DETAIL_LEVEL
+        - TASKUI_PRINTER_INCLUDE_DIARY_ENTRIES
 
         Returns:
             Dictionary with printer configuration
@@ -67,10 +68,16 @@ class Config:
                           self._config.get('printer', 'timeout', fallback='60')),
             'detail_level': os.getenv('TASKUI_PRINTER_DETAIL_LEVEL') or
                            self._config.get('printer', 'detail_level', fallback='minimal'),
+            'include_diary_entries': (
+                os.getenv('TASKUI_PRINTER_INCLUDE_DIARY_ENTRIES', '').lower() == 'true'
+                if os.getenv('TASKUI_PRINTER_INCLUDE_DIARY_ENTRIES')
+                else self._config.getboolean('printer', 'include_diary_entries', fallback=True)
+            ),
         }
 
         logger.debug(f"Printer config: host={config['host']}, port={config['port']}, "
-                    f"detail_level={config['detail_level']}")
+                    f"detail_level={config['detail_level']}, "
+                    f"include_diary_entries={config['include_diary_entries']}")
 
         return config
 
@@ -106,6 +113,25 @@ class Config:
 
         encryption_status = "enabled" if config.get('encryption_key') else "disabled"
         logger.debug(f"Cloud print config: region={config['region']}, mode={config['mode']}, encryption={encryption_status}")
+
+        return config
+
+    def get_display_config(self) -> Dict[str, Any]:
+        """
+        Get display configuration with environment overrides.
+
+        Environment variables take precedence over config file:
+        - TASKUI_DISPLAY_TIMEZONE
+
+        Returns:
+            Dictionary with display configuration
+        """
+        config = {
+            'timezone': os.getenv('TASKUI_DISPLAY_TIMEZONE') or
+                       self._config.get('display', 'timezone', fallback='America/Denver'),
+        }
+
+        logger.debug(f"Display config: timezone={config['timezone']}")
 
         return config
 

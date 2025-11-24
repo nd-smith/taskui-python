@@ -13,9 +13,10 @@ from datetime import datetime
 from enum import Enum
 import logging
 
-from taskui.models import Task
+from taskui.models import Task, DiaryEntry
 from taskui.logging_config import get_logger
 from taskui.services.encryption import MessageEncryption
+from taskui.utils.datetime_utils import format_diary_timestamp
 
 logger = get_logger(__name__)
 
@@ -168,13 +169,14 @@ class CloudPrintQueue:
             logger.error(f"Failed to connect to AWS SQS: {e}", exc_info=True)
             return False
 
-    def send_print_job(self, task: Task, children: List[Task]) -> bool:
+    def send_print_job(self, task: Task, children: List[Task], diary_entries: Optional[List[DiaryEntry]] = None) -> bool:
         """
         Send print job to cloud queue.
 
         Args:
             task: Parent task to print
             children: Child tasks to include
+            diary_entries: Optional diary entries to include in print
 
         Returns:
             True if job queued successfully, False otherwise
@@ -185,7 +187,7 @@ class CloudPrintQueue:
 
         try:
             # Serialize task data
-            job_data = self._serialize_print_job(task, children)
+            job_data = self._serialize_print_job(task, children, diary_entries)
 
             # Encrypt the message (if encryption is enabled)
             encrypted_message = self.encryption.encrypt_message(job_data)
@@ -214,26 +216,35 @@ class CloudPrintQueue:
             logger.error(f"Failed to queue print job: {e}", exc_info=True)
             return False
 
-    def _serialize_print_job(self, task: Task, children: List[Task]) -> Dict[str, Any]:
+    def _serialize_print_job(self, task: Task, children: List[Task], diary_entries: Optional[List[DiaryEntry]] = None) -> Dict[str, Any]:
         """
         Serialize task and children for transmission.
 
         Args:
             task: Parent task
             children: Child tasks
+            diary_entries: Optional diary entries to include
 
         Returns:
             Dictionary with serialized job data
         """
-        return {
-            'version': '1.0',
+        from taskui.config import Config
+
+        # Load config to check if diary entries should be included and get timezone
+        config = Config()
+        include_diary_entries = config.get('printer', 'include_diary_entries', fallback='false').lower() == 'true'
+        display_config = config.get_display_config()
+        timezone = display_config['timezone']
+
+        job_data = {
+            'version': '1.1',
             'timestamp': datetime.now().isoformat(),
             'task': {
                 'id': str(task.id),
                 'title': task.title,
                 'notes': task.notes,
                 'is_completed': task.is_completed,
-                'created_at': task.created_at.isoformat() if task.created_at else None
+                'created_at': format_diary_timestamp(task.created_at, timezone) if task.created_at else None
             },
             'children': [
                 {
@@ -241,11 +252,23 @@ class CloudPrintQueue:
                     'title': child.title,
                     'notes': child.notes,
                     'is_completed': child.is_completed,
-                    'created_at': child.created_at.isoformat() if child.created_at else None
+                    'created_at': format_diary_timestamp(child.created_at, timezone) if child.created_at else None
                 }
                 for child in children
             ]
         }
+
+        # Include diary entries only if both provided and config enabled
+        if diary_entries and include_diary_entries:
+            job_data['diary_entries'] = [
+                {
+                    'timestamp': format_diary_timestamp(entry.created_at, timezone) if entry.created_at else None,
+                    'content': entry.content
+                }
+                for entry in diary_entries
+            ]
+
+        return job_data
 
     def get_queue_depth(self) -> Optional[int]:
         """

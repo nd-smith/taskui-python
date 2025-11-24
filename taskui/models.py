@@ -85,6 +85,7 @@ class Task(BaseModel):
     id: UUID = Field(default_factory=uuid4, description="Unique identifier for the task")
     title: str = Field(..., min_length=1, max_length=500, description="Task title/name")
     notes: Optional[str] = Field(default=None, max_length=5000, description="Optional task notes")
+    url: Optional[str] = Field(default=None, max_length=2083, description="Optional URL/link")
 
     # Status flags
     is_completed: bool = Field(default=False, description="Whether the task is completed")
@@ -272,4 +273,29 @@ class Task(BaseModel):
         """Mark the task as incomplete, removing completion timestamp."""
         self.is_completed = False
         self.completed_at = None
+
+
+class DiaryEntry(BaseModel):
+    """
+    Represents a diary/journal entry associated with a task.
+
+    Diary entries allow users to add timestamped notes and reflections
+    about their tasks, creating a log of progress, thoughts, and updates.
+    """
+
+    id: UUID = Field(default_factory=uuid4, description="Unique identifier for the diary entry")
+    task_id: UUID = Field(..., description="ID of the task this entry belongs to")
+    content: str = Field(..., min_length=1, max_length=2000, description="Entry content/text")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp")
+
+    class Config:
+        """Pydantic configuration."""
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174002",
+                "task_id": "123e4567-e89b-12d3-a456-426614174001",
+                "content": "Made good progress today on the API documentation.",
+                "created_at": "2025-01-14T15:30:00",
+            }
+        }
 

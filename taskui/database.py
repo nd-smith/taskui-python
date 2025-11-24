@@ -72,6 +72,7 @@ class TaskORM(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    url: Mapped[Optional[str]] = mapped_column(String(2083), nullable=True)
 
     # Status flags
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -93,8 +94,42 @@ class TaskORM(Base):
     # Relationship to task list
     task_list: Mapped["TaskListORM"] = relationship("TaskListORM", back_populates="tasks")
 
+    # Relationship to diary entries
+    diary_entries: Mapped[list["DiaryEntryORM"]] = relationship(
+        "DiaryEntryORM",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="DiaryEntryORM.created_at.desc()"
+    )
+
     def __repr__(self) -> str:
         return f"<TaskORM(id={self.id}, title={self.title}, level={self.level})>"
+
+
+class DiaryEntryORM(Base):
+    """
+    SQLAlchemy ORM model for diary entries.
+
+    Stores task diary entries with timestamp tracking and content.
+    Linked to tasks via foreign key with CASCADE delete.
+    """
+    __tablename__ = "diary_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+    # Relationship to task
+    task: Mapped["TaskORM"] = relationship("TaskORM", back_populates="diary_entries")
+
+    def __repr__(self) -> str:
+        return f"<DiaryEntryORM(id={self.id}, task_id={self.task_id})>"
 
 
 class DatabaseManager:

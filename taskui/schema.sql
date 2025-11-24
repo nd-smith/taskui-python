@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     id VARCHAR(36) PRIMARY KEY,           -- UUID as string
     title VARCHAR(500) NOT NULL,          -- Task title/name
     notes TEXT,                            -- Optional task notes/description
+    url VARCHAR(2083),                     -- Optional URL/link
 
     -- Status Flags
     is_completed BOOLEAN NOT NULL DEFAULT 0,  -- Completion status

@@ -3,29 +3,34 @@
 This module provides a modal dialog for creating and editing tasks with:
 - Title input (required)
 - Notes input (optional)
+- Diary entries display and management (edit mode only)
 - Context display (sibling vs child creation)
 - Nesting limit validation
 - Keyboard shortcuts (Enter to save, Escape to cancel)
 """
 
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
+from datetime import datetime
 
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical
+from textual.containers import Container, Vertical, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static, TextArea
 from textual.message import Message
 from textual.binding import Binding
 
 from taskui.logging_config import get_logger
-from taskui.models import Task
+from taskui.models import Task, DiaryEntry
 from taskui.services.nesting_validation import can_create_child, MAX_NESTING_DEPTH
 from taskui.ui.base_styles import MODAL_BASE_CSS, BUTTON_BASE_CSS
 from taskui.ui.theme import (
     LEVEL_1_COLOR,
     ORANGE,
+    LEVEL_2_COLOR,
 )
+from taskui.utils.datetime_utils import format_diary_timestamp
+from taskui.config import Config
 
 # Initialize logger for this module
 logger = get_logger(__name__)
@@ -48,8 +53,10 @@ class TaskCreationModal(ModalScreen):
     # Use base modal and button styles, plus modal-specific overrides
     DEFAULT_CSS = MODAL_BASE_CSS + BUTTON_BASE_CSS + f"""
     TaskCreationModal > Container {{
-        width: 70;
+        width: 80;
         height: auto;
+        max-height: 90%;
+        overflow-y: auto;
     }}
 
     TaskCreationModal .modal-header {{
@@ -95,6 +102,61 @@ class TaskCreationModal(ModalScreen):
         margin-bottom: 1;
     }}
 
+    TaskCreationModal .diary-section {{
+        width: 100%;
+        height: auto;
+        margin-top: 2;
+        padding: 1;
+        border: solid {LEVEL_2_COLOR};
+    }}
+
+    TaskCreationModal .diary-header {{
+        width: 100%;
+        height: 1;
+        color: {LEVEL_1_COLOR};
+        text-style: bold;
+        margin-bottom: 1;
+    }}
+
+    TaskCreationModal .diary-entry {{
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+        padding: 1;
+        background: $surface;
+        border: solid {LEVEL_2_COLOR};
+    }}
+
+    TaskCreationModal .diary-timestamp {{
+        width: 100%;
+        height: 1;
+        color: {LEVEL_2_COLOR};
+        text-style: italic;
+    }}
+
+    TaskCreationModal .diary-content {{
+        width: 100%;
+        height: auto;
+        margin: 1 0;
+    }}
+
+    TaskCreationModal .diary-edit-area {{
+        width: 100%;
+        height: 6;
+        margin: 1 0;
+    }}
+
+    TaskCreationModal .diary-buttons {{
+        width: 100%;
+        height: 1;
+        layout: horizontal;
+    }}
+
+    TaskCreationModal .diary-buttons Button {{
+        margin: 0 1 0 0;
+        min-width: 10;
+    }}
+
     TaskCreationModal .button-container {{
         width: 100%;
         height: 3;
@@ -119,6 +181,7 @@ class TaskCreationModal(ModalScreen):
         mode: str = "create_sibling",
         parent_task: Optional[Task] = None,
         edit_task: Optional[Task] = None,
+        diary_service_getter=None,
         **kwargs
     ) -> None:
         """Initialize the task creation modal.
@@ -142,6 +205,7 @@ class TaskCreationModal(ModalScreen):
             mode: Creation mode - "create_sibling", "create_child", or "edit"
             parent_task: Parent task for child creation or sibling reference
             edit_task: Task to edit (for edit mode)
+            diary_service_getter: Async context manager to get DiaryService instance
             **kwargs: Additional keyword arguments for ModalScreen
 
         Attributes:
@@ -152,7 +216,14 @@ class TaskCreationModal(ModalScreen):
         self.mode = mode
         self.parent_task = parent_task
         self.edit_task = edit_task
+        self.diary_service_getter = diary_service_getter
         self.validation_error: Optional[str] = None
+        self.diary_entries: List[DiaryEntry] = []
+        self.editing_entry_id: Optional[UUID] = None
+
+        # Get timezone from config for timestamp formatting
+        config = Config()
+        self.timezone = config.get_display_config()['timezone']
 
         # Validate nesting constraints for child creation
         if mode == "create_child" and parent_task is not None:
@@ -202,6 +273,21 @@ class TaskCreationModal(ModalScreen):
                 text=notes_value,
                 id="notes-input"
             )
+
+            # URL field
+            yield Label("URL (optional):", classes="field-label")
+            url_value = self.edit_task.url if self.edit_task and self.edit_task.url else ""
+            yield Input(
+                placeholder="https://example.com",
+                value=url_value,
+                id="url-input"
+            )
+
+            # Diary entries section (edit mode only)
+            if self.mode == "edit":
+                with Vertical(classes="diary-section", id="diary-section"):
+                    yield Static("📔 Diary Entries", classes="diary-header")
+                    yield Vertical(id="diary-entries-container")
 
             # Buttons
             with Container(classes="button-container"):
@@ -317,6 +403,7 @@ class TaskCreationModal(ModalScreen):
         1. Logging modal open event for debugging
         2. Setting focus to the title input field
         3. Disabling the save button if validation errors were detected in __init__
+        4. Loading diary entries if in edit mode
 
         Validation Error Handling:
             - Checks self.validation_error set during __init__ (nesting limit violations)
@@ -342,6 +429,10 @@ class TaskCreationModal(ModalScreen):
             save_button = self.query_one("#save-button", Button)
             save_button.disabled = True
 
+        # Load diary entries if in edit mode
+        if self.mode == "edit" and self.edit_task and self.diary_service_getter:
+            self.run_worker(self._load_diary_entries(), exclusive=True)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events.
 
@@ -353,6 +444,9 @@ class TaskCreationModal(ModalScreen):
             self.action_save()
         elif event.button.id == "cancel-button":
             self.action_cancel()
+        else:
+            # Check if it's a diary entry button
+            self._handle_diary_button(event.button.id)
 
     def action_save(self) -> None:
         """Save the task and dismiss the modal.
@@ -385,9 +479,11 @@ class TaskCreationModal(ModalScreen):
         # Get input values
         title_input = self.query_one("#title-input", Input)
         notes_input = self.query_one("#notes-input", TextArea)
+        url_input = self.query_one("#url-input", Input)
 
         title = title_input.value.strip()
         notes = notes_input.text.strip() if notes_input.text else None
+        url = url_input.value.strip() if url_input.value else None
 
         # Validate title
         if not title:
@@ -397,7 +493,8 @@ class TaskCreationModal(ModalScreen):
 
         logger.info(
             f"TaskModal: Task {self.mode} saved - title='{title[:50]}', "
-            f"has_notes={bool(notes)}, notes_length={len(notes) if notes else 0}"
+            f"has_notes={bool(notes)}, notes_length={len(notes) if notes else 0}, "
+            f"has_url={bool(url)}"
         )
 
         # Post TaskCreated message
@@ -405,6 +502,7 @@ class TaskCreationModal(ModalScreen):
             self.TaskCreated(
                 title=title,
                 notes=notes,
+                url=url,
                 mode=self.mode,
                 parent_task=self.parent_task,
                 edit_task=self.edit_task,
@@ -453,6 +551,175 @@ class TaskCreationModal(ModalScreen):
             logger.debug("TaskModal: Enter pressed in title field, triggering save")
             self.action_save()
 
+    # ========================================================================
+    # DIARY ENTRY MANAGEMENT
+    # ========================================================================
+
+    async def _load_diary_entries(self) -> None:
+        """Load diary entries for the task being edited."""
+        if not self.edit_task or not self.diary_service_getter:
+            return
+
+        try:
+            async with self.diary_service_getter() as diary_service:
+                # Get all entries (not just last 3) - use large limit
+                self.diary_entries = await diary_service.get_entries_for_task(
+                    self.edit_task.id,
+                    limit=1000
+                )
+                logger.info(f"Loaded {len(self.diary_entries)} diary entries for task {self.edit_task.id}")
+                self._render_diary_entries()
+        except Exception as e:
+            logger.error(f"Failed to load diary entries: {e}", exc_info=True)
+            self.notify(f"Failed to load diary entries: {str(e)}", severity="error")
+
+    def _render_diary_entries(self) -> None:
+        """Render all diary entries in the container."""
+        container = self.query_one("#diary-entries-container", Vertical)
+        container.remove_children()
+
+        if not self.diary_entries:
+            container.mount(Static("No diary entries yet.", classes="diary-content"))
+            return
+
+        for entry in self.diary_entries:
+            self._render_single_entry(container, entry)
+
+    def _render_single_entry(self, container: Vertical, entry: DiaryEntry) -> None:
+        """Render a single diary entry.
+
+        Args:
+            container: Container to add entry to
+            entry: DiaryEntry to render
+        """
+        entry_id = str(entry.id)
+        is_editing = self.editing_entry_id == entry.id
+
+        with container.compose():
+            with Vertical(classes="diary-entry", id=f"entry-{entry_id}"):
+                # Timestamp - use new format_diary_timestamp function
+                timestamp_str = format_diary_timestamp(entry.created_at, self.timezone)
+                yield Static(f"🕐 {timestamp_str}", classes="diary-timestamp")
+
+                if is_editing:
+                    # Edit mode: show TextArea
+                    yield TextArea(
+                        text=entry.content,
+                        classes="diary-edit-area",
+                        id=f"edit-area-{entry_id}"
+                    )
+                    # Edit buttons
+                    with Horizontal(classes="diary-buttons"):
+                        yield Button("Save", id=f"save-{entry_id}", classes="success")
+                        yield Button("Cancel", id=f"cancel-{entry_id}")
+                else:
+                    # View mode: show content and action buttons
+                    yield Static(entry.content, classes="diary-content")
+                    with Horizontal(classes="diary-buttons"):
+                        yield Button("Edit", id=f"edit-{entry_id}")
+                        yield Button("Delete", id=f"delete-{entry_id}", classes="error")
+
+    def _handle_diary_button(self, button_id: str) -> None:
+        """Handle diary entry button clicks.
+
+        Args:
+            button_id: ID of the button that was clicked
+        """
+        parts = button_id.split("-", 1)
+        if len(parts) != 2:
+            return
+
+        action, entry_id_str = parts
+        try:
+            entry_id = UUID(entry_id_str)
+        except ValueError:
+            logger.error(f"Invalid entry ID in button: {button_id}")
+            return
+
+        if action == "edit":
+            self._start_editing_entry(entry_id)
+        elif action == "delete":
+            self.run_worker(self._delete_entry(entry_id))
+        elif action == "save":
+            self.run_worker(self._save_entry_edit(entry_id))
+        elif action == "cancel":
+            self._cancel_editing_entry()
+
+    def _start_editing_entry(self, entry_id: UUID) -> None:
+        """Start editing a diary entry.
+
+        Args:
+            entry_id: ID of entry to edit
+        """
+        self.editing_entry_id = entry_id
+        self._render_diary_entries()
+
+    def _cancel_editing_entry(self) -> None:
+        """Cancel editing the current entry."""
+        self.editing_entry_id = None
+        self._render_diary_entries()
+
+    async def _save_entry_edit(self, entry_id: UUID) -> None:
+        """Save edited diary entry content.
+
+        Args:
+            entry_id: ID of entry being edited
+        """
+        if not self.diary_service_getter:
+            return
+
+        try:
+            # Get the edited content
+            edit_area = self.query_one(f"#edit-area-{entry_id}", TextArea)
+            new_content = edit_area.text.strip()
+
+            if not new_content:
+                self.notify("Entry content cannot be empty", severity="warning")
+                return
+
+            # Update via service
+            async with self.diary_service_getter() as diary_service:
+                updated_entry = await diary_service.update_entry(entry_id, new_content)
+
+                # Update local cache
+                for i, entry in enumerate(self.diary_entries):
+                    if entry.id == entry_id:
+                        self.diary_entries[i] = updated_entry
+                        break
+
+            self.editing_entry_id = None
+            self._render_diary_entries()
+            self.notify("Diary entry updated", severity="information")
+            logger.info(f"Updated diary entry {entry_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to update diary entry: {e}", exc_info=True)
+            self.notify(f"Failed to update entry: {str(e)}", severity="error")
+
+    async def _delete_entry(self, entry_id: UUID) -> None:
+        """Delete a diary entry.
+
+        Args:
+            entry_id: ID of entry to delete
+        """
+        if not self.diary_service_getter:
+            return
+
+        try:
+            async with self.diary_service_getter() as diary_service:
+                await diary_service.delete_entry(entry_id)
+
+                # Remove from local cache
+                self.diary_entries = [e for e in self.diary_entries if e.id != entry_id]
+
+            self._render_diary_entries()
+            self.notify("Diary entry deleted", severity="information")
+            logger.info(f"Deleted diary entry {entry_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to delete diary entry: {e}", exc_info=True)
+            self.notify(f"Failed to delete entry: {str(e)}", severity="error")
+
     class TaskCreated(Message):
         """Message emitted when a task is created/edited."""
 
@@ -460,6 +727,7 @@ class TaskCreationModal(ModalScreen):
             self,
             title: str,
             notes: Optional[str],
+            url: Optional[str],
             mode: str,
             parent_task: Optional[Task],
             edit_task: Optional[Task] = None,
@@ -469,6 +737,7 @@ class TaskCreationModal(ModalScreen):
             Args:
                 title: Task title
                 notes: Optional task notes
+                url: Optional URL/link
                 mode: Creation mode
                 parent_task: Parent task reference
                 edit_task: Task being edited (if any)
@@ -476,6 +745,7 @@ class TaskCreationModal(ModalScreen):
             super().__init__()
             self.title = title
             self.notes = notes
+            self.url = url
             self.mode = mode
             self.parent_task = parent_task
             self.edit_task = edit_task

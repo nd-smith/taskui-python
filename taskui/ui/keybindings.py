@@ -4,7 +4,7 @@ This module defines all keyboard shortcuts and navigation handlers for the
 TaskUI application, including:
 - Within-column navigation (Up/Down arrows)
 - Between-column navigation (Tab/Shift+Tab)
-- Task actions (N, C, E, Space, A, P, Delete)
+- Task actions (N, C, E, D, Space, A, P, Delete)
 - Application controls (Q, ?)
 """
 
@@ -31,6 +31,7 @@ TASK_ACTION_BINDINGS = [
     Binding("n,N", "new_sibling_task", "New Sibling Task", show=True),
     Binding("c,C", "new_child_task", "New Child Task", show=True),
     Binding("e,E", "edit_task", "Edit Task", show=True),
+    Binding("d,D", "create_diary_entry", "Diary Entry", show=True),
     Binding("space", "toggle_completion", "Toggle Complete", show=True),
     Binding("delete,backspace", "delete_task", "Delete Task", show=True),
 ]

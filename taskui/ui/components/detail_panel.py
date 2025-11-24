@@ -18,8 +18,10 @@ from textual.widget import Widget
 from textual.reactive import reactive
 from textual.widgets import Static
 
-from taskui.models import Task
+from taskui.models import Task, DiaryEntry
 from taskui.logging_config import get_logger
+from taskui.utils.datetime_utils import format_diary_timestamp
+from taskui.config import Config
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -149,6 +151,7 @@ class DetailPanel(Widget):
     # Reactive properties
     current_task: reactive[Optional[Task]] = reactive(None)
     task_hierarchy: reactive[List[Task]] = reactive([])
+    diary_entries: reactive[List[DiaryEntry]] = reactive([])
 
     def __init__(
         self,
@@ -166,6 +169,8 @@ class DetailPanel(Widget):
         super().__init__(**kwargs)
         self.column_id = column_id
         self.panel_title = title
+        self.config = Config()
+        self.timezone = self.config.get_display_config()['timezone']
 
     def compose(self):
         """Compose the panel layout.
@@ -183,23 +188,31 @@ class DetailPanel(Widget):
                 id=f"{self.column_id}-empty"
             )
 
-    def set_task(self, task: Optional[Task], hierarchy: Optional[List[Task]] = None) -> None:
+    def set_task(
+        self,
+        task: Optional[Task],
+        hierarchy: Optional[List[Task]] = None,
+        diary_entries: Optional[List[DiaryEntry]] = None
+    ) -> None:
         """Update the panel with task details.
 
         Args:
             task: Task object to display, or None to show empty state
             hierarchy: List of tasks from root to current task (for hierarchy path)
+            diary_entries: List of diary entries for the task (newest first)
         """
         if task:
             logger.debug(
                 f"DetailPanel: Setting task '{task.title[:50]}' (id={task.id}, level={task.level}), "
-                f"hierarchy_depth={len(hierarchy) if hierarchy else 0}"
+                f"hierarchy_depth={len(hierarchy) if hierarchy else 0}, "
+                f"diary_entries={len(diary_entries) if diary_entries else 0}"
             )
         else:
             logger.debug("DetailPanel: Clearing task (no task selected)")
 
         self.current_task = task
         self.task_hierarchy = hierarchy or []
+        self.diary_entries = diary_entries or []
         self._render_details()
 
     def clear(self) -> None:
@@ -276,10 +289,10 @@ class DetailPanel(Widget):
 
         # Dates Section
         lines.append("[bold #66D9EF]DATES[/bold #66D9EF]")
-        lines.append(f"  Created: [#AE81FF]{self._format_datetime(task.created_at)}[/#AE81FF]")
+        lines.append(f"  Created: [#AE81FF]{format_diary_timestamp(task.created_at, self.timezone)}[/#AE81FF]")
 
         if task.completed_at:
-            lines.append(f"  Completed: [#AE81FF]{self._format_datetime(task.completed_at)}[/#AE81FF]")
+            lines.append(f"  Completed: [#AE81FF]{format_diary_timestamp(task.completed_at, self.timezone)}[/#AE81FF]")
 
         lines.append("")
 
@@ -314,18 +327,29 @@ class DetailPanel(Widget):
                 lines.append(f"  [italic]{note_line}[/italic]")
             lines.append("")
 
+        # URL Section
+        if task.url:
+            lines.append("[bold #66D9EF]LINK[/bold #66D9EF]")
+            # Display URL as clickable link using Textual markup
+            lines.append(f"  [link={task.url}]{task.url}[/link]")
+            lines.append("")
+
+        # Diary Entries Section
+        lines.append("[bold #66D9EF]DIARY ENTRIES[/bold #66D9EF]")
+        if self.diary_entries:
+            for entry in self.diary_entries:
+                timestamp = format_diary_timestamp(entry.created_at, self.timezone)
+                lines.append(f"  [#AE81FF]{timestamp}[/#AE81FF]")
+                # Split content by newlines and indent each line
+                content_lines = entry.content.split('\n')
+                for content_line in content_lines:
+                    lines.append(f"    {content_line}")
+                lines.append("")  # Add blank line between entries
+        else:
+            lines.append("  [#888888]No diary entries yet[/#888888]")
+            lines.append("")
+
         return "\n".join(lines)
-
-    def _format_datetime(self, dt: datetime) -> str:
-        """Format a datetime for display.
-
-        Args:
-            dt: Datetime to format
-
-        Returns:
-            Formatted datetime string
-        """
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
 
     def on_focus(self) -> None:
         """Handle widget focus event.

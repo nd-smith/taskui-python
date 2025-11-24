@@ -22,6 +22,7 @@ from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
+from taskui.services.diary_service import DiaryService
 from taskui.services.printer_service import PrinterService, PrinterConfig
 from taskui.services.cloud_print_queue import CloudPrintQueue, CloudPrintConfig
 from taskui.ui.components.task_modal import TaskCreationModal
@@ -29,6 +30,7 @@ from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
 from taskui.ui.components.list_management_modal import ListManagementModal
 from taskui.ui.components.list_delete_modal import ListDeleteModal
+from taskui.ui.modals import DiaryEntryModal
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -274,6 +276,7 @@ class TaskUI(App):
         """
         title = message.title
         notes = message.notes
+        url = message.url
         mode = message.mode
         parent_task = message.parent_task
         edit_task = message.edit_task
@@ -283,14 +286,14 @@ class TaskUI(App):
 
         # Handle edit mode
         if mode == "edit" and edit_task is not None:
-            await self._handle_edit_task(edit_task.id, title, notes)
+            await self._handle_edit_task(edit_task.id, title, notes, url)
             return
 
         # Handle create modes (create_sibling, create_child)
         if mode == "create_sibling":
-            await self._handle_create_sibling_task(title, notes, parent_task)
+            await self._handle_create_sibling_task(title, notes, url, parent_task)
         elif mode == "create_child":
-            await self._handle_create_child_task(title, notes, parent_task)
+            await self._handle_create_child_task(title, notes, url, parent_task)
 
         # Refresh UI to show the new task
         await self._refresh_ui_after_task_change()
@@ -450,6 +453,54 @@ class TaskUI(App):
         """
         pass
 
+    async def on_diary_entry_modal_entry_saved(self, message: DiaryEntryModal.EntrySaved) -> None:
+        """Handle diary entry creation from the modal.
+
+        Args:
+            message: EntrySaved message containing the diary entry
+        """
+        if not self._has_db_manager():
+            return
+
+        try:
+            # Save the entry to the database
+            async with self._with_diary_service() as diary_service:
+                saved_entry = await diary_service.create_entry(
+                    task_id=message.entry.task_id,
+                    content=message.entry.content
+                )
+
+            if saved_entry:
+                logger.info(f"Diary entry created: id={saved_entry.id}, task_id={saved_entry.task_id}")
+                self.notify(
+                    "✓ Diary entry created",
+                    severity="information",
+                    timeout=NOTIFICATION_TIMEOUT_SHORT
+                )
+
+                # Refresh the detail panel to show the new entry
+                column = self._get_focused_column()
+                if column:
+                    selected_task = column.get_selected_task()
+                    if selected_task and selected_task.id == message.entry.task_id:
+                        await self._update_column3_for_selection(selected_task)
+
+        except Exception as e:
+            logger.error("Error creating diary entry", exc_info=True)
+            self.notify(
+                "Failed to create diary entry",
+                severity="error",
+                timeout=NOTIFICATION_TIMEOUT_MEDIUM
+            )
+
+    async def on_diary_entry_modal_entry_cancelled(self, message: DiaryEntryModal.EntryCancelled) -> None:
+        """Handle diary entry creation cancellation.
+
+        Args:
+            message: EntryCancelled message
+        """
+        pass
+
     # ==============================================================================
     # ACTION HANDLERS - NAVIGATION
     # ==============================================================================
@@ -497,7 +548,8 @@ class TaskUI(App):
 
         modal = TaskCreationModal(
             mode="create_sibling",
-            parent_task=selected_task
+            parent_task=selected_task,
+            diary_service_getter=self._with_diary_service
         )
         self.push_screen(modal)
 
@@ -536,7 +588,8 @@ class TaskUI(App):
 
         modal = TaskCreationModal(
             mode="create_child",
-            parent_task=selected_task
+            parent_task=selected_task,
+            diary_service_getter=self._with_diary_service
         )
         self.push_screen(modal)
 
@@ -560,7 +613,8 @@ class TaskUI(App):
         modal = TaskCreationModal(
             mode="edit",
             parent_task=None,  # Not needed for edit mode
-            edit_task=selected_task
+            edit_task=selected_task,
+            diary_service_getter=self._with_diary_service
         )
         self.push_screen(modal)
 
@@ -712,8 +766,17 @@ class TaskUI(App):
             async with self._with_task_service() as task_service:
                 children = await task_service.get_children(selected_task.id)
 
+            # Load diary entries for the task
+            diary_entries = None
+            try:
+                async with self._with_diary_service() as diary_service:
+                    diary_entries = await diary_service.get_entries_for_task(selected_task.id)
+            except Exception as e:
+                logger.warning(f"Failed to load diary entries for print: {e}")
+                # Continue without diary entries
+
             # Send print job to cloud queue
-            self._printer_service.send_print_job(selected_task, children)
+            self._printer_service.send_print_job(selected_task, children, diary_entries)
 
             # Show success message
             self.notify("✓ Print job queued!", severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
@@ -729,6 +792,36 @@ class TaskUI(App):
         # Note: Textual handles Escape key for modal dismissal automatically.
         # This action is reserved for future custom cancel behaviors if needed.
         pass
+
+    def action_create_diary_entry(self) -> None:
+        """Create a diary entry for the selected task (D key).
+
+        Opens the diary entry modal to create a quick journal entry for the
+        currently selected task. The modal provides a text area for entry content
+        with character counter (1-2000 characters).
+        """
+        logger.debug("Create diary entry key pressed ('D')")
+
+        # Get the focused column
+        column = self._get_focused_column()
+        if not column:
+            logger.debug("No focused column for diary entry")
+            return
+
+        # Get the currently selected task
+        selected_task = column.get_selected_task()
+        if not selected_task:
+            self.notify(
+                "No task selected",
+                severity="warning",
+                timeout=NOTIFICATION_TIMEOUT_MEDIUM
+            )
+            logger.debug("No task selected for diary entry")
+            return
+
+        # Open the diary entry modal
+        modal = DiaryEntryModal(task_id=selected_task.id)
+        self.push_screen(modal)
 
     # ==============================================================================
     # ACTION HANDLERS - LIST SWITCHING
@@ -905,6 +998,20 @@ class TaskUI(App):
         async with self._db_manager.get_session() as session:
             yield ListService(session)
 
+    @asynccontextmanager
+    async def _with_diary_service(self):
+        """Context manager for DiaryService with database session.
+
+        Yields:
+            DiaryService instance with active database session
+
+        Example:
+            async with self._with_diary_service() as diary_service:
+                entries = await diary_service.get_entries_for_task(task_id)
+        """
+        async with self._db_manager.get_session() as session:
+            yield DiaryService(session)
+
     def _notify_task_success(self, action: str, title: str, icon: str = "✓") -> None:
         """Show success notification for task operation.
 
@@ -949,20 +1056,21 @@ class TaskUI(App):
         # Selected task has a parent - create sibling under same parent
         return parent_task.parent_id
 
-    async def _handle_edit_task(self, task_id: UUID, title: str, notes: Optional[str]) -> None:
+    async def _handle_edit_task(self, task_id: UUID, title: str, notes: Optional[str], url: Optional[str]) -> None:
         """Update an existing task in the database.
 
         Args:
             task_id: UUID of the task to update
             title: New title for the task
             notes: New notes for the task (can be None)
+            url: New URL for the task (can be None)
         """
         if not self._has_db_manager():
             return
 
         try:
             async with self._with_task_service() as task_service:
-                await task_service.update_task(task_id, title=title, notes=notes)
+                await task_service.update_task(task_id, title=title, notes=notes, url=url)
 
             # Notify user of successful edit
             self._notify_task_success("updated", title)
@@ -977,6 +1085,7 @@ class TaskUI(App):
         self,
         title: str,
         notes: Optional[str],
+        url: Optional[str],
         parent_task: Optional[Task]
     ) -> None:
         """Create a new sibling task at the same level as the selected task.
@@ -984,6 +1093,7 @@ class TaskUI(App):
         Args:
             title: New task title
             notes: Optional task notes
+            url: Optional URL
             parent_task: The currently selected task (sibling reference)
         """
         if not self._can_perform_task_operation():
@@ -998,14 +1108,16 @@ class TaskUI(App):
                     await task_service.create_task(
                         title=title,
                         list_id=self._current_list_id,
-                        notes=notes
+                        notes=notes,
+                        url=url
                     )
                 else:
                     # Create child under parent
                     await task_service.create_child_task(
                         parent_id=parent_id,
                         title=title,
-                        notes=notes
+                        notes=notes,
+                        url=url
                     )
 
             # Notify user of successful creation
@@ -1019,6 +1131,7 @@ class TaskUI(App):
         self,
         title: str,
         notes: Optional[str],
+        url: Optional[str],
         parent_task: Optional[Task]
     ) -> None:
         """Create a new child task under the selected task.
@@ -1026,6 +1139,7 @@ class TaskUI(App):
         Args:
             title: New task title
             notes: Optional task notes
+            url: Optional URL
             parent_task: The parent task (must not be None)
         """
         if not self._db_manager or not parent_task:
@@ -1037,7 +1151,8 @@ class TaskUI(App):
                 await task_service.create_child_task(
                     parent_id=parent_task.id,
                     title=title,
-                    notes=notes
+                    notes=notes,
+                    url=url
                 )
 
             # Notify user of successful creation
@@ -1343,8 +1458,19 @@ class TaskUI(App):
         # Get the hierarchy path (from root to selected task)
         hierarchy = await self._get_task_hierarchy(selected_task.id)
 
-        # Update Column 3 with task details
-        column3.set_task(selected_task, hierarchy)
+        # Get diary entries for the task (last 3 entries)
+        async with self._with_diary_service() as diary_service:
+            try:
+                diary_entries = await diary_service.get_entries_for_task(
+                    selected_task.id,
+                    limit=3
+                )
+            except Exception as e:
+                logger.error(f"Failed to fetch diary entries for task {selected_task.id}: {e}")
+                diary_entries = []
+
+        # Update Column 3 with task details and diary entries
+        column3.set_task(selected_task, hierarchy, diary_entries)
 
     def _switch_to_list(self, list_number: int) -> None:
         """Switch to specified list number.
