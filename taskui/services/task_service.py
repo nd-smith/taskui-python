@@ -6,7 +6,7 @@ and nesting validation. Handles parent-child relationships and hierarchy managem
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import select
@@ -16,6 +16,9 @@ from sqlalchemy.orm import selectinload
 from taskui.database import TaskORM, TaskListORM
 from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
+
+if TYPE_CHECKING:
+    from taskui.services.pending_operations import PendingOperationsQueue
 
 logger = get_logger(__name__)
 
@@ -50,15 +53,39 @@ class TaskService:
 
     def __init__(
         self,
-        session: AsyncSession
+        session: AsyncSession,
+        pending_queue: Optional["PendingOperationsQueue"] = None
     ) -> None:
         """
         Initialize task service with database session.
 
         Args:
             session: Active async database session
+            pending_queue: Optional PendingOperationsQueue for sync support
         """
         self.session = session
+        self.pending_queue = pending_queue
+
+    async def _queue_sync_operation(
+        self,
+        operation: str,
+        list_id: UUID,
+        data: dict
+    ) -> None:
+        """
+        Queue operation for sync if pending_queue is configured.
+
+        Args:
+            operation: Operation type (TASK_CREATE, TASK_UPDATE, etc.)
+            list_id: UUID of the list
+            data: Operation-specific data
+        """
+        if self.pending_queue:
+            try:
+                await self.pending_queue.add(operation, str(list_id), data)
+                logger.debug(f"Queued sync operation: {operation} for list {list_id}")
+            except Exception as e:
+                logger.warning(f"Failed to queue sync operation {operation}: {e}")
 
     # ==============================================================================
     # CONVERSION HELPERS
@@ -341,6 +368,25 @@ class TaskService:
             self.session.add(task_orm)
             await self.session.flush()  # Flush to get the ID
 
+            # Queue for sync
+            await self._queue_sync_operation(
+                "TASK_CREATE",
+                list_id,
+                {
+                    "task": {
+                        "id": str(task.id),
+                        "title": task.title,
+                        "notes": task.notes,
+                        "url": task.url,
+                        "parent_id": None,
+                        "level": task.level,
+                        "position": task.position,
+                        "is_completed": task.is_completed,
+                        "created_at": task.created_at.isoformat() if task.created_at else None
+                    }
+                }
+            )
+
             logger.info(f"Created task: id={task.id}, title='{title}', level=0")
             return task
         except TaskListNotFoundError as e:
@@ -426,6 +472,25 @@ class TaskService:
             task_orm = self._pydantic_to_orm(child_task)
             self.session.add(task_orm)
             await self.session.flush()
+
+            # Queue for sync
+            await self._queue_sync_operation(
+                "TASK_CREATE",
+                parent_task.list_id,
+                {
+                    "task": {
+                        "id": str(child_task.id),
+                        "title": child_task.title,
+                        "notes": child_task.notes,
+                        "url": child_task.url,
+                        "parent_id": str(parent_id),
+                        "level": child_task.level,
+                        "position": child_task.position,
+                        "is_completed": child_task.is_completed,
+                        "created_at": child_task.created_at.isoformat() if child_task.created_at else None
+                    }
+                }
+            )
 
             logger.info(
                 f"Created child task: id={child_task.id}, title='{title}', "
@@ -601,6 +666,22 @@ class TaskService:
             # Convert back to Pydantic with counts using helper
             task = await self._fetch_task_with_counts(task_orm)
 
+            # Queue for sync
+            await self._queue_sync_operation(
+                "TASK_UPDATE",
+                UUID(task_orm.list_id),
+                {
+                    "task_id": str(task_id),
+                    "changes": {
+                        k: v for k, v in [
+                            ("title", title),
+                            ("notes", notes),
+                            ("url", url)
+                        ] if v is not None
+                    }
+                }
+            )
+
             logger.info(f"Updated task: id={task_id}, title='{task.title}'")
             return task
         except TaskNotFoundError as e:
@@ -659,6 +740,19 @@ class TaskService:
             )
             raise
 
+        # Queue for sync
+        await self._queue_sync_operation(
+            "TASK_UPDATE",
+            UUID(task_orm.list_id),
+            {
+                "task_id": str(task_id),
+                "changes": {
+                    "is_completed": task_orm.is_completed,
+                    "completed_at": task_orm.completed_at.isoformat() if task_orm.completed_at else None
+                }
+            }
+        )
+
         # Convert back to Pydantic with counts using helper
         return await self._fetch_task_with_counts(task_orm)
 
@@ -685,6 +779,17 @@ class TaskService:
             # Get task to delete
             task_orm = await self._get_task_or_raise(task_id)
             task_title = task_orm.title
+            task_list_id = UUID(task_orm.list_id)
+
+            # Queue for sync BEFORE deletion (need list_id)
+            await self._queue_sync_operation(
+                "TASK_DELETE",
+                task_list_id,
+                {
+                    "task_id": str(task_id),
+                    "cascade": True
+                }
+            )
 
             # Get all descendants for cascade deletion
             descendants = await self.get_all_descendants(task_id)
@@ -901,6 +1006,17 @@ class TaskService:
 
         # Flush changes
         await self.session.flush()
+
+        # Queue for sync
+        await self._queue_sync_operation(
+            "TASK_MOVE",
+            UUID(task_orm.list_id),
+            {
+                "task_id": str(task_id),
+                "new_parent_id": str(new_parent_id) if new_parent_id else None,
+                "new_position": final_position
+            }
+        )
 
         # Return updated task with counts using helper
         return await self._fetch_task_with_counts(task_orm)

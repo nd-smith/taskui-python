@@ -61,6 +61,11 @@ PRINT_BINDINGS = [
     Binding("p,P", "print_column", "Print Column", show=True),
 ]
 
+# Sync keybindings
+SYNC_BINDINGS = [
+    Binding("ctrl+shift+s", "manual_sync", "Sync", show=True),
+]
+
 # Application control keybindings
 APP_CONTROL_BINDINGS = [
     Binding("q,Q", "quit", "Quit", priority=True, show=True),
@@ -135,5 +140,6 @@ def get_all_bindings() -> list[Binding]:
         LIST_BINDINGS +
         LIST_CRUD_BINDINGS +
         PRINT_BINDINGS +
+        SYNC_BINDINGS +
         APP_CONTROL_BINDINGS
     )
