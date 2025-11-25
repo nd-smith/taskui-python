@@ -13,6 +13,7 @@ from typing import Optional, Any, List
 from uuid import UUID
 
 from textual.app import App, ComposeResult
+from textual.command import Provider, Hits, Hit, DiscoveryHit
 from textual.containers import Container, Horizontal
 from textual.widgets import Footer
 from textual.events import Key
@@ -60,6 +61,132 @@ from taskui.ui.keybindings import (
 
 # Initialize logger for this module
 logger = get_logger(__name__)
+
+
+class TaskUICommands(Provider):
+    """Command provider for TaskUI actions."""
+
+    async def discover(self) -> Hits:
+        """Provide commands that are always available for discovery."""
+        app = self.app
+
+        # Task operations
+        yield DiscoveryHit(
+            "New Task",
+            "Create a new sibling task (n)",
+            app.action_new_sibling_task,
+        )
+        yield DiscoveryHit(
+            "New Child Task",
+            "Create a child task under selected task (c)",
+            app.action_new_child_task,
+        )
+        yield DiscoveryHit(
+            "Edit Task",
+            "Edit the selected task (e)",
+            app.action_edit_task,
+        )
+        yield DiscoveryHit(
+            "Toggle Task Completion",
+            "Mark task as complete/incomplete (Enter/Space)",
+            app.action_toggle_completion,
+        )
+        yield DiscoveryHit(
+            "Delete Task",
+            "Delete the selected task (x/Backspace)",
+            app.action_delete_task,
+        )
+
+        # Diary operations
+        yield DiscoveryHit(
+            "New Diary Entry",
+            "Add a diary entry to selected task (d)",
+            app.action_create_diary_entry,
+        )
+
+        # List operations
+        yield DiscoveryHit(
+            "New List",
+            "Create a new task list (Ctrl+N)",
+            app.action_create_list,
+        )
+        yield DiscoveryHit(
+            "Edit List",
+            "Edit the current list name (Ctrl+E)",
+            app.action_edit_list,
+        )
+        yield DiscoveryHit(
+            "Delete List",
+            "Delete the current list (Ctrl+D)",
+            app.action_delete_list,
+        )
+
+        # Navigation
+        yield DiscoveryHit(
+            "Next Column",
+            "Move focus to next column (Tab)",
+            app.action_navigate_next_column,
+        )
+        yield DiscoveryHit(
+            "Previous Column",
+            "Move focus to previous column (Shift+Tab)",
+            app.action_navigate_prev_column,
+        )
+
+        # Printing
+        yield DiscoveryHit(
+            "Print Column",
+            "Print the current column (p)",
+            app.action_print_column,
+        )
+
+        # Help
+        yield DiscoveryHit(
+            "Show Help",
+            "Display keyboard shortcuts (?)",
+            app.action_help,
+        )
+
+    async def search(self, query: str) -> Hits:
+        """Search for commands matching the query."""
+        matcher = self.matcher(query)
+        app = self.app
+
+        # Define all commands with their metadata
+        commands = [
+            ("New Task", "Create a new sibling task (n)", app.action_new_sibling_task),
+            ("New Child Task", "Create a child task under selected task (c)", app.action_new_child_task),
+            ("Edit Task", "Edit the selected task (e)", app.action_edit_task),
+            ("Toggle Task Completion", "Mark task as complete/incomplete (Enter/Space)", app.action_toggle_completion),
+            ("Delete Task", "Delete the selected task (x/Backspace)", app.action_delete_task),
+            ("New Diary Entry", "Add a diary entry to selected task (d)", app.action_create_diary_entry),
+            ("New List", "Create a new task list (Ctrl+N)", app.action_create_list),
+            ("Edit List", "Edit the current list name (Ctrl+E)", app.action_edit_list),
+            ("Delete List", "Delete the current list (Ctrl+D)", app.action_delete_list),
+            ("Next Column", "Move focus to next column (Tab)", app.action_navigate_next_column),
+            ("Previous Column", "Move focus to previous column (Shift+Tab)", app.action_navigate_prev_column),
+            ("Print Column", "Print the current column (p)", app.action_print_column),
+            ("Show Help", "Display keyboard shortcuts (?)", app.action_help),
+            ("Switch to List 1", "Switch to first list (1)", app.action_switch_list_1),
+            ("Switch to List 2", "Switch to second list (2)", app.action_switch_list_2),
+            ("Switch to List 3", "Switch to third list (3)", app.action_switch_list_3),
+            ("Switch to List 4", "Switch to fourth list (4)", app.action_switch_list_4),
+            ("Switch to List 5", "Switch to fifth list (5)", app.action_switch_list_5),
+            ("Switch to List 6", "Switch to sixth list (6)", app.action_switch_list_6),
+            ("Switch to List 7", "Switch to seventh list (7)", app.action_switch_list_7),
+            ("Switch to List 8", "Switch to eighth list (8)", app.action_switch_list_8),
+            ("Switch to List 9", "Switch to ninth list (9)", app.action_switch_list_9),
+        ]
+
+        for title, help_text, callback in commands:
+            score = matcher.match(title)
+            if score > 0:
+                yield Hit(
+                    score,
+                    matcher.highlight(title),
+                    callback,
+                    help=help_text,
+                )
 
 
 class TaskUI(App):
@@ -119,6 +246,7 @@ class TaskUI(App):
     """
 
     BINDINGS = get_all_bindings()
+    COMMANDS = App.COMMANDS | {TaskUICommands}
 
     # ==============================================================================
     # LIFECYCLE METHODS
@@ -842,6 +970,26 @@ class TaskUI(App):
     def action_switch_list_4(self) -> None:
         """Switch to list 4 (4 key)."""
         self._switch_to_list(4)
+
+    def action_switch_list_5(self) -> None:
+        """Switch to list 5 (5 key)."""
+        self._switch_to_list(5)
+
+    def action_switch_list_6(self) -> None:
+        """Switch to list 6 (6 key)."""
+        self._switch_to_list(6)
+
+    def action_switch_list_7(self) -> None:
+        """Switch to list 7 (7 key)."""
+        self._switch_to_list(7)
+
+    def action_switch_list_8(self) -> None:
+        """Switch to list 8 (8 key)."""
+        self._switch_to_list(8)
+
+    def action_switch_list_9(self) -> None:
+        """Switch to list 9 (9 key)."""
+        self._switch_to_list(9)
 
     # ==============================================================================
     # ACTION HANDLERS - LIST MANAGEMENT

@@ -36,12 +36,17 @@ TASK_ACTION_BINDINGS = [
     Binding("delete,backspace", "delete_task", "Delete Task", show=True),
 ]
 
-# List management keybindings
+# List management keybindings (1-9 for quick list switching)
 LIST_BINDINGS = [
     Binding("1", "switch_list_1", "List 1", show=True),
     Binding("2", "switch_list_2", "List 2", show=True),
     Binding("3", "switch_list_3", "List 3", show=True),
-    Binding("4", "switch_list_4", "List 4", show=True)
+    Binding("4", "switch_list_4", "List 4", show=True),
+    Binding("5", "switch_list_5", "List 5", show=True),
+    Binding("6", "switch_list_6", "List 6", show=True),
+    Binding("7", "switch_list_7", "List 7", show=True),
+    Binding("8", "switch_list_8", "List 8", show=True),
+    Binding("9", "switch_list_9", "List 9", show=True),
 ]
 
 # List CRUD keybindings
