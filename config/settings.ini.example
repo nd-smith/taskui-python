@@ -33,6 +33,47 @@ mode = auto
 # The same key must be configured on both the app and Raspberry Pi
 # encryption_key = your-base64-encoded-key-here
 
+[sync]
+# ============================================================================
+# MULTI-COMPUTER SYNC VIA AWS SQS
+# ============================================================================
+# Sync task lists between multiple computers using AWS SQS message queues.
+# Each change (task create/update/delete, list create/update) is queued locally
+# and synced when manually triggered (Ctrl+Shift+S) or on app lifecycle events.
+#
+# SETUP REQUIREMENTS:
+# 1. Create a NEW SQS queue named "taskui-sync" (SEPARATE from cloud_print queue)
+# 2. Configure AWS credentials (aws configure or in [cloud_print] section)
+# 3. Share the same encryption_key across all computers
+# 4. Set enabled = true
+
+# Enable/disable sync feature
+enabled = false
+
+# Sync mode: manual (only manual sync supported currently)
+mode = manual
+
+# Auto-sync triggers - when to automatically sync
+sync_on_open = true      # Sync when app starts (pull remote changes)
+sync_on_close = true     # Sync when app closes (push local changes)
+sync_on_list_switch = false  # Reserved for future use
+
+# SQS Queue Settings
+# IMPORTANT: Use a SEPARATE queue from cloud_print!
+# Create a new queue in AWS SQS Console named "taskui-sync"
+# Queue type: Standard (not FIFO)
+# Message retention: 14 days recommended
+# Visibility timeout: 30 seconds recommended
+queue_url = https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/taskui-sync
+region = us-east-1
+
+# ENCRYPTION: Reuses encryption_key from [cloud_print] section above
+# IMPORTANT: All syncing computers MUST use the same encryption key!
+# Generate a key with: python scripts/generate_encryption_key.py
+#
+# KEYBOARD SHORTCUT: Ctrl+Shift+S triggers manual sync
+# STATUS BAR: Shows pending count, last sync time, and connection status
+
 [nesting]
 # TOML configuration is preferred for nesting features
 # For full configuration options, see nesting.toml.example

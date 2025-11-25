@@ -135,6 +135,47 @@ class Config:
 
         return config
 
+    def get_sync_config(self) -> Dict[str, Any]:
+        """
+        Get sync configuration with environment overrides.
+
+        Environment variables take precedence over config file:
+        - TASKUI_SYNC_ENABLED
+        - TASKUI_SYNC_QUEUE_URL
+        - TASKUI_SYNC_REGION
+        - TASKUI_SYNC_ON_OPEN
+
+        Returns:
+            Dictionary with sync configuration
+        """
+        enabled_env = os.getenv('TASKUI_SYNC_ENABLED', '').lower()
+        enabled = (
+            enabled_env == 'true'
+            if enabled_env
+            else self._config.getboolean('sync', 'enabled', fallback=False)
+        )
+
+        sync_on_open_env = os.getenv('TASKUI_SYNC_ON_OPEN', '').lower()
+        sync_on_open = (
+            sync_on_open_env == 'true'
+            if sync_on_open_env
+            else self._config.getboolean('sync', 'sync_on_open', fallback=True)
+        )
+
+        config = {
+            'enabled': enabled,
+            'queue_url': os.getenv('TASKUI_SYNC_QUEUE_URL') or
+                        self._config.get('sync', 'queue_url', fallback=''),
+            'region': os.getenv('TASKUI_SYNC_REGION') or
+                     self._config.get('sync', 'region', fallback='us-east-1'),
+            'sync_on_open': sync_on_open,
+        }
+
+        logger.debug(f"Sync config: enabled={config['enabled']}, "
+                    f"region={config['region']}, sync_on_open={config['sync_on_open']}")
+
+        return config
+
     def get(self, section: str, key: str, fallback: Any = None) -> Any:
         """
         Get configuration value with fallback.

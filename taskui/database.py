@@ -132,6 +132,26 @@ class DiaryEntryORM(Base):
         return f"<DiaryEntryORM(id={self.id}, task_id={self.task_id})>"
 
 
+class PendingSyncOperationORM(Base):
+    """
+    SQLAlchemy ORM model for pending sync operations.
+
+    Stores operations that haven't been synced yet, queued locally
+    until the user triggers a manual sync.
+    """
+    __tablename__ = "pending_sync_operations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    operation: Mapped[str] = mapped_column(String(50), nullable=False)  # TASK_CREATE, TASK_UPDATE, etc.
+    list_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    data: Mapped[str] = mapped_column(Text, nullable=False)  # JSON blob
+    timestamp: Mapped[str] = mapped_column(String(50), nullable=False)  # ISO-8601 UTC
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    def __repr__(self) -> str:
+        return f"<PendingSyncOperationORM(id={self.id}, operation={self.operation})>"
+
+
 class DatabaseManager:
     """
     Manages database connections and session lifecycle.

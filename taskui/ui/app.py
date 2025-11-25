@@ -13,6 +13,7 @@ from typing import Optional, Any, List
 from uuid import UUID
 
 from textual.app import App, ComposeResult
+from textual.command import Provider, Hits, Hit, DiscoveryHit
 from textual.containers import Container, Horizontal
 from textual.widgets import Footer
 from textual.events import Key
@@ -25,12 +26,19 @@ from taskui.services.list_service import ListService
 from taskui.services.diary_service import DiaryService
 from taskui.services.printer_service import PrinterService, PrinterConfig
 from taskui.services.cloud_print_queue import CloudPrintQueue, CloudPrintConfig
+from taskui.config import Config
+from taskui.services.sync_client import SyncClient
+from taskui.services.sync_queue import SyncQueue
+from taskui.services.pending_operations import PendingOperationsQueue
+from taskui.services.sync_operations import SyncOperationHandler
+from taskui.services.manual_sync import ManualSyncService
 from taskui.ui.components.task_modal import TaskCreationModal
 from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
 from taskui.ui.components.list_management_modal import ListManagementModal
 from taskui.ui.components.list_delete_modal import ListDeleteModal
 from taskui.ui.modals import DiaryEntryModal
+from taskui.ui.components.sync_status import SyncStatus
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -60,6 +68,132 @@ from taskui.ui.keybindings import (
 
 # Initialize logger for this module
 logger = get_logger(__name__)
+
+
+class TaskUICommands(Provider):
+    """Command provider for TaskUI actions."""
+
+    async def discover(self) -> Hits:
+        """Provide commands that are always available for discovery."""
+        app = self.app
+
+        # Task operations
+        yield DiscoveryHit(
+            "New Task",
+            "Create a new sibling task (n)",
+            app.action_new_sibling_task,
+        )
+        yield DiscoveryHit(
+            "New Child Task",
+            "Create a child task under selected task (c)",
+            app.action_new_child_task,
+        )
+        yield DiscoveryHit(
+            "Edit Task",
+            "Edit the selected task (e)",
+            app.action_edit_task,
+        )
+        yield DiscoveryHit(
+            "Toggle Task Completion",
+            "Mark task as complete/incomplete (Enter/Space)",
+            app.action_toggle_completion,
+        )
+        yield DiscoveryHit(
+            "Delete Task",
+            "Delete the selected task (x/Backspace)",
+            app.action_delete_task,
+        )
+
+        # Diary operations
+        yield DiscoveryHit(
+            "New Diary Entry",
+            "Add a diary entry to selected task (d)",
+            app.action_create_diary_entry,
+        )
+
+        # List operations
+        yield DiscoveryHit(
+            "New List",
+            "Create a new task list (Ctrl+N)",
+            app.action_create_list,
+        )
+        yield DiscoveryHit(
+            "Edit List",
+            "Edit the current list name (Ctrl+E)",
+            app.action_edit_list,
+        )
+        yield DiscoveryHit(
+            "Delete List",
+            "Delete the current list (Ctrl+D)",
+            app.action_delete_list,
+        )
+
+        # Navigation
+        yield DiscoveryHit(
+            "Next Column",
+            "Move focus to next column (Tab)",
+            app.action_navigate_next_column,
+        )
+        yield DiscoveryHit(
+            "Previous Column",
+            "Move focus to previous column (Shift+Tab)",
+            app.action_navigate_prev_column,
+        )
+
+        # Printing
+        yield DiscoveryHit(
+            "Print Column",
+            "Print the current column (p)",
+            app.action_print_column,
+        )
+
+        # Help
+        yield DiscoveryHit(
+            "Show Help",
+            "Display keyboard shortcuts (?)",
+            app.action_help,
+        )
+
+    async def search(self, query: str) -> Hits:
+        """Search for commands matching the query."""
+        matcher = self.matcher(query)
+        app = self.app
+
+        # Define all commands with their metadata
+        commands = [
+            ("New Task", "Create a new sibling task (n)", app.action_new_sibling_task),
+            ("New Child Task", "Create a child task under selected task (c)", app.action_new_child_task),
+            ("Edit Task", "Edit the selected task (e)", app.action_edit_task),
+            ("Toggle Task Completion", "Mark task as complete/incomplete (Enter/Space)", app.action_toggle_completion),
+            ("Delete Task", "Delete the selected task (x/Backspace)", app.action_delete_task),
+            ("New Diary Entry", "Add a diary entry to selected task (d)", app.action_create_diary_entry),
+            ("New List", "Create a new task list (Ctrl+N)", app.action_create_list),
+            ("Edit List", "Edit the current list name (Ctrl+E)", app.action_edit_list),
+            ("Delete List", "Delete the current list (Ctrl+D)", app.action_delete_list),
+            ("Next Column", "Move focus to next column (Tab)", app.action_navigate_next_column),
+            ("Previous Column", "Move focus to previous column (Shift+Tab)", app.action_navigate_prev_column),
+            ("Print Column", "Print the current column (p)", app.action_print_column),
+            ("Show Help", "Display keyboard shortcuts (?)", app.action_help),
+            ("Switch to List 1", "Switch to first list (1)", app.action_switch_list_1),
+            ("Switch to List 2", "Switch to second list (2)", app.action_switch_list_2),
+            ("Switch to List 3", "Switch to third list (3)", app.action_switch_list_3),
+            ("Switch to List 4", "Switch to fourth list (4)", app.action_switch_list_4),
+            ("Switch to List 5", "Switch to fifth list (5)", app.action_switch_list_5),
+            ("Switch to List 6", "Switch to sixth list (6)", app.action_switch_list_6),
+            ("Switch to List 7", "Switch to seventh list (7)", app.action_switch_list_7),
+            ("Switch to List 8", "Switch to eighth list (8)", app.action_switch_list_8),
+            ("Switch to List 9", "Switch to ninth list (9)", app.action_switch_list_9),
+        ]
+
+        for title, help_text, callback in commands:
+            score = matcher.match(title)
+            if score > 0:
+                yield Hit(
+                    score,
+                    matcher.highlight(title),
+                    callback,
+                    help=help_text,
+                )
 
 
 class TaskUI(App):
@@ -119,6 +253,7 @@ class TaskUI(App):
     """
 
     BINDINGS = get_all_bindings()
+    COMMANDS = App.COMMANDS | {TaskUICommands}
 
     # ==============================================================================
     # LIFECYCLE METHODS
@@ -134,6 +269,13 @@ class TaskUI(App):
         self._current_list_id: Optional[UUID] = None  # Will be set after database initialization
         self._lists: List[TaskList] = []  # Store available lists
         self._printer_service: Optional[CloudPrintQueue] = None  # Cloud print queue service
+
+        # Sync services
+        self._sync_client: Optional[SyncClient] = None
+        self._sync_queue: Optional[SyncQueue] = None
+        self._pending_queue: Optional[PendingOperationsQueue] = None
+        self._manual_sync: Optional[ManualSyncService] = None
+        self._sync_enabled: bool = False
 
     def compose(self) -> ComposeResult:
         """Compose the application layout.
@@ -168,6 +310,9 @@ class TaskUI(App):
                     title="Details",
                     id=COLUMN_3_ID
                 )
+
+        # Sync status bar
+        yield SyncStatus(id="sync-status")
 
         yield Footer()
 
@@ -206,7 +351,31 @@ class TaskUI(App):
             logger.warning(f"Cloud print queue not available at startup: {e}")
             # Continue without printer - user can still use the app
 
+        # Initialize sync service (if enabled in config)
+        await self._initialize_sync()
+
         logger.info("TaskUI application ready")
+
+    async def on_unmount(self) -> None:
+        """Called when app is shutting down. Push pending operations before close."""
+        logger.info("TaskUI application shutting down")
+
+        # Sync on close if enabled and configured
+        if self._sync_enabled and self._sync_queue:
+            try:
+                config = Config()
+                sync_config = config.get_sync_config()
+
+                if sync_config.get('sync_on_close', True):
+                    logger.info("Pushing pending operations before shutdown...")
+                    sent = await self._run_push_only()
+                    if sent > 0:
+                        logger.info(f"Pushed {sent} operations before shutdown")
+            except Exception as e:
+                logger.error(f"Failed to sync on shutdown: {e}")
+                # Continue shutdown even if sync fails
+
+        logger.info("TaskUI application shutdown complete")
 
     # ==============================================================================
     # EVENT HANDLERS
@@ -843,6 +1012,26 @@ class TaskUI(App):
         """Switch to list 4 (4 key)."""
         self._switch_to_list(4)
 
+    def action_switch_list_5(self) -> None:
+        """Switch to list 5 (5 key)."""
+        self._switch_to_list(5)
+
+    def action_switch_list_6(self) -> None:
+        """Switch to list 6 (6 key)."""
+        self._switch_to_list(6)
+
+    def action_switch_list_7(self) -> None:
+        """Switch to list 7 (7 key)."""
+        self._switch_to_list(7)
+
+    def action_switch_list_8(self) -> None:
+        """Switch to list 8 (8 key)."""
+        self._switch_to_list(8)
+
+    def action_switch_list_9(self) -> None:
+        """Switch to list 9 (9 key)."""
+        self._switch_to_list(9)
+
     # ==============================================================================
     # ACTION HANDLERS - LIST MANAGEMENT
     # ==============================================================================
@@ -914,6 +1103,169 @@ class TaskUI(App):
         self.push_screen(modal)
 
     # ==============================================================================
+    # SYNC METHODS
+    # ==============================================================================
+
+    async def _initialize_sync(self) -> None:
+        """Initialize sync service if enabled in config."""
+        try:
+            config = Config()
+            sync_config = config.get_sync_config()
+
+            if not sync_config.get('enabled', False):
+                logger.info("Sync is disabled in config")
+                return
+
+            self._sync_enabled = True
+
+            # Initialize client ID
+            self._sync_client = SyncClient()
+
+            # Initialize sync queue
+            cloud_config = CloudPrintConfig(
+                queue_url=sync_config.get('queue_url', ''),
+                region=sync_config.get('region', 'us-east-1'),
+                encryption_key=config.get('cloud_print', 'encryption_key', fallback=None),
+                aws_access_key_id=config.get('cloud_print', 'aws_access_key_id', fallback=None),
+                aws_secret_access_key=config.get('cloud_print', 'aws_secret_access_key', fallback=None),
+            )
+
+            self._sync_queue = SyncQueue(cloud_config, self._sync_client.client_id)
+            connected = self._sync_queue.connect()
+
+            # Update status widget
+            sync_status = self.query_one("#sync-status", SyncStatus)
+            sync_status.set_enabled(True)
+            sync_status.set_connected(connected)
+
+            if connected:
+                logger.info("Sync service connected successfully")
+
+                # Auto-sync on startup if configured
+                if sync_config.get('sync_on_open', True):
+                    await self._run_sync()
+            else:
+                logger.warning("Sync service failed to connect")
+
+        except Exception as e:
+            logger.warning(f"Sync initialization failed: {e}")
+            # Continue without sync - app should still work
+
+    async def action_manual_sync(self) -> None:
+        """Handle Ctrl+Shift+S - manual sync."""
+        if not self._sync_enabled:
+            self.notify("Sync not enabled", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        if not self._sync_queue or not self._sync_queue.is_connected():
+            self.notify("Sync not connected", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        await self._run_sync()
+
+    async def _run_sync(self) -> None:
+        """Execute sync and update UI."""
+        if not self._sync_queue:
+            self.notify("Sync not available", severity="error")
+            return
+
+        # Update status
+        sync_status = self.query_one("#sync-status", SyncStatus)
+        sync_status.start_sync()
+        self.notify("Syncing...")
+
+        try:
+            # Create sync service fresh with a database session for this operation
+            async with self._db_manager.get_session() as session:
+                # Create services with pending queue
+                pending_queue = PendingOperationsQueue(
+                    session,
+                    on_change_callback=self._on_pending_count_changed
+                )
+
+                # Create task and list services with pending queue
+                task_service = TaskService(session, pending_queue)
+                list_service = ListService(session, pending_queue)
+
+                # Create operation handler
+                operation_handler = SyncOperationHandler(task_service, list_service)
+
+                # Create manual sync service
+                manual_sync = ManualSyncService(
+                    self._sync_queue,
+                    pending_queue,
+                    operation_handler
+                )
+
+                # Store reference for shutdown sync
+                self._manual_sync = manual_sync
+                self._pending_queue = pending_queue
+
+                # Run sync within the session context
+                sent, received = await manual_sync.sync()
+
+                # Get updated pending count
+                pending = await pending_queue.count()
+
+            # Update status (outside session - just UI updates)
+            sync_status.set_sync_complete(sent, received)
+            sync_status.set_pending_count(pending)
+
+            # Notify user
+            if sent > 0 or received > 0:
+                self.notify(
+                    f"✓ Synced: {sent} sent, {received} received",
+                    severity="information",
+                    timeout=NOTIFICATION_TIMEOUT_MEDIUM
+                )
+                # Refresh current view to show received changes
+                await self._refresh_ui_after_task_change()
+            else:
+                self.notify("Already in sync", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+        except Exception as e:
+            logger.error(f"Sync failed: {e}", exc_info=True)
+            sync_status.syncing = False
+            self.notify(f"Sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+
+    async def _run_push_only(self) -> int:
+        """Push pending operations (for shutdown). Returns count sent."""
+        if not self._sync_queue or not self._db_manager:
+            return 0
+
+        try:
+            async with self._db_manager.get_session() as session:
+                # Create pending queue
+                pending_queue = PendingOperationsQueue(session)
+
+                # Create task and list services (needed for operation handler, even though we're just pushing)
+                task_service = TaskService(session, pending_queue)
+                list_service = ListService(session, pending_queue)
+                operation_handler = SyncOperationHandler(task_service, list_service)
+
+                # Create manual sync service
+                manual_sync = ManualSyncService(
+                    self._sync_queue,
+                    pending_queue,
+                    operation_handler
+                )
+
+                # Push only (no pull)
+                return await manual_sync.push_only()
+
+        except Exception as e:
+            logger.error(f"Failed to push pending operations: {e}", exc_info=True)
+            return 0
+
+    def _on_pending_count_changed(self, count: int) -> None:
+        """Callback when pending operation count changes."""
+        try:
+            sync_status = self.query_one("#sync-status", SyncStatus)
+            sync_status.set_pending_count(count)
+        except Exception:
+            pass  # Widget might not exist yet
+
+    # ==============================================================================
     # PRIVATE HELPERS - FOCUS & NAVIGATION
     # ==============================================================================
 
@@ -982,7 +1334,7 @@ class TaskUI(App):
                 task = await task_service.get_task_by_id(task_id)
         """
         async with self._db_manager.get_session() as session:
-            yield TaskService(session)
+            yield TaskService(session, self._pending_queue)
 
     @asynccontextmanager
     async def _with_list_service(self):
@@ -996,7 +1348,7 @@ class TaskUI(App):
                 lists = await list_service.get_all_lists()
         """
         async with self._db_manager.get_session() as session:
-            yield ListService(session)
+            yield ListService(session, self._pending_queue)
 
     @asynccontextmanager
     async def _with_diary_service(self):

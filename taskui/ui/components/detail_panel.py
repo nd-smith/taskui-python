@@ -13,6 +13,7 @@ from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 
+from rich.markup import escape as escape_markup
 from textual.containers import VerticalScroll, Vertical
 from textual.widget import Widget
 from textual.reactive import reactive
@@ -330,8 +331,11 @@ class DetailPanel(Widget):
         # URL Section
         if task.url:
             lines.append("[bold #66D9EF]LINK[/bold #66D9EF]")
-            # Display URL as clickable link using Textual markup
-            lines.append(f"  [link={task.url}]{task.url}[/link]")
+            # Ensure URL has protocol for clickable link
+            link_url = task.url if task.url.startswith(('http://', 'https://')) else f"https://{task.url}"
+            display_url = escape_markup(task.url)
+            # URL must be quoted in link markup
+            lines.append(f'  [link="{link_url}"]{display_url}[/link]')
             lines.append("")
 
         # Diary Entries Section

@@ -4,7 +4,7 @@ This module provides the ListBar widget which renders a horizontal bar showing
 all available task lists with:
 - Active list highlighting
 - Completion percentage display
-- Number key shortcuts (1-3)
+- Number key shortcuts (1-9)
 - One Monokai theme styling
 
 The ListBar manages tab creation through the _create_all_tabs() and
@@ -92,7 +92,7 @@ class ListTab(Widget):
 
         Args:
             task_list: The TaskList model to display
-            shortcut_number: The number key shortcut (1-3)
+            shortcut_number: The number key shortcut (1-9)
             is_active: Whether this list is currently active
             is_last: Whether this is the last tab (for separator logic)
             **kwargs: Additional widget arguments
@@ -180,7 +180,7 @@ class ListBar(Horizontal):
 
     List Selection and Switching:
     - Active list tracking via the reactive active_list_id property
-    - Keyboard shortcuts via select_list_by_number() for number keys (1-3)
+    - Keyboard shortcuts via select_list_by_number() for number keys (1-9)
     - Programmatic selection via set_active_list() for direct list activation
     - The watch_active_list_id() reactive watcher automatically updates tab
       highlighting when the active list changes
@@ -252,13 +252,13 @@ class ListBar(Horizontal):
 
         The created tab is configured with:
         - The task_list model to display
-        - The shortcut_number for keyboard shortcuts (1-3)
+        - The shortcut_number for keyboard shortcuts (1-9)
         - The active state matching current selection
         - The is_last flag for controlling separator rendering
 
         Args:
             task_list: Task list to create tab for
-            shortcut_number: Keyboard shortcut number (1-3), mapped to keys 1-3
+            shortcut_number: Keyboard shortcut number (1-9), mapped to keys 1-9
             is_last: Whether this is the last tab (affects separator rendering)
 
         Returns:
@@ -397,18 +397,18 @@ class ListBar(Horizontal):
         # Note: watch_active_list_id() will automatically update tab highlighting
 
     def select_list_by_number(self, number: int) -> bool:
-        """Select a list by its shortcut number (1-3).
+        """Select a list by its shortcut number (1-9).
 
         This method handles keyboard shortcut-based list selection. When the user
-        presses a number key (1-3), this method is called to switch to the
+        presses a number key (1-9), this method is called to switch to the
         corresponding list. It validates that the number is within the valid range
-        (1 to the number of available lists).
+        (1 to the number of available lists, max 9).
 
         If the number is valid, the method calls set_active_list() to switch to
         the selected list and emit the ListSelected message.
 
         Args:
-            number: The shortcut number (1-3), typically from keyboard input
+            number: The shortcut number (1-9), typically from keyboard input
 
         Returns:
             True if list was successfully selected, False if number is out of range
