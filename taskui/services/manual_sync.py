@@ -184,17 +184,25 @@ class ManualSyncService:
             # Check if it's our own message (skip to avoid circular updates)
             if decrypted_data.get('client_id') == self.sync_queue.client_id:
                 logger.debug(f"Skipping own message: {decrypted_data.get('operation')}")
+                success = True  # Own messages are "successful" - just skip them
             else:
                 # Apply operation
-                await self.operation_handler.handle_operation(decrypted_data)
+                success = await self.operation_handler.handle_operation(decrypted_data)
 
-            # Delete message from queue (mark as processed)
-            self.sync_queue.sqs_client.delete_message(
-                QueueUrl=self.sync_queue.config.queue_url,
-                ReceiptHandle=message['ReceiptHandle']
-            )
-
-            return True
+            if success:
+                # Delete message from queue only on success
+                self.sync_queue.sqs_client.delete_message(
+                    QueueUrl=self.sync_queue.config.queue_url,
+                    ReceiptHandle=message['ReceiptHandle']
+                )
+                return True
+            else:
+                # Leave message in queue for retry (SQS visibility timeout will make it available again)
+                logger.warning(
+                    f"Operation failed, leaving message in queue for retry: "
+                    f"{decrypted_data.get('operation')}"
+                )
+                return False
         except Exception as e:
             logger.error(f"Failed to process message: {e}", exc_info=True)
             return False
