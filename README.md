@@ -1,19 +1,23 @@
 # TaskUI
 
-A terminal-based nested task management system with a hierarchical two-column display. TaskUI provides a powerful and intuitive interface for managing complex task hierarchies directly from your terminal.
+Terminal-based task manager with hierarchical two-column display. Built with Python and Textual.
 
 ## Features
 
-- **Two-Column Hierarchical Display**: View tasks and their subtasks side-by-side
-- **Multi-Level Task Nesting**: Up to 4 levels of task hierarchy (5 levels total: 0-4)
-- **Visual Hierarchy Indicators**: Tree-style lines and color-coding for clear structure
-- **Async SQLite Backend**: Fast and reliable task storage
-- **Keyboard-Driven Interface**: Efficient task management without leaving the keyboard
-- **Thermal Printer Support**: Print tasks to physical kanban boards via AWS SQS
+- **Two-Column Layout** - View tasks and subtasks side-by-side with tree-style hierarchy
+- **Deep Nesting** - Up to 5 levels of task hierarchy (levels 0-4)
+- **Multiple Lists** - Organize tasks into separate lists, switch with number keys
+- **Multi-Computer Sync** - Sync tasks across machines via AWS SQS (optional)
+- **Thermal Printer** - Print task lists to ESC/POS printers (optional)
+- **Keyboard-Driven** - Full keyboard navigation, no mouse needed
 
 ## Installation
 
-### From Source
+```bash
+pip install taskui
+```
+
+Or from source:
 
 ```bash
 git clone https://github.com/yourusername/taskui-python.git
@@ -21,109 +25,51 @@ cd taskui-python
 pip install -e .
 ```
 
-### Requirements
+Requires Python 3.10+
 
-- Python 3.10 or higher
-- See `pyproject.toml` for full dependency list
-
-## Quick Start
-
-Launch TaskUI from your terminal:
+## Usage
 
 ```bash
 taskui
 ```
 
-### Basic Commands
+### Keybindings
 
-- `a` - Add a new task
-- `Enter` - Add a child task to selected item
-- `d` - Delete selected task
-- `e` - Edit selected task
-- `↑/↓` - Navigate tasks
-- `Tab` - Switch between columns
-- `q` - Quit
+| Key | Action |
+|-----|--------|
+| `n` | New sibling task |
+| `c` | New child task |
+| `e` | Edit task |
+| `Space` | Toggle complete |
+| `Delete` | Delete task |
+| `Tab` | Switch columns |
+| `Up/Down` | Navigate |
+| `1-9` | Switch lists |
+| `Ctrl+N` | New list |
+| `p` | Print column |
+| `q` | Quit |
 
 ## Configuration
 
+Create `~/.config/taskui/config.ini` for optional features:
 
-## Task Hierarchy
+```ini
+[printing]
+enabled = true
+queue_url = https://sqs.region.amazonaws.com/account/queue
 
-TaskUI supports up to 4 levels of task nesting (levels 0-4, for 5 total levels):
-
-**Column 1 (Tasks):**
-- Shows high-level tasks (levels 0-1)
-- Use for main projects and phases
-
-**Column 2 (Subtasks):**
-- Shows all descendants of selected task
-- Use for detailed breakdown
-
-**Example:**
+[sync]
+enabled = true
+queue_url = https://sqs.region.amazonaws.com/account/sync-queue
 ```
-Build App (Level 0)
-├─ Build UI (Level 1)
-│  ├─ Design components (Level 2)
-│  │  └─ Button styles (Level 3)
-│  └─ Implement forms (Level 2)
-└─ Build API (Level 1)
-   └─ Auth endpoints (Level 2)
-       └─ JWT tokens (Level 3)
-```
-
-Select "Build UI" in Column 1 → Column 2 shows all its descendants
-
-## Architecture
-
-TaskUI uses a clean, modular architecture:
-
-- **Core**: Task models and business logic using Pydantic
-- **Database**: Async SQLite with SQLAlchemy for reliable persistence
-- **UI**: Textual framework for a beautiful terminal interface
-- **Services**: Task management and validation logic
 
 ## Development
 
-### Setup Development Environment
-
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/taskui-python.git
-cd taskui-python
-
-# Install with development dependencies
 pip install -e ".[dev]"
-```
-
-### Running Tests
-
-```bash
 pytest
 ```
 
-### Code Quality
-
-```bash
-# Format code
-black taskui
-
-# Lint
-ruff check taskui
-
-# Type checking
-mypy taskui
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
 ## License
 
-MIT License - see LICENSE file for details
-
-## Project Status
-
-TaskUI is in active development. Features and APIs may change between versions.
-
-Current version: 0.1.0
+MIT
