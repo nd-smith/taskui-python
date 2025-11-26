@@ -154,6 +154,18 @@ class TaskUICommands(Provider):
             app.action_help,
         )
 
+        # Sync operations
+        yield DiscoveryHit(
+            "Sync Now",
+            "Sync with other computers (Ctrl+Shift+S)",
+            app.action_manual_sync,
+        )
+        yield DiscoveryHit(
+            "Force Full Sync",
+            "Queue ALL tasks for sync (use after setup or to fix sync issues)",
+            app.action_force_full_sync,
+        )
+
     async def search(self, query: str) -> Hits:
         """Search for commands matching the query."""
         matcher = self.matcher(query)
@@ -174,6 +186,8 @@ class TaskUICommands(Provider):
             ("Previous Column", "Move focus to previous column (Shift+Tab)", app.action_navigate_prev_column),
             ("Print Column", "Print the current column (p)", app.action_print_column),
             ("Show Help", "Display keyboard shortcuts (?)", app.action_help),
+            ("Sync Now", "Sync with other computers (Ctrl+Shift+S)", app.action_manual_sync),
+            ("Force Full Sync", "Queue ALL tasks for sync (use after setup or to fix sync issues)", app.action_force_full_sync),
             ("Switch to List 1", "Switch to first list (1)", app.action_switch_list_1),
             ("Switch to List 2", "Switch to second list (2)", app.action_switch_list_2),
             ("Switch to List 3", "Switch to third list (3)", app.action_switch_list_3),
@@ -1163,6 +1177,84 @@ class TaskUI(App):
 
         await self._run_sync()
 
+    async def action_force_full_sync(self) -> None:
+        """Queue ALL existing tasks and lists for sync, then sync.
+
+        Use this after initial setup or to fix sync issues.
+        This queues every task and list as CREATE operations.
+        """
+        if not self._sync_enabled:
+            self.notify("Sync not enabled", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        if not self._sync_queue or not self._sync_queue.is_connected():
+            self.notify("Sync not connected", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        self.notify("Queuing all tasks for sync...")
+
+        try:
+            async with self._db_manager.get_session() as session:
+                pending_queue = PendingOperationsQueue(
+                    session,
+                    on_change_callback=self._on_pending_count_changed
+                )
+
+                # Get all lists
+                list_service = ListService(session, pending_queue)
+                lists = await list_service.get_all_lists()
+
+                # Queue each list as LIST_CREATE
+                list_count = 0
+                for task_list in lists:
+                    await pending_queue.add(
+                        "LIST_CREATE",
+                        str(task_list.id),
+                        {
+                            "list": {
+                                "id": str(task_list.id),
+                                "name": task_list.name,
+                                "created_at": task_list.created_at.isoformat() if task_list.created_at else None,
+                            }
+                        }
+                    )
+                    list_count += 1
+
+                # Get all tasks from all lists
+                task_service = TaskService(session, pending_queue)
+                task_count = 0
+                for task_list in lists:
+                    tasks = await task_service.get_tasks_for_list(task_list.id)
+                    for task in tasks:
+                        await pending_queue.add(
+                            "TASK_CREATE",
+                            str(task.list_id),
+                            {
+                                "task": {
+                                    "id": str(task.id),
+                                    "title": task.title,
+                                    "notes": task.notes,
+                                    "url": task.url,
+                                    "parent_id": str(task.parent_id) if task.parent_id else None,
+                                    "level": task.level,
+                                    "position": task.position,
+                                    "is_completed": task.is_completed,
+                                    "created_at": task.created_at.isoformat() if task.created_at else None,
+                                }
+                            }
+                        )
+                        task_count += 1
+
+                logger.info(f"Force sync: queued {list_count} lists and {task_count} tasks")
+                self.notify(f"Queued {list_count} lists and {task_count} tasks", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+
+            # Now run normal sync to push everything
+            await self._run_sync()
+
+        except Exception as e:
+            logger.error(f"Force sync failed: {e}", exc_info=True)
+            self.notify(f"Force sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+
     async def _run_sync(self) -> None:
         """Execute sync and update UI."""
         if not self._sync_queue:
@@ -1334,7 +1426,13 @@ class TaskUI(App):
                 task = await task_service.get_task_by_id(task_id)
         """
         async with self._db_manager.get_session() as session:
-            yield TaskService(session, self._pending_queue)
+            # Create fresh pending queue with THIS session to avoid database locking
+            # The old approach stored _pending_queue from sync which used a different session
+            pending_queue = PendingOperationsQueue(
+                session,
+                on_change_callback=self._on_pending_count_changed
+            ) if self._sync_enabled else None
+            yield TaskService(session, pending_queue)
 
     @asynccontextmanager
     async def _with_list_service(self):
@@ -1348,7 +1446,12 @@ class TaskUI(App):
                 lists = await list_service.get_all_lists()
         """
         async with self._db_manager.get_session() as session:
-            yield ListService(session, self._pending_queue)
+            # Create fresh pending queue with THIS session to avoid database locking
+            pending_queue = PendingOperationsQueue(
+                session,
+                on_change_callback=self._on_pending_count_changed
+            ) if self._sync_enabled else None
+            yield ListService(session, pending_queue)
 
     @asynccontextmanager
     async def _with_diary_service(self):
