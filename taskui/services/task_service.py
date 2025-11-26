@@ -584,6 +584,34 @@ class TaskService:
         # Convert to Pydantic with counts using helper
         return await self._fetch_tasks_with_counts(task_orms)
 
+    async def get_all_tasks_for_list(self, list_id: UUID) -> List[Task]:
+        """
+        Get ALL tasks for a task list (including children at all levels).
+
+        Used for Force Full Sync to queue all tasks, not just top-level.
+
+        Args:
+            list_id: UUID of the task list
+
+        Returns:
+            List of Task instances ordered by position (includes all nesting levels)
+
+        Raises:
+            TaskListNotFoundError: If list does not exist
+        """
+        # Verify list exists
+        await self._verify_list_exists(list_id)
+
+        # Build query for ALL tasks (not just level 0)
+        query = self._query_active_tasks(list_id)
+
+        # Execute query
+        result = await self.session.execute(query)
+        task_orms = result.scalars().all()
+
+        # Convert to Pydantic with counts using helper
+        return await self._fetch_tasks_with_counts(task_orms)
+
     async def get_children(self, parent_id: UUID) -> List[Task]:
         """
         Get all direct children of a parent task.

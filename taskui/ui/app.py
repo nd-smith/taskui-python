@@ -1220,11 +1220,11 @@ class TaskUI(App):
                     )
                     list_count += 1
 
-                # Get all tasks from all lists
+                # Get all tasks from all lists (including children at all levels)
                 task_service = TaskService(session, pending_queue)
                 task_count = 0
                 for task_list in lists:
-                    tasks = await task_service.get_tasks_for_list(task_list.id)
+                    tasks = await task_service.get_all_tasks_for_list(task_list.id)
                     for task in tasks:
                         await pending_queue.add(
                             "TASK_CREATE",
