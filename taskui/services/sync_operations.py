@@ -45,7 +45,7 @@ class SyncOperationHandler:
             placeholder_name: Temporary name if list needs to be created
         """
         try:
-            existing = await self.list_service.get_list(list_id)
+            existing = await self.list_service.get_list_by_id(list_id)
             if existing:
                 return  # List exists, nothing to do
         except Exception:
@@ -267,7 +267,7 @@ class SyncOperationHandler:
 
         # Check if list already exists to prevent duplicates
         try:
-            existing_list = await self.list_service.get_list(list_id)
+            existing_list = await self.list_service.get_list_by_id(list_id)
             if existing_list:
                 logger.warning(
                     f"List {list_id} already exists, skipping creation from sync"
@@ -307,7 +307,7 @@ class SyncOperationHandler:
 
         # Get current list state
         try:
-            current_list = await self.list_service.get_list(list_id)
+            current_list = await self.list_service.get_list_by_id(list_id)
             if not current_list:
                 logger.warning(f"List {list_id} not found, cannot apply update from sync")
                 return

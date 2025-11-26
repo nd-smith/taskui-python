@@ -36,19 +36,19 @@ class TestEnsureListExists:
         """Should return immediately if list already exists."""
         list_id = uuid.uuid4()
         existing_list = TaskList(id=list_id, name="Existing List")
-        mock_list_service.get_list.return_value = existing_list
+        mock_list_service.get_list_by_id.return_value = existing_list
 
         await sync_handler._ensure_list_exists(list_id)
 
         # Should check for existing list
-        mock_list_service.get_list.assert_called_once_with(list_id)
+        mock_list_service.get_list_by_id.assert_called_once_with(list_id)
         # Should not create new list
         mock_list_service.create_list.assert_not_called()
 
     async def test_creates_placeholder_if_list_missing(self, sync_handler, mock_list_service):
         """Should create placeholder list if list doesn't exist."""
         list_id = uuid.uuid4()
-        mock_list_service.get_list.side_effect = Exception("Not found")
+        mock_list_service.get_list_by_id.side_effect = Exception("Not found")
 
         await sync_handler._ensure_list_exists(list_id)
 
@@ -61,7 +61,7 @@ class TestEnsureListExists:
     async def test_handles_race_condition(self, sync_handler, mock_list_service):
         """Should handle case where list is created by another operation."""
         list_id = uuid.uuid4()
-        mock_list_service.get_list.side_effect = Exception("Not found")
+        mock_list_service.get_list_by_id.side_effect = Exception("Not found")
         mock_list_service.create_list.side_effect = Exception("Already exists")
 
         # Should not raise exception
@@ -71,7 +71,7 @@ class TestEnsureListExists:
         """Should use custom placeholder name if provided."""
         list_id = uuid.uuid4()
         custom_name = "Loading..."
-        mock_list_service.get_list.side_effect = Exception("Not found")
+        mock_list_service.get_list_by_id.side_effect = Exception("Not found")
 
         await sync_handler._ensure_list_exists(list_id, placeholder_name=custom_name)
 
@@ -90,7 +90,7 @@ class TestTaskCreateWithMissingList:
         task_id = uuid.uuid4()
 
         # Simulate missing list
-        mock_list_service.get_list.side_effect = Exception("Not found")
+        mock_list_service.get_list_by_id.side_effect = Exception("Not found")
         mock_task_service.get_task.side_effect = Exception("Not found")
 
         operation_data = {
@@ -139,7 +139,7 @@ class TestTaskUpdateWithListMove:
         mock_task_service.get_task.return_value = existing_task
 
         # New list doesn't exist yet
-        mock_list_service.get_list.side_effect = Exception("Not found")
+        mock_list_service.get_list_by_id.side_effect = Exception("Not found")
 
         operation_data = {
             'operation': 'TASK_UPDATE',
