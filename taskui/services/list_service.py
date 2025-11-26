@@ -52,13 +52,21 @@ class ListService:
         self.session = session
         self.pending_queue = pending_queue
 
-    async def create_list(self, name: str, list_id: Optional[UUID] = None) -> TaskList:
+    async def create_list(
+        self,
+        name: str,
+        list_id: Optional[UUID] = None,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None,
+    ) -> TaskList:
         """
         Create a new task list.
 
         Args:
             name: Name of the list to create
             list_id: Optional UUID for the list (auto-generated if not provided)
+            created_at: Optional creation timestamp (for sync operations)
+            updated_at: Optional update timestamp (for sync operations)
 
         Returns:
             Created TaskList model
@@ -79,7 +87,9 @@ class ListService:
             if list_id is None:
                 list_id = uuid4()
 
-            created_at = datetime.utcnow()
+            # Use provided timestamp or generate now
+            if created_at is None:
+                created_at = datetime.utcnow()
 
             list_orm = TaskListORM(
                 id=str(list_id),

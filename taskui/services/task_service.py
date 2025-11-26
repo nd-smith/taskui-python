@@ -321,45 +321,94 @@ class TaskService:
         list_id: UUID,
         notes: Optional[str] = None,
         url: Optional[str] = None,
+        task_id: Optional[UUID] = None,
+        parent_id: Optional[UUID] = None,
+        position: Optional[int] = None,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None,
     ) -> Task:
         """
-        Create a new top-level task (level 0).
+        Create a new task (top-level or child).
 
         Args:
             title: Task title
             list_id: UUID of the task list
             notes: Optional task notes
             url: Optional URL/link
+            task_id: Optional UUID for the task (for sync operations)
+            parent_id: Optional parent task UUID (for subtasks)
+            position: Optional position (auto-calculated if not provided)
+            created_at: Optional creation timestamp (for sync operations)
+            updated_at: Optional update timestamp (for sync operations)
 
         Returns:
             Created Task instance
 
         Raises:
             TaskListNotFoundError: If list does not exist
+            TaskNotFoundError: If parent task does not exist
+            NestingLimitError: If nesting limit is exceeded
         """
+        from taskui.services.nesting_validation import (
+            can_create_child,
+            get_child_level,
+            NestingLimitError as ValidationNestingError,
+            MAX_NESTING_DEPTH
+        )
+
         try:
-            logger.debug(f"Creating top-level task: title='{title}', list_id={list_id}")
+            logger.debug(f"Creating task: title='{title}', list_id={list_id}, parent_id={parent_id}")
 
             # Verify list exists
             await self._verify_list_exists(list_id)
 
-            # Get next position
-            position = await self._get_next_position(list_id, parent_id=None)
+            # Calculate level based on parent
+            level = 0
+            if parent_id is not None:
+                parent_orm = await self._get_task_or_raise(parent_id)
+                parent_task = self._orm_to_pydantic(parent_orm)
 
-            # Import global max depth for validation
-            from taskui.services.nesting_validation import MAX_NESTING_DEPTH
+                # Validate nesting depth
+                if not can_create_child(parent_task.level):
+                    logger.warning(
+                        f"Nesting limit reached: parent_level={parent_task.level}, "
+                        f"max_depth={MAX_NESTING_DEPTH}"
+                    )
+                    raise NestingLimitError(
+                        f"Cannot create child task. Parent task at level {parent_task.level} "
+                        f"has reached maximum nesting depth ({MAX_NESTING_DEPTH})."
+                    )
+
+                try:
+                    level = get_child_level(parent_task.level)
+                except ValidationNestingError as e:
+                    logger.error(f"Cannot determine child level: parent_level={parent_task.level}")
+                    raise NestingLimitError(str(e))
+
+            # Get position if not provided
+            if position is None:
+                position = await self._get_next_position(list_id, parent_id=parent_id)
+
+            # Build task data
+            task_data = {
+                'title': title,
+                'notes': notes,
+                'url': url,
+                'list_id': list_id,
+                'level': level,
+                'position': position,
+                'parent_id': parent_id,
+            }
+
+            # Add optional sync fields
+            if task_id is not None:
+                task_data['id'] = task_id
+            if created_at is not None:
+                task_data['created_at'] = created_at
 
             # Create task with validation context
             task = Task.model_validate(
-                {
-                    'title': title,
-                    'notes': notes,
-                    'url': url,
-                    'list_id': list_id,
-                    'level': 0,
-                    'position': position,
-                    'parent_id': None,
-                },
+                task_data,
                 context={'max_level': MAX_NESTING_DEPTH}
             )
 
@@ -368,29 +417,30 @@ class TaskService:
             self.session.add(task_orm)
             await self.session.flush()  # Flush to get the ID
 
-            # Queue for sync
-            await self._queue_sync_operation(
-                "TASK_CREATE",
-                list_id,
-                {
-                    "task": {
-                        "id": str(task.id),
-                        "title": task.title,
-                        "notes": task.notes,
-                        "url": task.url,
-                        "parent_id": None,
-                        "level": task.level,
-                        "position": task.position,
-                        "is_completed": task.is_completed,
-                        "created_at": task.created_at.isoformat() if task.created_at else None
+            # Queue for sync (only if not from sync - i.e., task_id was not provided)
+            if task_id is None:
+                await self._queue_sync_operation(
+                    "TASK_CREATE",
+                    list_id,
+                    {
+                        "task": {
+                            "id": str(task.id),
+                            "title": task.title,
+                            "notes": task.notes,
+                            "url": task.url,
+                            "parent_id": str(parent_id) if parent_id else None,
+                            "level": task.level,
+                            "position": task.position,
+                            "is_completed": task.is_completed,
+                            "created_at": task.created_at.isoformat() if task.created_at else None
+                        }
                     }
-                }
-            )
+                )
 
-            logger.info(f"Created task: id={task.id}, title='{title}', level=0")
+            logger.info(f"Created task: id={task.id}, title='{title}', level={level}")
             return task
-        except TaskListNotFoundError as e:
-            logger.error(f"Failed to create task - list not found: {e}", exc_info=True)
+        except (TaskListNotFoundError, TaskNotFoundError, NestingLimitError) as e:
+            logger.error(f"Failed to create task: {e}", exc_info=True)
             raise
         except Exception as e:
             logger.error(f"Failed to create task: {e}", exc_info=True)

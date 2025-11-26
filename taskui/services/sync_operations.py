@@ -133,7 +133,8 @@ class SyncOperationHandler:
             await self.task_service.create_task(
                 list_id=list_id,
                 title=task_data.get('title', ''),
-                description=task_data.get('description'),
+                notes=task_data.get('notes'),
+                url=task_data.get('url'),
                 parent_id=uuid.UUID(task_data['parent_id']) if task_data.get('parent_id') else None,
                 position=task_data.get('position', 0),
                 task_id=task_id,  # Use the remote task ID
