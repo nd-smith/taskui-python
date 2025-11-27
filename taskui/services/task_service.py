@@ -589,12 +589,15 @@ class TaskService:
         Get ALL tasks for a task list (including children at all levels).
 
         Used for Force Full Sync to queue all tasks, not just top-level.
+        Tasks are ordered by level first (parents before children) to ensure
+        proper sync order when receiving on another device.
 
         Args:
             list_id: UUID of the task list
 
         Returns:
-            List of Task instances ordered by position (includes all nesting levels)
+            List of Task instances ordered by level, then position
+            (ensures parents sync before their children)
 
         Raises:
             TaskListNotFoundError: If list does not exist
@@ -602,8 +605,12 @@ class TaskService:
         # Verify list exists
         await self._verify_list_exists(list_id)
 
-        # Build query for ALL tasks (not just level 0)
-        query = self._query_active_tasks(list_id)
+        # Build query for ALL tasks ordered by level first (parents before children)
+        query = (
+            select(TaskORM)
+            .where(TaskORM.list_id == str(list_id))
+            .order_by(TaskORM.level, TaskORM.position)
+        )
 
         # Execute query
         result = await self.session.execute(query)
