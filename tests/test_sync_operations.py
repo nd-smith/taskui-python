@@ -91,7 +91,7 @@ class TestTaskCreateWithMissingList:
 
         # Simulate missing list
         mock_list_service.get_list_by_id.side_effect = Exception("Not found")
-        mock_task_service.get_task.side_effect = Exception("Not found")
+        mock_task_service.get_task_by_id.side_effect = Exception("Not found")
 
         operation_data = {
             'operation': 'TASK_CREATE',
@@ -136,7 +136,7 @@ class TestTaskUpdateWithListMove:
         existing_task.title = "Test Task"
         existing_task.list_id = old_list_id
         existing_task.updated_at = datetime.utcnow()
-        mock_task_service.get_task.return_value = existing_task
+        mock_task_service.get_task_by_id.return_value = existing_task
 
         # New list doesn't exist yet
         mock_list_service.get_list_by_id.side_effect = Exception("Not found")

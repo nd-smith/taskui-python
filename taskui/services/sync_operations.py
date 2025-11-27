@@ -118,7 +118,7 @@ class SyncOperationHandler:
 
         # Check if task already exists to prevent duplicates
         try:
-            existing_task = await self.task_service.get_task(task_id)
+            existing_task = await self.task_service.get_task_by_id(task_id)
             if existing_task:
                 logger.warning(
                     f"Task {task_id} already exists, skipping creation from sync"
@@ -168,7 +168,7 @@ class SyncOperationHandler:
 
         # Get current task state
         try:
-            current_task = await self.task_service.get_task(task_id)
+            current_task = await self.task_service.get_task_by_id(task_id)
             if not current_task:
                 logger.warning(f"Task {task_id} not found, cannot apply update from sync")
                 return
@@ -205,7 +205,7 @@ class SyncOperationHandler:
 
         try:
             # Check if task exists
-            existing_task = await self.task_service.get_task(task_id)
+            existing_task = await self.task_service.get_task_by_id(task_id)
             if not existing_task:
                 logger.warning(f"Task {task_id} not found, already deleted")
                 return
@@ -235,7 +235,7 @@ class SyncOperationHandler:
 
         try:
             # Check if task exists
-            existing_task = await self.task_service.get_task(task_id)
+            existing_task = await self.task_service.get_task_by_id(task_id)
             if not existing_task:
                 logger.warning(f"Task {task_id} not found, cannot move")
                 return
