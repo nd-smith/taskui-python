@@ -143,6 +143,13 @@ class TaskUICommands(Provider):
             app.action_print_column,
         )
 
+        # Sync operations
+        yield DiscoveryHit(
+            "Sync Now",
+            "Sync with remote (Ctrl+Shift+S)",
+            app.action_sync,
+        )
+
         # Help
         yield DiscoveryHit(
             "Show Help",
@@ -169,6 +176,7 @@ class TaskUICommands(Provider):
             ("Next Column", "Move focus to next column (Tab)", app.action_navigate_next_column),
             ("Previous Column", "Move focus to previous column (Shift+Tab)", app.action_navigate_prev_column),
             ("Print Column", "Print the current column (p)", app.action_print_column),
+            ("Sync Now", "Sync with remote (Ctrl+Shift+S)", app.action_sync),
             ("Show Help", "Display keyboard shortcuts (?)", app.action_help),
             ("Switch to List 1", "Switch to first list (1)", app.action_switch_list_1),
             ("Switch to List 2", "Switch to second list (2)", app.action_switch_list_2),
