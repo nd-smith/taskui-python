@@ -144,6 +144,9 @@ class Config:
         - TASKUI_SYNC_QUEUE_URL
         - TASKUI_SYNC_REGION
         - TASKUI_SYNC_ON_OPEN
+        - TASKUI_ENCRYPTION_KEY (shared with cloud_print)
+        - AWS_ACCESS_KEY_ID
+        - AWS_SECRET_ACCESS_KEY
 
         Returns:
             Dictionary with sync configuration
@@ -162,6 +165,32 @@ class Config:
             else self._config.getboolean('sync', 'sync_on_open', fallback=True)
         )
 
+        sync_on_close_env = os.getenv('TASKUI_SYNC_ON_CLOSE', '').lower()
+        sync_on_close = (
+            sync_on_close_env == 'true'
+            if sync_on_close_env
+            else self._config.getboolean('sync', 'sync_on_close', fallback=True)
+        )
+
+        # Encryption key is shared with cloud_print section
+        encryption_key = (
+            os.getenv('TASKUI_ENCRYPTION_KEY') or
+            self._config.get('sync', 'encryption_key', fallback=None) or
+            self._config.get('cloud_print', 'encryption_key', fallback=None)
+        )
+
+        # AWS credentials (check sync section first, then cloud_print, then env)
+        aws_access_key_id = (
+            os.getenv('AWS_ACCESS_KEY_ID') or
+            self._config.get('sync', 'aws_access_key_id', fallback=None) or
+            self._config.get('cloud_print', 'aws_access_key_id', fallback=None)
+        )
+        aws_secret_access_key = (
+            os.getenv('AWS_SECRET_ACCESS_KEY') or
+            self._config.get('sync', 'aws_secret_access_key', fallback=None) or
+            self._config.get('cloud_print', 'aws_secret_access_key', fallback=None)
+        )
+
         config = {
             'enabled': enabled,
             'queue_url': os.getenv('TASKUI_SYNC_QUEUE_URL') or
@@ -169,10 +198,16 @@ class Config:
             'region': os.getenv('TASKUI_SYNC_REGION') or
                      self._config.get('sync', 'region', fallback='us-east-1'),
             'sync_on_open': sync_on_open,
+            'sync_on_close': sync_on_close,
+            'encryption_key': encryption_key,
+            'aws_access_key_id': aws_access_key_id,
+            'aws_secret_access_key': aws_secret_access_key,
         }
 
+        encryption_status = "enabled" if config.get('encryption_key') else "disabled"
         logger.debug(f"Sync config: enabled={config['enabled']}, "
-                    f"region={config['region']}, sync_on_open={config['sync_on_open']}")
+                    f"region={config['region']}, sync_on_open={config['sync_on_open']}, "
+                    f"encryption={encryption_status}")
 
         return config
 

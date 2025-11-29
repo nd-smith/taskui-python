@@ -23,22 +23,18 @@ from taskui.logging_config import get_logger
 from taskui.models import Task, TaskList
 from taskui.services.task_service import TaskService
 from taskui.services.list_service import ListService
+from taskui.config import Config
 from taskui.services.diary_service import DiaryService
 from taskui.services.printer_service import PrinterService, PrinterConfig
 from taskui.services.cloud_print_queue import CloudPrintQueue, CloudPrintConfig
-from taskui.config import Config
-from taskui.services.sync_client import SyncClient
-from taskui.services.sync_queue import SyncQueue
-from taskui.services.pending_operations import PendingOperationsQueue
-from taskui.services.sync_operations import SyncOperationHandler
-from taskui.services.manual_sync import ManualSyncService
+from taskui.services.sync_v2 import SyncV2Service, SyncV2Error
+from taskui.export_schema import ConflictStrategy
 from taskui.ui.components.task_modal import TaskCreationModal
 from taskui.ui.components.detail_panel import DetailPanel
 from taskui.ui.components.list_bar import ListBar
 from taskui.ui.components.list_management_modal import ListManagementModal
 from taskui.ui.components.list_delete_modal import ListDeleteModal
 from taskui.ui.modals import DiaryEntryModal
-from taskui.ui.components.sync_status import SyncStatus
 from taskui.ui.theme import (
     BACKGROUND,
     FOREGROUND,
@@ -154,18 +150,6 @@ class TaskUICommands(Provider):
             app.action_help,
         )
 
-        # Sync operations
-        yield DiscoveryHit(
-            "Sync Now",
-            "Sync with other computers (Ctrl+Shift+S)",
-            app.action_manual_sync,
-        )
-        yield DiscoveryHit(
-            "Force Full Sync",
-            "Queue ALL tasks for sync (use after setup or to fix sync issues)",
-            app.action_force_full_sync,
-        )
-
     async def search(self, query: str) -> Hits:
         """Search for commands matching the query."""
         matcher = self.matcher(query)
@@ -186,8 +170,6 @@ class TaskUICommands(Provider):
             ("Previous Column", "Move focus to previous column (Shift+Tab)", app.action_navigate_prev_column),
             ("Print Column", "Print the current column (p)", app.action_print_column),
             ("Show Help", "Display keyboard shortcuts (?)", app.action_help),
-            ("Sync Now", "Sync with other computers (Ctrl+Shift+S)", app.action_manual_sync),
-            ("Force Full Sync", "Queue ALL tasks for sync (use after setup or to fix sync issues)", app.action_force_full_sync),
             ("Switch to List 1", "Switch to first list (1)", app.action_switch_list_1),
             ("Switch to List 2", "Switch to second list (2)", app.action_switch_list_2),
             ("Switch to List 3", "Switch to third list (3)", app.action_switch_list_3),
@@ -284,13 +266,6 @@ class TaskUI(App):
         self._lists: List[TaskList] = []  # Store available lists
         self._printer_service: Optional[CloudPrintQueue] = None  # Cloud print queue service
 
-        # Sync services
-        self._sync_client: Optional[SyncClient] = None
-        self._sync_queue: Optional[SyncQueue] = None
-        self._pending_queue: Optional[PendingOperationsQueue] = None
-        self._manual_sync: Optional[ManualSyncService] = None
-        self._sync_enabled: bool = False
-
     def compose(self) -> ComposeResult:
         """Compose the application layout.
 
@@ -324,9 +299,6 @@ class TaskUI(App):
                     title="Details",
                     id=COLUMN_3_ID
                 )
-
-        # Sync status bar
-        yield SyncStatus(id="sync-status")
 
         yield Footer()
 
@@ -365,30 +337,11 @@ class TaskUI(App):
             logger.warning(f"Cloud print queue not available at startup: {e}")
             # Continue without printer - user can still use the app
 
-        # Initialize sync service (if enabled in config)
-        await self._initialize_sync()
-
         logger.info("TaskUI application ready")
 
     async def on_unmount(self) -> None:
-        """Called when app is shutting down. Push pending operations before close."""
+        """Called when app is shutting down."""
         logger.info("TaskUI application shutting down")
-
-        # Sync on close if enabled and configured
-        if self._sync_enabled and self._sync_queue:
-            try:
-                config = Config()
-                sync_config = config.get_sync_config()
-
-                if sync_config.get('sync_on_close', True):
-                    logger.info("Pushing pending operations before shutdown...")
-                    sent = await self._run_push_only()
-                    if sent > 0:
-                        logger.info(f"Pushed {sent} operations before shutdown")
-            except Exception as e:
-                logger.error(f"Failed to sync on shutdown: {e}")
-                # Continue shutdown even if sync fails
-
         logger.info("TaskUI application shutdown complete")
 
     # ==============================================================================
@@ -970,6 +923,99 @@ class TaskUI(App):
             self.notify(f"Print failed: {str(e)}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
             logger.error(f"Failed to print task card: {e}", exc_info=True)
 
+    async def action_sync(self) -> None:
+        """Sync with remote (Ctrl+Shift+S).
+
+        Performs full bidirectional sync:
+        1. Push local state to SQS
+        2. Pull remote state from SQS
+        """
+        logger.info("Sync triggered (Ctrl+Shift+S)")
+
+        if not self._has_db_manager():
+            self.notify("Database not ready", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        try:
+            # Load sync configuration using centralized Config
+            app_config = Config()
+            sync_config = app_config.get_sync_config()
+
+            # Check if sync is enabled
+            if not sync_config.get('enabled'):
+                self.notify("Sync is disabled in config", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+                logger.info("Sync disabled in configuration")
+                return
+
+            # Check for required settings
+            if not sync_config.get('queue_url'):
+                self.notify("Sync queue URL not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
+                logger.warning("Sync queue_url not set in config")
+                return
+
+            if not sync_config.get('encryption_key'):
+                self.notify("Sync encryption key not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
+                logger.warning("Sync encryption_key not set in config")
+                return
+
+            # Build CloudPrintConfig from sync settings
+            cloud_config = CloudPrintConfig(
+                queue_url=sync_config['queue_url'],
+                region=sync_config.get('region', 'us-east-1'),
+                aws_access_key_id=sync_config.get('aws_access_key_id'),
+                aws_secret_access_key=sync_config.get('aws_secret_access_key'),
+                encryption_key=sync_config['encryption_key'],
+            )
+
+            # Generate client ID (based on machine - simple hash of hostname)
+            import platform
+            import hashlib
+            hostname = platform.node()
+            client_id = hashlib.md5(hostname.encode()).hexdigest()[:16]
+
+            # Show syncing status
+            self.notify("Syncing...", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+            # Perform sync
+            async with self._db_manager.session() as session:
+                sync_service = SyncV2Service(session, cloud_config, client_id)
+
+                if not sync_service.connect():
+                    self.notify("Failed to connect to sync queue", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+                    return
+
+                try:
+                    results = await sync_service.sync_full(
+                        strategy=ConflictStrategy.NEWER_WINS
+                    )
+
+                    # Report results
+                    if results['push_success']:
+                        msg = "Sync complete"
+                        if results['pull_imported'] > 0:
+                            msg += f" - imported {results['pull_imported']} list(s)"
+                        if results['conflicts']:
+                            msg += f" - {len(results['conflicts'])} conflict(s)"
+
+                        self.notify(msg, severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+                        logger.info(f"Sync results: {results}")
+
+                        # Refresh UI if anything was imported
+                        if results['pull_imported'] > 0:
+                            await self._refresh_lists()
+                    else:
+                        self.notify("Sync push failed", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+
+                finally:
+                    sync_service.disconnect()
+
+        except SyncV2Error as e:
+            self.notify(f"Sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"Sync error: {e}", exc_info=True)
+        except Exception as e:
+            self.notify(f"Sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"Unexpected sync error: {e}", exc_info=True)
+
     def action_cancel(self) -> None:
         """Cancel current operation (Escape key)."""
         # Note: Textual handles Escape key for modal dismissal automatically.
@@ -1117,247 +1163,6 @@ class TaskUI(App):
         self.push_screen(modal)
 
     # ==============================================================================
-    # SYNC METHODS
-    # ==============================================================================
-
-    async def _initialize_sync(self) -> None:
-        """Initialize sync service if enabled in config."""
-        try:
-            config = Config()
-            sync_config = config.get_sync_config()
-
-            if not sync_config.get('enabled', False):
-                logger.info("Sync is disabled in config")
-                return
-
-            self._sync_enabled = True
-
-            # Initialize client ID
-            self._sync_client = SyncClient()
-
-            # Initialize sync queue
-            cloud_config = CloudPrintConfig(
-                queue_url=sync_config.get('queue_url', ''),
-                region=sync_config.get('region', 'us-east-1'),
-                encryption_key=config.get('cloud_print', 'encryption_key', fallback=None),
-                aws_access_key_id=config.get('cloud_print', 'aws_access_key_id', fallback=None),
-                aws_secret_access_key=config.get('cloud_print', 'aws_secret_access_key', fallback=None),
-            )
-
-            self._sync_queue = SyncQueue(cloud_config, self._sync_client.client_id)
-            connected = self._sync_queue.connect()
-
-            # Update status widget
-            sync_status = self.query_one("#sync-status", SyncStatus)
-            sync_status.set_enabled(True)
-            sync_status.set_connected(connected)
-
-            if connected:
-                logger.info("Sync service connected successfully")
-
-                # Auto-sync on startup if configured
-                if sync_config.get('sync_on_open', True):
-                    await self._run_sync()
-            else:
-                logger.warning("Sync service failed to connect")
-
-        except Exception as e:
-            logger.warning(f"Sync initialization failed: {e}")
-            # Continue without sync - app should still work
-
-    async def action_manual_sync(self) -> None:
-        """Handle Ctrl+Shift+S - manual sync."""
-        if not self._sync_enabled:
-            self.notify("Sync not enabled", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-            return
-
-        if not self._sync_queue or not self._sync_queue.is_connected():
-            self.notify("Sync not connected", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-            return
-
-        await self._run_sync()
-
-    async def action_force_full_sync(self) -> None:
-        """Queue ALL existing tasks and lists for sync, then sync.
-
-        Use this after initial setup or to fix sync issues.
-        This queues every task and list as CREATE operations.
-        """
-        if not self._sync_enabled:
-            self.notify("Sync not enabled", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-            return
-
-        if not self._sync_queue or not self._sync_queue.is_connected():
-            self.notify("Sync not connected", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-            return
-
-        self.notify("Queuing all tasks for sync...")
-
-        try:
-            async with self._db_manager.get_session() as session:
-                pending_queue = PendingOperationsQueue(
-                    session,
-                    on_change_callback=self._on_pending_count_changed
-                )
-
-                # Get all lists
-                list_service = ListService(session, pending_queue)
-                lists = await list_service.get_all_lists()
-
-                # Queue each list as LIST_CREATE
-                list_count = 0
-                for task_list in lists:
-                    await pending_queue.add(
-                        "LIST_CREATE",
-                        str(task_list.id),
-                        {
-                            "list": {
-                                "id": str(task_list.id),
-                                "name": task_list.name,
-                                "created_at": task_list.created_at.isoformat() if task_list.created_at else None,
-                            }
-                        }
-                    )
-                    list_count += 1
-
-                # Get all tasks from all lists (including children at all levels)
-                task_service = TaskService(session, pending_queue)
-                task_count = 0
-                for task_list in lists:
-                    tasks = await task_service.get_all_tasks_for_list(task_list.id)
-                    for task in tasks:
-                        await pending_queue.add(
-                            "TASK_CREATE",
-                            str(task.list_id),
-                            {
-                                "task": {
-                                    "id": str(task.id),
-                                    "title": task.title,
-                                    "notes": task.notes,
-                                    "url": task.url,
-                                    "parent_id": str(task.parent_id) if task.parent_id else None,
-                                    "level": task.level,
-                                    "position": task.position,
-                                    "is_completed": task.is_completed,
-                                    "created_at": task.created_at.isoformat() if task.created_at else None,
-                                }
-                            }
-                        )
-                        task_count += 1
-
-                logger.info(f"Force sync: queued {list_count} lists and {task_count} tasks")
-                self.notify(f"Queued {list_count} lists and {task_count} tasks", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-
-            # Now run normal sync to push everything
-            await self._run_sync()
-
-        except Exception as e:
-            logger.error(f"Force sync failed: {e}", exc_info=True)
-            self.notify(f"Force sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
-
-    async def _run_sync(self) -> None:
-        """Execute sync and update UI."""
-        if not self._sync_queue:
-            self.notify("Sync not available", severity="error")
-            return
-
-        # Update status
-        sync_status = self.query_one("#sync-status", SyncStatus)
-        sync_status.start_sync()
-        self.notify("Syncing...")
-
-        try:
-            # Create sync service fresh with a database session for this operation
-            async with self._db_manager.get_session() as session:
-                # Create services with pending queue
-                pending_queue = PendingOperationsQueue(
-                    session,
-                    on_change_callback=self._on_pending_count_changed
-                )
-
-                # Create task and list services with pending queue
-                task_service = TaskService(session, pending_queue)
-                list_service = ListService(session, pending_queue)
-
-                # Create operation handler
-                operation_handler = SyncOperationHandler(task_service, list_service)
-
-                # Create manual sync service
-                manual_sync = ManualSyncService(
-                    self._sync_queue,
-                    pending_queue,
-                    operation_handler
-                )
-
-                # Store reference for shutdown sync
-                self._manual_sync = manual_sync
-                self._pending_queue = pending_queue
-
-                # Run sync within the session context
-                sent, received = await manual_sync.sync()
-
-                # Get updated pending count
-                pending = await pending_queue.count()
-
-            # Update status (outside session - just UI updates)
-            sync_status.set_sync_complete(sent, received)
-            sync_status.set_pending_count(pending)
-
-            # Notify user
-            if sent > 0 or received > 0:
-                self.notify(
-                    f"✓ Synced: {sent} sent, {received} received",
-                    severity="information",
-                    timeout=NOTIFICATION_TIMEOUT_MEDIUM
-                )
-                # Refresh current view to show received changes
-                await self._refresh_ui_after_task_change()
-            else:
-                self.notify("Already in sync", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
-
-        except Exception as e:
-            logger.error(f"Sync failed: {e}", exc_info=True)
-            sync_status.syncing = False
-            self.notify(f"Sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
-
-    async def _run_push_only(self) -> int:
-        """Push pending operations (for shutdown). Returns count sent."""
-        if not self._sync_queue or not self._db_manager:
-            return 0
-
-        try:
-            async with self._db_manager.get_session() as session:
-                # Create pending queue
-                pending_queue = PendingOperationsQueue(session)
-
-                # Create task and list services (needed for operation handler, even though we're just pushing)
-                task_service = TaskService(session, pending_queue)
-                list_service = ListService(session, pending_queue)
-                operation_handler = SyncOperationHandler(task_service, list_service)
-
-                # Create manual sync service
-                manual_sync = ManualSyncService(
-                    self._sync_queue,
-                    pending_queue,
-                    operation_handler
-                )
-
-                # Push only (no pull)
-                return await manual_sync.push_only()
-
-        except Exception as e:
-            logger.error(f"Failed to push pending operations: {e}", exc_info=True)
-            return 0
-
-    def _on_pending_count_changed(self, count: int) -> None:
-        """Callback when pending operation count changes."""
-        try:
-            sync_status = self.query_one("#sync-status", SyncStatus)
-            sync_status.set_pending_count(count)
-        except Exception:
-            pass  # Widget might not exist yet
-
-    # ==============================================================================
     # PRIVATE HELPERS - FOCUS & NAVIGATION
     # ==============================================================================
 
@@ -1426,13 +1231,7 @@ class TaskUI(App):
                 task = await task_service.get_task_by_id(task_id)
         """
         async with self._db_manager.get_session() as session:
-            # Create fresh pending queue with THIS session to avoid database locking
-            # The old approach stored _pending_queue from sync which used a different session
-            pending_queue = PendingOperationsQueue(
-                session,
-                on_change_callback=self._on_pending_count_changed
-            ) if self._sync_enabled else None
-            yield TaskService(session, pending_queue)
+            yield TaskService(session)
 
     @asynccontextmanager
     async def _with_list_service(self):
@@ -1446,12 +1245,7 @@ class TaskUI(App):
                 lists = await list_service.get_all_lists()
         """
         async with self._db_manager.get_session() as session:
-            # Create fresh pending queue with THIS session to avoid database locking
-            pending_queue = PendingOperationsQueue(
-                session,
-                on_change_callback=self._on_pending_count_changed
-            ) if self._sync_enabled else None
-            yield ListService(session, pending_queue)
+            yield ListService(session)
 
     @asynccontextmanager
     async def _with_diary_service(self):

@@ -6,7 +6,7 @@ including default list creation and list-specific task operations.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, func
@@ -15,9 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from taskui.database import TaskListORM, TaskORM
 from taskui.logging_config import get_logger
 from taskui.models import TaskList
-
-if TYPE_CHECKING:
-    from taskui.services.pending_operations import PendingOperationsQueue
 
 logger = get_logger(__name__)
 
@@ -37,20 +34,14 @@ class ListService:
         {"name": "Personal", "id": "00000000-0000-0000-0000-000000000003"},
     ]
 
-    def __init__(
-        self,
-        session: AsyncSession,
-        pending_queue: Optional["PendingOperationsQueue"] = None
-    ) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         """
         Initialize the list service.
 
         Args:
             session: Active database session for operations
-            pending_queue: Optional PendingOperationsQueue for sync support
         """
         self.session = session
-        self.pending_queue = pending_queue
 
     async def create_list(
         self,
@@ -111,19 +102,6 @@ class ListService:
             task_count = await self._get_task_count(list_id)
             completed_count = await self._get_completed_count(list_id)
             task_list.update_counts(task_count, completed_count)
-
-            # Queue for sync
-            await self._queue_sync_operation(
-                "LIST_CREATE",
-                list_id,
-                {
-                    "list": {
-                        "id": str(list_id),
-                        "name": name,
-                        "created_at": created_at.isoformat()
-                    }
-                }
-            )
 
             logger.info(f"Created list: id={list_id}, name='{name}'")
             return task_list
@@ -229,18 +207,6 @@ class ListService:
             # Return updated model
             task_list = await self._orm_to_pydantic_with_counts(list_orm)
 
-            # Queue for sync
-            await self._queue_sync_operation(
-                "LIST_UPDATE",
-                list_id,
-                {
-                    "list_id": str(list_id),
-                    "changes": {
-                        "name": name
-                    }
-                }
-            )
-
             logger.info(f"Updated list: id={list_id}, '{old_name}' → '{name}'")
             return task_list
         except ValueError:
@@ -249,27 +215,6 @@ class ListService:
         except Exception as e:
             logger.error(f"Failed to update list {list_id}: {e}", exc_info=True)
             raise
-
-    async def _queue_sync_operation(
-        self,
-        operation: str,
-        list_id: UUID,
-        data: dict
-    ) -> None:
-        """
-        Queue operation for sync if pending_queue is configured.
-
-        Args:
-            operation: Operation type (LIST_CREATE, LIST_UPDATE)
-            list_id: UUID of the list
-            data: Operation-specific data
-        """
-        if self.pending_queue:
-            try:
-                await self.pending_queue.add(operation, str(list_id), data)
-                logger.debug(f"Queued {operation} for list {list_id}")
-            except Exception as e:
-                logger.warning(f"Failed to queue sync operation: {e}")
 
     async def delete_list(self, list_id: UUID) -> bool:
         """
