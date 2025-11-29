@@ -28,6 +28,7 @@ from taskui.services.diary_service import DiaryService
 from taskui.services.printer_service import PrinterService, PrinterConfig
 from taskui.services.cloud_print_queue import CloudPrintQueue, CloudPrintConfig
 from taskui.services.sync_v2 import SyncV2Service, SyncV2Error
+from taskui.services.export_import import ExportImportService
 from taskui.export_schema import ConflictStrategy
 from taskui.ui.components.task_modal import TaskCreationModal
 from taskui.ui.components.detail_panel import DetailPanel
@@ -150,6 +151,18 @@ class TaskUICommands(Provider):
             app.action_sync,
         )
 
+        # Export/Import operations
+        yield DiscoveryHit(
+            "Export to File",
+            "Export all lists to encrypted backup file",
+            app.action_export,
+        )
+        yield DiscoveryHit(
+            "Import from File",
+            "Import lists from most recent backup file",
+            app.action_import,
+        )
+
         # Help
         yield DiscoveryHit(
             "Show Help",
@@ -177,6 +190,8 @@ class TaskUICommands(Provider):
             ("Previous Column", "Move focus to previous column (Shift+Tab)", app.action_navigate_prev_column),
             ("Print Column", "Print the current column (p)", app.action_print_column),
             ("Sync Now", "Sync with remote (Ctrl+Shift+S)", app.action_sync),
+            ("Export to File", "Export all lists to encrypted backup file", app.action_export),
+            ("Import from File", "Import lists from most recent backup file", app.action_import),
             ("Show Help", "Display keyboard shortcuts (?)", app.action_help),
             ("Switch to List 1", "Switch to first list (1)", app.action_switch_list_1),
             ("Switch to List 2", "Switch to second list (2)", app.action_switch_list_2),
@@ -1026,6 +1041,108 @@ class TaskUI(App):
         except Exception as e:
             self.notify(f"Sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
             logger.error(f"Unexpected sync error: {e}", exc_info=True)
+
+    async def action_export(self) -> None:
+        """Export all lists to an encrypted JSON file.
+
+        Exports to ~/taskui_backup_YYYYMMDD_HHMMSS.json.enc
+        """
+        logger.info("[EXPORT] Export triggered")
+
+        if not self._has_db_manager():
+            self.notify("Database not ready", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        try:
+            # Load config to get encryption key
+            app_config = Config()
+            sync_config = app_config.get_sync_config()
+
+            encryption_key = sync_config.get('encryption_key')
+            if not encryption_key:
+                self.notify("Encryption key not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
+                logger.warning("[EXPORT] encryption_key not set in config")
+                return
+
+            # Generate filename with timestamp
+            from datetime import datetime
+            from pathlib import Path
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            export_dir = Path.home()
+            filepath = export_dir / f"taskui_backup_{timestamp}.json.enc"
+
+            self.notify("Exporting...", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+            async with self._db_manager.session() as session:
+                export_service = ExportImportService(session, "export")
+                await export_service.export_to_encrypted_file(str(filepath), encryption_key)
+
+            self.notify(f"Exported to {filepath.name}", severity="information", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.info(f"[EXPORT] Complete: {filepath}")
+
+        except Exception as e:
+            self.notify(f"Export failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"[EXPORT] Error: {e}", exc_info=True)
+
+    async def action_import(self) -> None:
+        """Import lists from an encrypted JSON file.
+
+        Imports from the most recent ~/taskui_backup_*.json.enc file.
+        """
+        logger.info("[IMPORT] Import triggered")
+
+        if not self._has_db_manager():
+            self.notify("Database not ready", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        try:
+            # Load config to get encryption key
+            app_config = Config()
+            sync_config = app_config.get_sync_config()
+
+            encryption_key = sync_config.get('encryption_key')
+            if not encryption_key:
+                self.notify("Encryption key not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
+                logger.warning("[IMPORT] encryption_key not set in config")
+                return
+
+            # Find the most recent backup file
+            from pathlib import Path
+            export_dir = Path.home()
+            backup_files = sorted(export_dir.glob("taskui_backup_*.json.enc"), reverse=True)
+
+            if not backup_files:
+                self.notify("No backup files found in home directory", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
+                logger.warning("[IMPORT] No backup files found")
+                return
+
+            filepath = backup_files[0]  # Most recent
+            self.notify(f"Importing {filepath.name}...", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+            async with self._db_manager.session() as session:
+                import_service = ExportImportService(session, "import")
+                imported, skipped, conflicts = await import_service.import_from_encrypted_file(
+                    str(filepath),
+                    encryption_key,
+                    ConflictStrategy.NEWER_WINS,
+                )
+
+            msg = f"Imported {imported} list(s)"
+            if skipped > 0:
+                msg += f", {skipped} skipped"
+            if conflicts:
+                msg += f", {len(conflicts)} conflict(s)"
+
+            self.notify(msg, severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            logger.info(f"[IMPORT] Complete: {imported} imported, {skipped} skipped")
+
+            # Refresh UI if anything was imported
+            if imported > 0:
+                await self._refresh_lists()
+
+        except Exception as e:
+            self.notify(f"Import failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"[IMPORT] Error: {e}", exc_info=True)
 
     def action_cancel(self) -> None:
         """Cancel current operation (Escape key)."""

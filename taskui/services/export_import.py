@@ -412,3 +412,57 @@ class ExportImportService:
             data = json.load(f)
 
         return await self.import_all_lists(data, strategy)
+
+    async def export_to_encrypted_file(
+        self,
+        filepath: str,
+        encryption_key: str,
+    ) -> None:
+        """
+        Export full state to an encrypted JSON file.
+
+        Args:
+            filepath: Path to output file
+            encryption_key: Base64-encoded encryption key
+        """
+        from taskui.services.encryption import MessageEncryption
+
+        state = await self.export_all_lists()
+        data = state.model_dump(mode="json")
+
+        # Encrypt the data
+        encryption = MessageEncryption(encryption_key)
+        encrypted_json = encryption.encrypt_message(data)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(encrypted_json)
+
+        logger.info(f"Exported encrypted state to: {filepath}")
+
+    async def import_from_encrypted_file(
+        self,
+        filepath: str,
+        encryption_key: str,
+        strategy: ConflictStrategy = ConflictStrategy.NEWER_WINS,
+    ) -> Tuple[int, int, List[str]]:
+        """
+        Import full state from an encrypted JSON file.
+
+        Args:
+            filepath: Path to input file
+            encryption_key: Base64-encoded encryption key
+            strategy: Conflict resolution strategy
+
+        Returns:
+            Tuple of (lists_imported, lists_skipped, conflict_messages)
+        """
+        from taskui.services.encryption import MessageEncryption
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            encrypted_json = f.read()
+
+        # Decrypt the data
+        encryption = MessageEncryption(encryption_key)
+        data = encryption.decrypt_message(encrypted_json)
+
+        return await self.import_all_lists(data, strategy)
