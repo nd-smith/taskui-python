@@ -1003,7 +1003,7 @@ class TaskUI(App):
             self.notify("Syncing...", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
             # Perform sync
-            async with self._db_manager.session() as session:
+            async with self._db_manager.get_session() as session:
                 sync_service = SyncV2Service(session, cloud_config, client_id)
 
                 if not sync_service.connect():
@@ -1073,7 +1073,7 @@ class TaskUI(App):
 
             self.notify("Exporting...", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
-            async with self._db_manager.session() as session:
+            async with self._db_manager.get_session() as session:
                 export_service = ExportImportService(session, "export")
                 await export_service.export_to_encrypted_file(str(filepath), encryption_key)
 
@@ -1119,7 +1119,7 @@ class TaskUI(App):
             filepath = backup_files[0]  # Most recent
             self.notify(f"Importing {filepath.name}...", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
-            async with self._db_manager.session() as session:
+            async with self._db_manager.get_session() as session:
                 import_service = ExportImportService(session, "import")
                 imported, skipped, conflicts = await import_service.import_from_encrypted_file(
                     str(filepath),
