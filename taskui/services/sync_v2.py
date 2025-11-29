@@ -170,7 +170,7 @@ class SyncV2Service:
             )
 
             logger.info(
-                f"Sync push complete: {len(state.lists)} lists "
+                f"[SYNC] Push complete: {len(state.lists)} lists "
                 f"(MessageId: {response['MessageId']})"
             )
             return True
@@ -268,7 +268,7 @@ class SyncV2Service:
                     # Don't delete failed messages - they'll be retried
 
             logger.info(
-                f"Sync pull complete: {total_imported} imported, "
+                f"[SYNC] Pull complete: {total_imported} imported, "
                 f"{total_skipped} skipped, {len(all_conflicts)} conflicts"
             )
             return total_imported, total_skipped, all_conflicts

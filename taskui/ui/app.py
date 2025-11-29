@@ -930,7 +930,7 @@ class TaskUI(App):
         1. Push local state to SQS
         2. Pull remote state from SQS
         """
-        logger.info("Sync triggered (Ctrl+Shift+S)")
+        logger.info("[SYNC] Sync triggered (Ctrl+Shift+S)")
 
         if not self._has_db_manager():
             self.notify("Database not ready", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
@@ -940,22 +940,25 @@ class TaskUI(App):
             # Load sync configuration using centralized Config
             app_config = Config()
             sync_config = app_config.get_sync_config()
+            logger.info(f"[SYNC] Config loaded: enabled={sync_config.get('enabled')}, "
+                       f"queue_url={'set' if sync_config.get('queue_url') else 'missing'}, "
+                       f"encryption_key={'set' if sync_config.get('encryption_key') else 'missing'}")
 
             # Check if sync is enabled
             if not sync_config.get('enabled'):
                 self.notify("Sync is disabled in config", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-                logger.info("Sync disabled in configuration")
+                logger.info("[SYNC] Sync disabled in configuration")
                 return
 
             # Check for required settings
             if not sync_config.get('queue_url'):
                 self.notify("Sync queue URL not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
-                logger.warning("Sync queue_url not set in config")
+                logger.warning("[SYNC] queue_url not set in config")
                 return
 
             if not sync_config.get('encryption_key'):
                 self.notify("Sync encryption key not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
-                logger.warning("Sync encryption_key not set in config")
+                logger.warning("[SYNC] encryption_key not set in config")
                 return
 
             # Build CloudPrintConfig from sync settings
@@ -998,7 +1001,7 @@ class TaskUI(App):
                             msg += f" - {len(results['conflicts'])} conflict(s)"
 
                         self.notify(msg, severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-                        logger.info(f"Sync results: {results}")
+                        logger.info(f"[SYNC] Complete: {results}")
 
                         # Refresh UI if anything was imported
                         if results['pull_imported'] > 0:
