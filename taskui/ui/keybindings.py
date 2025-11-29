@@ -63,7 +63,8 @@ PRINT_BINDINGS = [
 
 # Sync keybindings
 SYNC_BINDINGS = [
-    Binding("ctrl+shift+s", "sync", "Sync", show=True),
+    Binding("ctrl+shift+s", "sync_pull", "Sync Pull", show=True),
+    Binding("ctrl+shift+p", "sync_push", "Sync Push", show=True),
 ]
 
 # Application control keybindings

@@ -146,9 +146,14 @@ class TaskUICommands(Provider):
 
         # Sync operations
         yield DiscoveryHit(
-            "Sync Now",
-            "Sync with remote (Ctrl+Shift+S)",
-            app.action_sync,
+            "Sync - Pull",
+            "Pull remote changes from sync queue",
+            app.action_sync_pull,
+        )
+        yield DiscoveryHit(
+            "Sync - Push",
+            "Push local state to sync queue",
+            app.action_sync_push,
         )
 
         # Export/Import operations
@@ -189,7 +194,8 @@ class TaskUICommands(Provider):
             ("Next Column", "Move focus to next column (Tab)", app.action_navigate_next_column),
             ("Previous Column", "Move focus to previous column (Shift+Tab)", app.action_navigate_prev_column),
             ("Print Column", "Print the current column (p)", app.action_print_column),
-            ("Sync Now", "Sync with remote (Ctrl+Shift+S)", app.action_sync),
+            ("Sync - Pull", "Pull remote changes from sync queue", app.action_sync_pull),
+            ("Sync - Push", "Push local state to sync queue", app.action_sync_push),
             ("Export to File", "Export all lists to encrypted backup file", app.action_export),
             ("Import from File", "Import lists from most recent backup file", app.action_import),
             ("Show Help", "Display keyboard shortcuts (?)", app.action_help),
@@ -946,63 +952,70 @@ class TaskUI(App):
             self.notify(f"Print failed: {str(e)}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
             logger.error(f"Failed to print task card: {e}", exc_info=True)
 
-    async def action_sync(self) -> None:
-        """Sync with remote (Ctrl+Shift+S).
+    def _get_sync_config_and_client(self):
+        """Get sync configuration and client ID.
 
-        Performs full bidirectional sync:
-        1. Push local state to SQS
-        2. Pull remote state from SQS
+        Returns:
+            Tuple of (CloudPrintConfig, client_id) or (None, None) if not configured.
         """
-        logger.info("[SYNC] Sync triggered (Ctrl+Shift+S)")
+        app_config = Config()
+        sync_config = app_config.get_sync_config()
+        logger.info(f"[SYNC] Config loaded: enabled={sync_config.get('enabled')}, "
+                   f"queue_url={'set' if sync_config.get('queue_url') else 'missing'}, "
+                   f"encryption_key={'set' if sync_config.get('encryption_key') else 'missing'}")
+
+        # Check if sync is enabled
+        if not sync_config.get('enabled'):
+            self.notify("Sync is disabled in config", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            logger.info("[SYNC] Sync disabled in configuration")
+            return None, None
+
+        # Check for required settings
+        if not sync_config.get('queue_url'):
+            self.notify("Sync queue URL not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.warning("[SYNC] queue_url not set in config")
+            return None, None
+
+        if not sync_config.get('encryption_key'):
+            self.notify("Sync encryption key not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.warning("[SYNC] encryption_key not set in config")
+            return None, None
+
+        # Build CloudPrintConfig from sync settings
+        cloud_config = CloudPrintConfig(
+            queue_url=sync_config['queue_url'],
+            region=sync_config.get('region', 'us-east-1'),
+            aws_access_key_id=sync_config.get('aws_access_key_id'),
+            aws_secret_access_key=sync_config.get('aws_secret_access_key'),
+            encryption_key=sync_config['encryption_key'],
+        )
+
+        # Generate client ID (based on machine - simple hash of hostname)
+        import platform
+        import hashlib
+        hostname = platform.node()
+        client_id = hashlib.md5(hostname.encode()).hexdigest()[:16]
+
+        return cloud_config, client_id
+
+    async def action_sync_pull(self) -> None:
+        """Pull remote changes from sync queue.
+
+        Receives and imports any pending sync messages from other clients.
+        """
+        logger.info("[SYNC] Pull triggered")
 
         if not self._has_db_manager():
             self.notify("Database not ready", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
             return
 
         try:
-            # Load sync configuration using centralized Config
-            app_config = Config()
-            sync_config = app_config.get_sync_config()
-            logger.info(f"[SYNC] Config loaded: enabled={sync_config.get('enabled')}, "
-                       f"queue_url={'set' if sync_config.get('queue_url') else 'missing'}, "
-                       f"encryption_key={'set' if sync_config.get('encryption_key') else 'missing'}")
-
-            # Check if sync is enabled
-            if not sync_config.get('enabled'):
-                self.notify("Sync is disabled in config", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-                logger.info("[SYNC] Sync disabled in configuration")
+            cloud_config, client_id = self._get_sync_config_and_client()
+            if not cloud_config:
                 return
 
-            # Check for required settings
-            if not sync_config.get('queue_url'):
-                self.notify("Sync queue URL not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
-                logger.warning("[SYNC] queue_url not set in config")
-                return
+            self.notify("Pulling remote changes...", timeout=NOTIFICATION_TIMEOUT_SHORT)
 
-            if not sync_config.get('encryption_key'):
-                self.notify("Sync encryption key not configured", severity="warning", timeout=NOTIFICATION_TIMEOUT_LONG)
-                logger.warning("[SYNC] encryption_key not set in config")
-                return
-
-            # Build CloudPrintConfig from sync settings
-            cloud_config = CloudPrintConfig(
-                queue_url=sync_config['queue_url'],
-                region=sync_config.get('region', 'us-east-1'),
-                aws_access_key_id=sync_config.get('aws_access_key_id'),
-                aws_secret_access_key=sync_config.get('aws_secret_access_key'),
-                encryption_key=sync_config['encryption_key'],
-            )
-
-            # Generate client ID (based on machine - simple hash of hostname)
-            import platform
-            import hashlib
-            hostname = platform.node()
-            client_id = hashlib.md5(hostname.encode()).hexdigest()[:16]
-
-            # Show syncing status
-            self.notify("Syncing...", timeout=NOTIFICATION_TIMEOUT_SHORT)
-
-            # Perform sync
             async with self._db_manager.get_session() as session:
                 sync_service = SyncV2Service(session, cloud_config, client_id)
 
@@ -1011,36 +1024,74 @@ class TaskUI(App):
                     return
 
                 try:
-                    results = await sync_service.sync_full(
+                    imported, skipped, conflicts = await sync_service.sync_pull(
                         strategy=ConflictStrategy.NEWER_WINS
                     )
 
-                    # Report results
-                    if results['push_success']:
-                        msg = "Sync complete"
-                        if results['pull_imported'] > 0:
-                            msg += f" - imported {results['pull_imported']} list(s)"
-                        if results['conflicts']:
-                            msg += f" - {len(results['conflicts'])} conflict(s)"
-
+                    if imported > 0:
+                        msg = f"Pulled {imported} list(s)"
+                        if conflicts:
+                            msg += f", {len(conflicts)} conflict(s)"
                         self.notify(msg, severity="information", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
-                        logger.info(f"[SYNC] Complete: {results}")
-
-                        # Refresh UI if anything was imported
-                        if results['pull_imported'] > 0:
-                            await self._refresh_lists()
+                        await self._refresh_lists()
                     else:
-                        self.notify("Sync push failed", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+                        self.notify("No remote changes", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+                    logger.info(f"[SYNC] Pull complete: {imported} imported, {skipped} skipped")
 
                 finally:
                     sync_service.disconnect()
 
         except SyncV2Error as e:
-            self.notify(f"Sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
-            logger.error(f"Sync error: {e}", exc_info=True)
+            self.notify(f"Pull failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"[SYNC] Pull error: {e}", exc_info=True)
         except Exception as e:
-            self.notify(f"Sync failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
-            logger.error(f"Unexpected sync error: {e}", exc_info=True)
+            self.notify(f"Pull failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"[SYNC] Unexpected pull error: {e}", exc_info=True)
+
+    async def action_sync_push(self) -> None:
+        """Push local state to sync queue.
+
+        Sends current local state to the sync queue for other clients to receive.
+        """
+        logger.info("[SYNC] Push triggered")
+
+        if not self._has_db_manager():
+            self.notify("Database not ready", severity="error", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+            return
+
+        try:
+            cloud_config, client_id = self._get_sync_config_and_client()
+            if not cloud_config:
+                return
+
+            self.notify("Pushing local state...", timeout=NOTIFICATION_TIMEOUT_SHORT)
+
+            async with self._db_manager.get_session() as session:
+                sync_service = SyncV2Service(session, cloud_config, client_id)
+
+                if not sync_service.connect():
+                    self.notify("Failed to connect to sync queue", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+                    return
+
+                try:
+                    success = await sync_service.sync_push()
+
+                    if success:
+                        self.notify("Push complete", severity="information", timeout=NOTIFICATION_TIMEOUT_SHORT)
+                        logger.info("[SYNC] Push complete")
+                    else:
+                        self.notify("Push failed", severity="warning", timeout=NOTIFICATION_TIMEOUT_MEDIUM)
+
+                finally:
+                    sync_service.disconnect()
+
+        except SyncV2Error as e:
+            self.notify(f"Push failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"[SYNC] Push error: {e}", exc_info=True)
+        except Exception as e:
+            self.notify(f"Push failed: {e}", severity="error", timeout=NOTIFICATION_TIMEOUT_LONG)
+            logger.error(f"[SYNC] Unexpected push error: {e}", exc_info=True)
 
     async def action_export(self) -> None:
         """Export all lists to an encrypted JSON file.
