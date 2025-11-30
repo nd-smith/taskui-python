@@ -990,11 +990,13 @@ class TaskUI(App):
             encryption_key=sync_config['encryption_key'],
         )
 
-        # Generate client ID (based on machine - simple hash of hostname)
-        import platform
-        import hashlib
-        hostname = platform.node()
-        client_id = hashlib.md5(hostname.encode()).hexdigest()[:16]
+        # Get client ID from config, or generate from hostname
+        client_id = sync_config.get('client_id')
+        if not client_id:
+            import platform
+            import hashlib
+            hostname = platform.node()
+            client_id = hashlib.md5(hostname.encode()).hexdigest()[:16]
 
         return cloud_config, client_id
 

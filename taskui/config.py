@@ -144,6 +144,7 @@ class Config:
         - TASKUI_SYNC_QUEUE_URL
         - TASKUI_SYNC_REGION
         - TASKUI_SYNC_ON_OPEN
+        - TASKUI_SYNC_CLIENT_ID (optional, defaults to hostname hash)
         - TASKUI_ENCRYPTION_KEY (shared with cloud_print)
         - AWS_ACCESS_KEY_ID
         - AWS_SECRET_ACCESS_KEY
@@ -191,6 +192,12 @@ class Config:
             self._config.get('cloud_print', 'aws_secret_access_key', fallback=None)
         )
 
+        # Client ID (optional, for multi-instance testing)
+        client_id = (
+            os.getenv('TASKUI_SYNC_CLIENT_ID') or
+            self._config.get('sync', 'client_id', fallback=None)
+        )
+
         config = {
             'enabled': enabled,
             'queue_url': os.getenv('TASKUI_SYNC_QUEUE_URL') or
@@ -199,6 +206,7 @@ class Config:
                      self._config.get('sync', 'region', fallback='us-east-1'),
             'sync_on_open': sync_on_open,
             'sync_on_close': sync_on_close,
+            'client_id': client_id,
             'encryption_key': encryption_key,
             'aws_access_key_id': aws_access_key_id,
             'aws_secret_access_key': aws_secret_access_key,
