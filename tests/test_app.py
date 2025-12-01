@@ -706,12 +706,13 @@ class TestActionMethodsTaskOperations:
 
 
     @pytest.mark.asyncio
-    async def test_action_delete_task_shows_not_implemented_notification(self):
-        """Test that action_delete_task() shows not implemented notification.
+    async def test_action_delete_task_deletes_selected_task(self):
+        """Test that action_delete_task() deletes the selected task.
 
         Verifies:
-        - Method exists but shows warning
-        - No actual deletion occurs
+        - Task is created successfully
+        - Delete action removes the task
+        - Task no longer exists in the column
         """
         async with TaskUI().run_test() as pilot:
             app = pilot.app
@@ -726,16 +727,19 @@ class TestActionMethodsTaskOperations:
             modal.action_save()
             await pilot.pause()
 
-            # Select the task
+            # Verify task was created
             column1 = app.query_one(f"#{COLUMN_1_ID}", TaskColumn)
+            assert len(column1._tasks) == 1
+
+            # Select the task
             column1._selected_index = 0
 
             # Call delete action
-            app.action_delete_task()
+            await app.action_delete_task()
             await pilot.pause()
 
-            # Verify task still exists (delete not implemented)
-            assert len(column1._tasks) == 1
+            # Verify task was deleted
+            assert len(column1._tasks) == 0
 
 
 

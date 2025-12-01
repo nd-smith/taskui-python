@@ -271,10 +271,11 @@ class ExportImportService:
             # Delete existing list (cascade deletes tasks)
             await self.list_service.delete_list(local_list.id)
 
-        # Create list
+        # Create list - preserve original created_at to maintain list ordering
         await self.list_service.create_list(
             name=exported_list.name,
             list_id=exported_list.id,
+            created_at=exported_list.created_at,
         )
 
         # Import tasks recursively

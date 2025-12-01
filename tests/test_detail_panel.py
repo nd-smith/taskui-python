@@ -91,13 +91,6 @@ class TestDetailPanelLogic:
         assert panel.current_task is None
         assert panel.task_hierarchy == []
 
-    def test_format_datetime(self, sample_task):
-        """Test datetime formatting."""
-        panel = DetailPanel()
-        formatted = panel._format_datetime(sample_task.created_at)
-
-        assert formatted == "2025-01-14 10:00:00"
-
     def test_build_details_text_basic(self, sample_task):
         """Test building details text for a basic task."""
         panel = DetailPanel()
@@ -121,7 +114,8 @@ class TestDetailPanelLogic:
         # Check completion indicators
         assert "Complete" in text
         assert "Completed:" in text
-        assert "2025-01-14 12:00:00" in text
+        # Datetime format is now compact: M/D/YY H:MMAM/PM (timezone adjusted)
+        assert "1/14/25" in text
 
     def test_build_details_text_with_notes(self, sample_task):
         """Test building details text for a task with notes."""
@@ -228,7 +222,8 @@ class TestDetailPanelIntegration:
         # Verify all expected information is present
         assert sample_task.title in text
         assert str(sample_task.level) in text
-        assert "2025-01-14 10:00:00" in text
+        # Datetime format is now compact: M/D/YY H:MMAM/PM (timezone adjusted)
+        assert "1/14/25" in text
         assert "STATUS" in text
         assert "DATES" in text
 

@@ -421,23 +421,3 @@ class TestPrinterIntegration:
             # Verify job was sent successfully
             assert result is True
             assert queue.sqs_client.send_message.called
-
-
-class TestTaskModalDiaryIntegration:
-    """Tests for diary entry management in task creation/editing modal."""
-
-    def test_task_modal_displays_diary_entries(self):
-        """Test that task modal can display existing diary entries."""
-        # This would test the TaskCreationModal showing diary entries
-        # Note: Implementation depends on how TaskCreationModal is structured
-        pytest.skip("TaskCreationModal diary display - implementation pending")
-
-    def test_task_modal_allows_editing_diary_entries(self):
-        """Test that users can edit diary entries from task modal."""
-        # This would test editing functionality in TaskCreationModal
-        pytest.skip("TaskCreationModal diary editing - implementation pending")
-
-    def test_task_modal_allows_deleting_diary_entries(self):
-        """Test that users can delete diary entries from task modal."""
-        # This would test deletion functionality in TaskCreationModal
-        pytest.skip("TaskCreationModal diary deletion - implementation pending")

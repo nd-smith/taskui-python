@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, PrivateAttr, ValidationInfo, field_validator, model_validator, computed_field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, field_validator, model_validator, computed_field
 
 
 class TaskList(BaseModel):
@@ -27,15 +27,15 @@ class TaskList(BaseModel):
     _task_count: int = PrivateAttr(default=0)
     _completed_count: int = PrivateAttr(default=0)
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "name": "Work",
                 "created_at": "2025-01-14T10:00:00",
             }
         }
+    )
 
     @computed_field
     @property
@@ -107,9 +107,8 @@ class Task(BaseModel):
     _completed_child_count: int = PrivateAttr(default=0)
     _max_levels_per_column: Dict[int, int] = PrivateAttr(default_factory=lambda: {1: 1, 2: 2})
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174001",
                 "title": "Complete project documentation",
@@ -122,6 +121,7 @@ class Task(BaseModel):
                 "created_at": "2025-01-14T10:00:00",
             }
         }
+    )
 
     @field_validator("level")
     @classmethod
@@ -288,9 +288,8 @@ class DiaryEntry(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000, description="Entry content/text")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp")
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174002",
                 "task_id": "123e4567-e89b-12d3-a456-426614174001",
@@ -298,4 +297,5 @@ class DiaryEntry(BaseModel):
                 "created_at": "2025-01-14T15:30:00",
             }
         }
+    )
 

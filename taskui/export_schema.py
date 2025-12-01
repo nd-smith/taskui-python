@@ -10,7 +10,7 @@ from enum import Enum
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 CURRENT_SCHEMA_VERSION = 1
@@ -43,8 +43,8 @@ class ExportedTask(BaseModel):
     completed_at: Optional[datetime] = Field(default=None, description="Completion timestamp")
     children: List["ExportedTask"] = Field(default_factory=list, description="Nested child tasks")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174001",
                 "title": "Parent task",
@@ -55,6 +55,7 @@ class ExportedTask(BaseModel):
                 "children": []
             }
         }
+    )
 
 
 class ExportedList(BaseModel):
@@ -70,8 +71,8 @@ class ExportedList(BaseModel):
     updated_at: datetime = Field(..., description="Last modification timestamp")
     tasks: List[ExportedTask] = Field(default_factory=list, description="Top-level tasks (children nested)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "name": "Work Tasks",
@@ -80,6 +81,7 @@ class ExportedList(BaseModel):
                 "tasks": []
             }
         }
+    )
 
 
 class ExportedState(BaseModel):
@@ -95,8 +97,8 @@ class ExportedState(BaseModel):
     client_id: str = Field(..., description="Unique machine/client identifier")
     lists: List[ExportedList] = Field(default_factory=list, description="All task lists")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "schema_version": 1,
                 "exported_at": "2025-11-26T18:00:00Z",
@@ -104,6 +106,7 @@ class ExportedState(BaseModel):
                 "lists": []
             }
         }
+    )
 
 
 def migrate_data(data: dict) -> dict:

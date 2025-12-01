@@ -47,6 +47,7 @@ class TestRefreshUIAfterTaskChange:
         app._current_list_id = uuid4()
         app._refresh_column_tasks = AsyncMock()
         app._refresh_list_bar_for_list = AsyncMock()
+        app._update_column3_for_selection = AsyncMock()
 
         # Mock Column 1 with selected task
         column1_mock = MagicMock()
