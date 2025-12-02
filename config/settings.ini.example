@@ -8,6 +8,10 @@ port = 9100
 timeout = 60
 detail_level = minimal
 
+# Include diary entries when printing task cards
+# Set to false to print only task title and children
+include_diary_entries = true
+
 [cloud_print]
 # Cloud print relay for VPN/restricted environments
 # Get queue URL from AWS SQS Console

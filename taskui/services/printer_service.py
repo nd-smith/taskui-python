@@ -22,9 +22,10 @@ logger = get_logger(__name__)
 
 class DetailLevel(Enum):
     """Print detail levels for task cards."""
-    MINIMAL = "minimal"      # Title, checkbox, basic progress
-    STANDARD = "standard"    # + dates, list name, completion %
-    FULL = "full"           # + notes for task and children
+
+    MINIMAL = "minimal"  # Title, checkbox, basic progress
+    STANDARD = "standard"  # + dates, list name, completion %
+    FULL = "full"  # + notes for task and children
 
 
 class PrinterConfig:
@@ -35,12 +36,14 @@ class PrinterConfig:
         host: str = "192.168.1.100",
         port: int = 9100,
         timeout: int = 60,
-        detail_level: DetailLevel = DetailLevel.MINIMAL
+        detail_level: DetailLevel = DetailLevel.MINIMAL,
+        include_diary_entries: bool = True,
     ):
         self.host = host
         self.port = port
         self.timeout = timeout
         self.detail_level = detail_level
+        self.include_diary_entries = include_diary_entries
 
     @classmethod
     def from_config_file(cls, config_path: Optional[Path] = None) -> "PrinterConfig":
@@ -63,20 +66,24 @@ class PrinterConfig:
         printer_config = config.get_printer_config()
 
         # Convert detail_level string to enum
-        detail_level_str = printer_config.get('detail_level', 'minimal').lower()
+        detail_level_str = printer_config.get("detail_level", "minimal").lower()
         try:
             detail_level = DetailLevel(detail_level_str)
         except ValueError:
             logger.warning(f"Invalid detail_level '{detail_level_str}', using MINIMAL")
             detail_level = DetailLevel.MINIMAL
 
-        logger.debug(f"Loaded printer config: {printer_config['host']}:{printer_config['port']}")
+        logger.debug(
+            f"Loaded printer config: {printer_config['host']}:{printer_config['port']}, "
+            f"include_diary_entries={printer_config['include_diary_entries']}"
+        )
 
         return cls(
-            host=printer_config['host'],
-            port=printer_config['port'],
-            timeout=printer_config['timeout'],
-            detail_level=detail_level
+            host=printer_config["host"],
+            port=printer_config["port"],
+            timeout=printer_config["timeout"],
+            detail_level=detail_level,
+            include_diary_entries=printer_config["include_diary_entries"],
         )
 
 
@@ -117,7 +124,9 @@ class PrinterService:
         logger.debug(f"Attempting to connect to printer at {self.config.host}:{self.config.port}")
 
         try:
-            self.printer = Network(self.config.host, port=self.config.port, timeout=self.config.timeout)
+            self.printer = Network(
+                self.config.host, port=self.config.port, timeout=self.config.timeout
+            )
             self._connected = True
             logger.info(f"Successfully connected to printer at {self.config.host}")
             return True
@@ -125,7 +134,9 @@ class PrinterService:
         except Exception as e:
             logger.error(f"Failed to connect to printer: {e}", exc_info=True)
             self._connected = False
-            raise ConnectionError(f"Cannot connect to printer at {self.config.host}:{self.config.port}") from e
+            raise ConnectionError(
+                f"Cannot connect to printer at {self.config.host}:{self.config.port}"
+            ) from e
 
     def disconnect(self):
         """Disconnect from thermal printer."""
@@ -189,11 +200,11 @@ class PrinterService:
             children: Child tasks
         """
         # TITLE - BIG and BOLD (Font A, double size)
-        self.printer.set(font='a', bold=True, double_height=True, double_width=True)
+        self.printer.set(font="a", bold=True, double_height=True, double_width=True)
         self.printer.text(f"\n{task.title}\n\n\n")
 
         # BODY - Small font (Font B is smaller than Font A)
-        self.printer.set(font='b', bold=False, double_height=False, double_width=False)
+        self.printer.set(font="b", bold=False, double_height=False, double_width=False)
 
         if children:
             # Print children as checkboxes with spacing between them
@@ -277,6 +288,7 @@ class MockPrinter:
 
 class PrintError(Exception):
     """Raised when print operation fails."""
+
     pass
 
 
@@ -287,11 +299,7 @@ if __name__ == "__main__":
     setup_logging()
 
     # Example configuration
-    config = PrinterConfig(
-        host="192.168.1.100",
-        port=9100,
-        detail_level=DetailLevel.MINIMAL
-    )
+    config = PrinterConfig(host="192.168.1.100", port=9100, detail_level=DetailLevel.MINIMAL)
 
     # Create mock task for testing
     from taskui.models import Task
@@ -307,13 +315,31 @@ if __name__ == "__main__":
         title="Design new feature",
         notes="This is a critical feature",
         is_completed=False,
-        created_at=datetime.now()
+        created_at=datetime.now(),
     )
 
     children = [
-        Task(id=uuid.uuid4(), list_id=list_id, title="Write specs", is_completed=False, created_at=datetime.now()),
-        Task(id=uuid.uuid4(), list_id=list_id, title="Create mockups", is_completed=True, created_at=datetime.now()),
-        Task(id=uuid.uuid4(), list_id=list_id, title="Review with team", is_completed=False, created_at=datetime.now()),
+        Task(
+            id=uuid.uuid4(),
+            list_id=list_id,
+            title="Write specs",
+            is_completed=False,
+            created_at=datetime.now(),
+        ),
+        Task(
+            id=uuid.uuid4(),
+            list_id=list_id,
+            title="Create mockups",
+            is_completed=True,
+            created_at=datetime.now(),
+        ),
+        Task(
+            id=uuid.uuid4(),
+            list_id=list_id,
+            title="Review with team",
+            is_completed=False,
+            created_at=datetime.now(),
+        ),
     ]
 
     # Test with actual printer
